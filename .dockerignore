@@ -1,0 +1,6 @@
+.git
+data/*
+notebooks/*
+
+*.pem
+*.ipynb
