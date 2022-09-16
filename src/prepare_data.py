@@ -268,7 +268,7 @@ def load_large_feats(shape, directory='../data/large-features/'):
     
     # load slope
     slope = hkl.load(directory + 'slope.hkl').squeeze()
-    original_shape = slope.shape
+    #original_shape = slope.shape
     slope = slope[np.newaxis]
     
     # load s1
@@ -279,7 +279,7 @@ def load_large_feats(shape, directory='../data/large-features/'):
     
     # load s2
     s2 = hkl.load(directory + 's2.hkl')
-    original_shape = s2.shape
+    #original_shape = s2.shape
     if s2.shape[-1] == 11:
         s2 = np.delete(s2, -1, -1)
     if len(s2.shape) == 4:
