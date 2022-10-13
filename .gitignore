@@ -1,4 +1,5 @@
 config.yaml
+tmp/*
 data/*
 models/*
 *.DS_Store

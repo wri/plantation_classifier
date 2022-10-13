@@ -1,3 +1,5 @@
+#! /usr/bin/env python3
+
 import yaml
 import hickle as hkl
 import pickle
@@ -192,7 +194,8 @@ def create_xy(sample_shape, v_train_data, drop_prob, drop_feats, verbose=False):
             print(f'Plot id {plot} has no cloud free imagery and will be removed.')
             plot_ids.remove(plot)
 
-    print(f'Training data includes {len(plot_ids)} plot ids.')
+    if verbose:
+        print(f'Training data includes {len(plot_ids)} plot ids.')
 
     # create empty x and y array based on number of plots (dropping TML probability changes dimensions from 78 -> 77)
     n_samples = len(plot_ids)
@@ -226,7 +229,8 @@ def create_xy(sample_shape, v_train_data, drop_prob, drop_feats, verbose=False):
         
     # check class balance and baseline accuracy
     labels, counts = np.unique(y_all, return_counts=True)
-    print(f'Baseline: {round(counts[0] / (counts[0] + counts[1]), 3)}')
+    if verbose:
+        print(f'Baseline: {round(counts[0] / (counts[0] + counts[1]), 3)}')
 
     return x_all, y_all
 
@@ -268,7 +272,7 @@ def load_large_feats(shape, directory='../data/large-features/'):
     
     # load slope
     slope = hkl.load(directory + 'slope.hkl').squeeze()
-    original_shape = slope.shape
+    #original_shape = slope.shape
     slope = slope[np.newaxis]
     
     # load s1
@@ -279,7 +283,7 @@ def load_large_feats(shape, directory='../data/large-features/'):
     
     # load s2
     s2 = hkl.load(directory + 's2.hkl')
-    original_shape = s2.shape
+    #original_shape = s2.shape
     if s2.shape[-1] == 11:
         s2 = np.delete(s2, -1, -1)
     if len(s2.shape) == 4:
