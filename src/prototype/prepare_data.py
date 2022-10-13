@@ -1,3 +1,5 @@
+#! /usr/bin/env python3
+
 import yaml
 import hickle as hkl
 import pickle
@@ -192,7 +194,8 @@ def create_xy(sample_shape, v_train_data, drop_prob, drop_feats, verbose=False):
             print(f'Plot id {plot} has no cloud free imagery and will be removed.')
             plot_ids.remove(plot)
 
-    print(f'Training data includes {len(plot_ids)} plot ids.')
+    if verbose:
+        print(f'Training data includes {len(plot_ids)} plot ids.')
 
     # create empty x and y array based on number of plots (dropping TML probability changes dimensions from 78 -> 77)
     n_samples = len(plot_ids)
@@ -226,7 +229,8 @@ def create_xy(sample_shape, v_train_data, drop_prob, drop_feats, verbose=False):
         
     # check class balance and baseline accuracy
     labels, counts = np.unique(y_all, return_counts=True)
-    print(f'Baseline: {round(counts[0] / (counts[0] + counts[1]), 3)}')
+    if verbose:
+        print(f'Baseline: {round(counts[0] / (counts[0] + counts[1]), 3)}')
 
     return x_all, y_all
 

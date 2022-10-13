@@ -546,7 +546,7 @@ def detect_pfcp(arr, dem, bbx):
     return fcps, pfps
 
 
-def remove_missed_clouds(img: np.ndarray, dem, bbx) -> np.ndarray:
+def remove_missed_clouds(img: np.ndarray, dem, bbx, verbose=False) -> np.ndarray:
     """ Removes clouds that may have been missed by s2cloudless
         by looking at a temporal change outside of IQR
         Parameters:
@@ -772,12 +772,13 @@ def remove_missed_clouds(img: np.ndarray, dem, bbx) -> np.ndarray:
     clouds = np.maximum(clouds, shadows)
     fcps = np.maximum(fcps, nir_swir_ratio)
     fcps = binary_dilation(fcps, iterations=2)
-    print("Cloud/shadow percents", np.mean(clouds, axis=(1, 2)))
-    print("False positive clouds", np.mean(fcps, axis=(1, 2)))
+    if verbose:
+        print("Cloud/shadow percents", np.mean(clouds, axis=(1, 2)))
+        print("False positive clouds", np.mean(fcps, axis=(1, 2)))
     return clouds, fcps
 
 
-def calculate_cloud_steps(clouds: np.ndarray, dates: np.ndarray) -> np.ndarray:
+def calculate_cloud_steps(clouds: np.ndarray, dates: np.ndarray, verbose=False) -> np.ndarray:
     """ Calculates the timesteps to remove based upon cloud cover and missing data
         This is basically the image selection algorithm, and will be renamed as such.
         In general, we want to balance selecting the best available images for each tile,
@@ -886,11 +887,12 @@ def calculate_cloud_steps(clouds: np.ndarray, dates: np.ndarray) -> np.ndarray:
     to_remove = cloud_steps
     data_filter = good_steps_idx
 
-    print(f"Utilizing {len(good_steps_idx)}/{dates.shape[0]} steps")
+    if verbose:
+        print(f"Utilizing {len(good_steps_idx)}/{dates.shape[0]} steps")
     return to_remove, good_steps_idx
 
 
-def print_dates(dates, probs):
+def print_dates(dates, probs, verbose=False):
     month_days = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 80]
     starting = np.cumsum(month_days)
     starting[0] = -30
@@ -933,8 +935,8 @@ def print_dates(dates, probs):
         month_probs = probs[month_idx]
         month_probs = [item for sublist in month_probs for item in sublist]
         month_probs = [np.around(x, 2) for x in month_probs]
-
-        print(f"{month + 1}, Dates: {month_dates}, Probs: {month_probs}")
+        if verbose:
+            print(f"{month + 1}, Dates: {month_dates}, Probs: {month_probs}")
     return duplicate_steps
 
 

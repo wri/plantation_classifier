@@ -1,3 +1,7 @@
+#! /usr/bin/env python3
+
+## Documentation 
+
 import numpy as np
 import bottleneck as bn
 
@@ -19,13 +23,15 @@ def id_missing_px(sentinel2: np.ndarray, thresh: int = 11) -> np.ndarray:
     return missing_images
 
 
-def interpolate_missing_vals(s2: np.ndarray) -> np.ndarray:
-    '''Interpolates NA values with closest time steps, to deal with
-       the small potential for NA values in calculating indices
+def interpolate_missing_vals(s2: np.ndarray, verbose=False) -> np.ndarray:
     '''
-    print("INTERPS MISSING")
-    print(np.sum(s2 >= 1))
-    print(np.sum(s2 == 0))
+    Interpolates NA values with closest time steps, to deal with
+    the small potential for NA values in calculating indices
+    '''
+    if verbose:
+        print("INTERPS MISSING")
+        print(np.sum(s2 >= 1))
+        print(np.sum(s2 == 0))
     if np.sum(np.logical_and(s2 >= 1, s2 == 0)) > 0:
         nanmedian = np.median(s2, axis = 0)
         for time in range(s2.shape[0]):
