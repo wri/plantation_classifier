@@ -60,7 +60,7 @@ def download_folder(s3_folder: str, local_dir: str, apikey, apisecret):
     return None
 
 
-def download_raw_tile(tile_idx: tuple, local_dir: str = "../tmp") -> None:
+def download_raw_tile(tile_idx: tuple, local_dir: str) -> None:
     
     '''
     Not free to run downloads to local - use sparingly.
@@ -176,7 +176,7 @@ def to_float32(array: np.array) -> np.array:
     Converts an int array to float32
     """
 
-    print(f'The original max value is {np.max(array)}')
+    # print(f'The original max value is {np.max(array)}')
     if not isinstance(array.flat[0], np.floating):
         assert np.max(array) > 1
         array = np.float32(array) / 65535.
@@ -189,7 +189,7 @@ def adjust_shape(arr: np.ndarray, width: int, height: int) -> np.ndarray:
     Assures that the shape of arr is width x height
     Used to align 10, 20, 40, 160, 640 meter resolution Sentinel data
     """
-    print(f"Input array shape: {arr.shape}")
+    # print(f"Input array shape: {arr.shape}")
     arr = arr[:, :, :, np.newaxis] if len(arr.shape) == 3 else arr
     arr = arr[np.newaxis, :, :, np.newaxis] if len(arr.shape) == 2 else arr
     
@@ -437,7 +437,7 @@ def process_tile(x: int, y: int, data: pd.DataFrame, local_path: str, bbx: list,
 
     dem = dem / 90
     sentinel2 = np.clip(sentinel2, 0, 1)
-    sns.heatmap(sentinel2[0, ..., 0])
+    #sns.heatmap(sentinel2[0, ..., 0])
 
     return sentinel2, image_dates, interp, s1, dem, cloudshad
 
@@ -485,11 +485,9 @@ def make_sample_nofeats(slope, s1, s2):
     
     # define the last dimension of the array
     n_feats = 1 + s1.shape[-1] + s2.shape[-1] 
-    print(f'features: {n_feats}')
 
     sample = np.empty((slope.shape[0], slope.shape[1], n_feats))
-    print(f'sample shape: {sample.shape}')
-
+    
     # convert monthly images to annual median
     s1 = np.median(s1, axis = 0) 
     s2 = np.median(s2, axis = 0)
@@ -535,12 +533,67 @@ def reshape_and_scale(v_train_data: list, unseen, verbose=False):
 
     scaler = StandardScaler()
     X_train_ss = scaler.fit_transform(X_train_ss)
+    print(f'Scaler mean: {scaler.mean_}')
+    print(f'Scaler scale: {scaler.scale_}')
+
     unseen_ss = scaler.transform(unseen_ss)
+    print(f'Scaler mean: {scaler.mean_}')
+    print(f'Scaler scale: {scaler.scale_}')
+
     if verbose:
         print(f'Scaled to {np.min(X_train_ss)}, {np.max(X_train_ss)}')
         print(f'Scaled to {np.min(unseen_ss)}, {np.max(unseen_ss)}')
-    
+        
     return unseen_ss
+
+
+def reshape_and_scale_manual(unseen, verbose=False):
+
+    ''' 
+    Manually standardizes the sample on a 1, 99% scaler 
+    instead of applying a mean, std scaler. Reshapes the sample
+    from (x, x, 13) to (x, 13).
+    '''
+
+    # MANUALLY standardize train/test data 
+    min_all = []
+    max_all = []
+
+    # iterate through the 10 bands and standardize the data based 
+    # on a 1 and 99% scaler instead of a mean and std scaler (standard scalar)
+    for band in range(0, unseen.shape[-1]):
+        
+        mins = np.percentile(unseen[..., band], 1)
+        maxs = np.percentile(unseen[..., band], 99)
+        
+        if maxs > mins:
+            
+            # clip values in each band based on min/max 
+            unseen[..., band] = np.clip(unseen[..., band], mins, maxs)
+
+            #calculate standardized data
+            midrange = (maxs + mins) / 2
+            rng = maxs - mins
+            standardized = (unseen[..., band] - midrange) / (rng / 2)
+
+            # update each band in the array to the standardized data
+            unseen[..., band] = standardized
+
+            min_all.append(mins)
+            max_all.append(maxs)
+        else:
+            pass
+    
+    if verbose:
+        print(unseen.shape)
+        print(f"The data has been scaled to {np.min(unseen)}, {np.max(unseen)}")
+        print(min_all)
+        print(max_all)
+
+    # now reshape
+    unseen_reshaped = np.reshape(unseen, (np.prod(unseen.shape[:-1]), unseen.shape[-1]))
+
+    return unseen_reshaped
 
 
 # Step 5: import classification model, run predictions
@@ -557,7 +610,7 @@ def predict_classification(arr, model, sample_dims):
     
     preds = model_pretrained.predict(arr)
     reshaped_preds = preds.reshape(sample_dims[0], sample_dims[1])
-    #print(np.unique(reshaped_preds))
+    # print(f'Predictions: {np.unique(reshaped_preds)}')
 
     return reshaped_preds
 
@@ -583,9 +636,9 @@ def write_tif(arr: np.ndarray, bbx, tile_idx, country, suffix = "preds") -> str:
 
     # create the file based on the size of the array
     transform = rs.transform.from_bounds(west = west, south = south,
-                                               east = east, north = north,
-                                               width = arr.shape[1],
-                                               height = arr.shape[0])
+                                         east = east, north = north,
+                                         width = arr.shape[1],
+                                         height = arr.shape[0])
 
     print("Writing", file)
     new_dataset = rs.open(file, 'w', driver = 'GTiff',
@@ -604,19 +657,19 @@ def write_tif(arr: np.ndarray, bbx, tile_idx, country, suffix = "preds") -> str:
 
 def execute(tile_idx, country, model):
 
-    ## make the training data and model an input
-    
+    ## make the training data version an input
     local_dir = '../tmp/' + country
     successful = download_raw_tile((tile_idx[0], tile_idx[1]), local_dir)
     if successful:
         bbx_df, bbx = make_bbox(country, (tile_idx[0], tile_idx[1]))
         s2_proc, image_dates, interp, s1_proc, slope_proc, cloudshad = process_tile(tile_idx[0], tile_idx[1], bbx_df, local_dir, bbx)
         sample, sample_dims = make_sample_nofeats(slope_proc, s1_proc, s2_proc)
-        unseen_ss = reshape_and_scale(['v8'], sample)
+        unseen_ss = reshape_and_scale_manual(sample)
         preds = predict_classification(unseen_ss, model, sample_dims)
         write_tif(preds, bbx, tile_idx, country, 'preds')
     else:
         print(f'Raw data for {tile_idx} does not exist.')
+    
     return None
 
 
