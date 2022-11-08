@@ -10,7 +10,6 @@ import glob
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import GridSearchCV, train_test_split, cross_val_score
 from sklearn.model_selection import learning_curve
 from sklearn.metrics import roc_curve, roc_auc_score, precision_recall_curve, f1_score, precision_score, recall_score, confusion_matrix, ConfusionMatrixDisplay
@@ -220,14 +219,3 @@ def learning_curve_comp(model_names, v_train_data, X_train, y_train):
         
     return None
 
-
-def visualize_large_feats(model_name, v_train_data, train_data):
-
-    filename = f'../models/{model_name}_model_{v_train_data}.pkl'
-    with open(filename, 'rb') as file:
-        model = pickle.load(file)
-
-    preds = model.predict(train_data)
-    sns.heatmap(preds.reshape((500, 500)), vmin=0, vmax=.8).set_title(model_name)
-
-    return None
