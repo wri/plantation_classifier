@@ -243,7 +243,7 @@ def mask_nonurban_areas(file, bbx, pfcps):
         rst = binary_dilation(rst, iterations=5)
         rst = resize(rst, pfcps.shape, 0)
         pfcps[rst == 0] = 0.
-        print(f"Tile is {np.mean(rst == 1) * 100}% urban")
+        # print(f"Tile is {np.mean(rst == 1) * 100}% urban")
         return pfcps
 
 
@@ -305,7 +305,7 @@ def remove_cloud_and_shadows(tiles: np.ndarray,
             areas_interpolated[date] = blurred
 
     areas_interpolated = areas_interpolated.astype(np.float32)
-    print(np.mean(areas_interpolated > 0, axis=(1, 2)))
+    # print(np.mean(areas_interpolated > 0, axis=(1, 2)))
     mosaic = make_aligned_mosaic(tiles, areas_interpolated)
 
     def _water_ndwi(array):
@@ -542,7 +542,7 @@ def detect_pfcp(arr, dem, bbx):
         pfps[i] = binary_dilation(pfps[i], iterations=6, structure=struct2)
 
     fcps = (pfps * cdis)
-    print("False positive clouds", np.mean(fcps, axis=(1, 2)))
+    # print("False positive clouds", np.mean(fcps, axis=(1, 2)))
     return fcps, pfps
 
 
@@ -875,8 +875,7 @@ def calculate_cloud_steps(clouds: np.ndarray, dates: np.ndarray, verbose=False) 
                             if i in [0, 2, 3, 5]
                         ]
                         month_good_dates = np.array(month_good_dates)
-                    print(f"{month + 1}, Dates: {month_good_dates},"
-                          f" Dist: {min_distance}, Thresh: {thresh[x]}")
+                    # print(f"{month + 1}, Dates: {month_good_dates}," f" Dist: {min_distance}, Thresh: {thresh[x]}")
                     good_steps = np.concatenate(
                         [good_steps, month_good_dates.flatten()])
 
@@ -1131,9 +1130,7 @@ def subset_contiguous_sunny_dates(dates, probs):
         delete_max = False
         n_removed = 0
         n_to_remove = len(dates_round_3) - 9
-        print(
-            f"There are {len(dates_round_3)} dates and need to remove {n_to_remove}"
-        )
+        print(f"There are {len(dates_round_3)} dates and need to remove {n_to_remove}")
 
         highest_n = np.argpartition(probs_round_3, -n_to_remove)[-n_to_remove:]
         # In general, we do not want to remove the cloudiest image..
