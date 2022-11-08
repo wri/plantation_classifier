@@ -9,7 +9,7 @@ import sys
 sys.path.append('../src/')
 
 
-def mosaic_tif(country: str, model: str):
+def mosaic_tif(country: str, model: str, date: str):
 
     ''''
     Takes in a list of tiles and merges them to form a single tif.
@@ -17,7 +17,7 @@ def mosaic_tif(country: str, model: str):
 
     # use the list of tiles to create a list of filenames
     tifs_to_mosaic = []
-    for tile in os.listdir(f'../tmp/{country}/preds/'):
+    for tile in [x for x in os.listdir(f'../tmp/{country}/preds/') if x != 'mosaic' and x != '.DS_Store']:
         tifs_to_mosaic.append(tile)
 
     # potential to use this -- gdal not cooperating at the moment
@@ -32,11 +32,12 @@ def mosaic_tif(country: str, model: str):
         src = rs.open(f'../tmp/{country}/preds/{file}')
         reader_mode.append(src) 
     
-    print(f'Merging {len(reader_mode)} tifs...')
+    print(f'Merging {len(reader_mode)} tifs.')
     mosaic, out_transform = merge(reader_mode)
     
     # outpath will be the new filename
-    outpath = f'../tmp/{country}/preds/{country}_{model}.tif'
+    suffix = f'{country}_{model}_{date}.tif'
+    outpath = f'../tmp/{country}/preds/mosaic/{suffix}'
     out_meta = src.meta.copy()
     out_meta.update({'driver': "GTiff",
                      'dtype': 'uint8',
@@ -60,9 +61,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     print("Argument List:", str(sys.argv))
 
-    parser.add_argument('--tile_list', dest='tiles', nargs='+', type=list)
     parser.add_argument('--country', dest='country', type=str)
     parser.add_argument('--model', dest='model', type=str)
+    parser.add_argument('--date', dest='date', type=str)
 
     args = parser.parse_args()
     
