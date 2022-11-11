@@ -1,6 +1,10 @@
 .git
+.cache
+tmp/*
 data/*
 notebooks/*
+__pycache__/*
 
 *.pem
 *.ipynb
+*.tif
