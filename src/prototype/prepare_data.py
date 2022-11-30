@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
+import random
 
 # Load Data -- download from s3 via jupyter notebook
 # Plot ID Labeling
@@ -22,7 +23,7 @@ from sklearn.model_selection import train_test_split
 def load_slope(idx, directory = '../data/train-slope/'):
     """
     Slope is stored as a 32 x 32 float32 array with border information.
-    Needs to be converted to 14 x 14 to match the labels w/ new axis.
+    Needs to be converted to 1 x 14 x 14 array to match the labels w/ new axis.
     directory = '../data/train-slope/'
     """
     # Remove axes of length one with .squeeze (32 x 32 x 1)
@@ -113,11 +114,11 @@ def load_feats(idx, drop_prob, directory = '../data/train-features/'):
     Index 33 - 65 are low level features
     '''
     feats = hkl.load(directory + str(idx) + '.hkl').astype(np.float32)
-    
+
     if drop_prob == True:
         feats = feats[..., :64]
         
-    #print(f'{idx} feats: {feats.shape}, {feats.dtype}')
+    # print(f'{idx} feats: {feats.shape}, {feats.dtype}')
     return feats
 
 
@@ -191,21 +192,19 @@ def create_xy(sample_shape, v_train_data, drop_prob, drop_feats, verbose=False):
         for i in v_train_data:
             df = pd.read_csv(f'../data/ceo-plantations-train-{i}.csv')
             plot_ids = plot_ids + df.PLOT_FNAME.drop_duplicates().tolist()
-            #plot_ids.append(df.PLOT_FNAME.drop_duplicates().tolist())
     
     # if the plot_ids do not have 5 digits, change to str and add leading 0
     plot_ids = [str(item).zfill(5) if len(str(item)) < 5 else item for item in plot_ids]
 
     # check and remove any plot ids where there are no cloud free images (no feats or s2)
     for plot in plot_ids:
-        if not os.path.exists(f'../data/train-s2/{plot}.hkl'):
-            if not os.path.exists(f'../data/train-features/{plot}.hkl'):
-                print(f'Plot id {plot} has no cloud free imagery and will be removed.')
-                plot_ids.remove(plot)
-    
+        if not os.path.exists(f'../data/train-s2/{plot}.hkl') and not os.path.exists(f'../data/train-features/{plot}.hkl'):
+            print(f'Plot id {plot} has no cloud free imagery and will be removed.')
+            plot_ids.remove(plot)
+
     # manually remove this plot that was getting skipped for unknown reason
-    plot_ids.remove('04008')
-    # plot_ids.remove('08182')
+    # plot_ids.remove('04008')
+    plot_ids.remove('08182')
     # plot_ids.remove('09168')
     # plot_ids.remove('09224')
 
@@ -284,9 +283,10 @@ def create_xy(sample_shape, v_train_data, drop_prob, drop_feats, verbose=False):
 
 
 
-def reshape_and_scale_manual(X, y, verbose=False):
+def reshape_and_scale_manual(X, y, v_train_data, verbose=False):
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=22)
+    start_min, start_max = X_train.min(), X_train.max()
 
     if verbose:
         print(f'X_train: {X_train.shape} X_test: {X_test.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}')
@@ -315,14 +315,16 @@ def reshape_and_scale_manual(X, y, verbose=False):
             # update each band in X_train and X_test to hold standardized data
             X_train[..., band] = X_train_std
             X_test[..., band] = X_test_std
-
+            end_min, end_max = X_train.min(), X_train.max()
+            
             min_all.append(mins)
             max_all.append(maxs)
         else:
             pass
-        
-    print(f"The data has been scaled to {np.min(X_train)}, {np.max(X_train)}")
-
+    
+    # save mins and maxs 
+    np.save(f'../data/mins_{v_train_data}', min_all)
+    np.save(f'../data/maxs_{v_train_data}', max_all)
 
     ## reshape
     X_train_ss = np.reshape(X_train, (np.prod(X_train.shape[:-1]), X_train.shape[-1]))
@@ -331,5 +333,6 @@ def reshape_and_scale_manual(X, y, verbose=False):
     y_test = np.reshape(y_test, (np.prod(y_test.shape[:])))
     if verbose:
         print(f'Reshaped X_train: {X_train_ss.shape} X_test: {X_test_ss.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}')
+        print(f"The data was scaled to: Min {start_min} -> {end_min}, Max {start_max} -> {end_max}")
 
     return X_train_ss, X_test_ss, y_train, y_test
