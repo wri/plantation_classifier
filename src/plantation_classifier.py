@@ -17,7 +17,6 @@ from scipy.ndimage import median_filter
 from skimage.transform import resize
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
-from catboost import CatBoostClassifier
 
 import sys
 sys.path.append('../src/')
@@ -47,7 +46,6 @@ def download_folder(s3_folder: str, local_dir: str, apikey, apisecret):
     s3 = boto3.resource('s3', aws_access_key_id=apikey, aws_secret_access_key=apisecret)
     bucket = s3.Bucket('tof-output')
 
-    
     for obj in bucket.objects.filter(Prefix=s3_folder):
         target = obj.key if local_dir is None \
             else os.path.join(local_dir, os.path.relpath(obj.key, s3_folder))
@@ -89,6 +87,7 @@ def download_raw_tile(tile_idx: tuple, local_dir: str) -> None:
         print(f"Downloading {s3_path_to_tile}")
         try: 
             s3 = boto3.resource('s3')
+            # confirm what this line is for?
             s3.Object('tof-output', s3_path_to_tile + f'raw/s1/{str(x)}X{str(y)}Y.hkl').load()
             download_folder(s3_folder = s3_path_to_tile,
                             local_dir = path_to_tile,
@@ -235,7 +234,7 @@ def adjust_shape(arr: np.ndarray, width: int, height: int) -> np.ndarray:
 
     return arr.squeeze()
 
-def process_tile(x: int, y: int, data: pd.DataFrame, local_path: str, bbx: list, make_shadow: bool = True, verbose=False) -> np.ndarray:
+def process_tile(x: int, y: int, data: pd.DataFrame, local_path: str, bbx: list, feats, make_shadow: bool = True, verbose=False) -> np.ndarray:
     """
     Transforms raw data structure (in temp/raw/*) to processed data structure
         - align shapes of different data sources (clouds / shadows / s1 / s2 / dem)
@@ -272,6 +271,29 @@ def process_tile(x: int, y: int, data: pd.DataFrame, local_path: str, bbx: list,
     s2_file = f'{folder}raw/s2/{tile_idx}.hkl'
     clean_steps_file = f'{folder}raw/clouds/clean_steps_{tile_idx}.hkl'
     dem_file = f'{folder}raw/misc/dem_{tile_idx}.hkl'
+    feats_file = f'{folder}raw/feats/{tile_idx}_feats.hkl'
+    
+    # load and prep features here
+    if feats:
+        feats_full = hkl.load(feats_file)
+        if feats_full.shape[0] != 65:
+            print(f'Warning: there are only {feats_full.shape[0]} feats')
+            
+        # separate /combine preds and feats ... there's prob an easier way?
+        preds = feats_full[0]
+        feats = feats_full[1:, ...] / 1000
+        comb = np.empty((feats_full.shape[0], feats_full.shape[1], feats_full.shape[2]))
+        comb[0,...] = preds
+        comb[1:,...] = feats
+
+        # adjust shape (65, 614, 618) ->  (618, 614, 65) 
+        # and make sure float32
+        comb = np.rollaxis(comb, 0, 3)
+        comb = np.rollaxis(comb, 0, 2)
+        tml_feats = comb.astype(np.float32)
+
+    else:
+        tml_feats = []
     
     clouds = hkl.load(clouds_file)
     if os.path.exists(cloud_mask_file):
@@ -437,41 +459,41 @@ def process_tile(x: int, y: int, data: pd.DataFrame, local_path: str, bbx: list,
 
     dem = dem / 90
     sentinel2 = np.clip(sentinel2, 0, 1)
-    #sns.heatmap(sentinel2[0, ..., 0])
 
-    return sentinel2, image_dates, interp, s1, dem, cloudshad
+    # switch from monthly to annual median
+    s1 = np.median(s1, axis = 0)
+    s2 = np.median(sentinel2, axis = 0)
 
-## PLACEHOLDER download feats (identify input and output )
+    #removing return of image_dates, interp, cloudshad as not used
+    return s2, tml_feats, s1, dem
+
 
 ## Step 3: Create a sample for input into the model -- right now using no TML features
 
-def make_sample(slope, s1, s2, feats):
+def make_sample(slope, s1, s2, tml_feats):
     
     ''' 
     Takes the output of process_tile() and calculates the monthly median
     Defines dimensions and then combines slope, s1, s2 and TML features from a plot
     into a sample with shape (x, x, 78)
     '''
-    
-    # define the last dimension of the array
-    n_feats = 1 + s1.shape[-1] + s2.shape[-1] + feats.shape[-1]
 
-    # Confirm if sample shape is a 2D array 
+    # define number of features in the sample
+    n_feats = 1 + s1.shape[-1] + s2.shape[-1] + tml_feats.shape[-1] 
+
+    # Create the empty array using shape of inputs
     sample = np.empty((slope.shape[0], slope.shape[1], n_feats))
-
-    # switch from monthly to annual median
-    s1 = np.median(s1, axis = 0)
-    s2 = np.median(s2, axis = 0)
     
     # populate empty array with each feature
     sample[..., 0] = slope
     sample[..., 1:3] = s1
     sample[..., 3:13] = s2
-    sample[..., 13:] = feats
+    sample[..., 13:] = tml_feats
 
     # save dims for future use
     arr_dims = (sample.shape[0], sample.shape[1])
-    
+    print(sample.shape)
+
     return sample, arr_dims
 
 def make_sample_nofeats(slope, s1, s2):
@@ -547,48 +569,48 @@ def reshape_and_scale(v_train_data: list, unseen, verbose=False):
     return unseen_ss
 
 
-def reshape_and_scale_manual(unseen, verbose=False):
+def reshape_and_scale_manual(v_train_data, unseen, verbose=False):
 
     ''' 
     Manually standardizes the sample on a 1, 99% scaler 
-    instead of applying a mean, std scaler. Reshapes the sample
-    from (x, x, 13) to (x, 13).
+    instead of applying a mean, std scaler. Imports array of mins/maxs from
+    appropriate training dataset for scaling of unseen data.
+    Then reshapes the sample from (x, x, 13) to (x, 13).
     '''
-
-    # MANUALLY standardize train/test data 
-    min_all = []
-    max_all = []
+    # import mins and maxs from appropriate training dataset 
+    mins = np.load(f'../data/mins_{v_train_data}.npy')
+    maxs = np.load(f'../data/maxs_{v_train_data}.npy')
+    start_min, start_max = unseen.min(), unseen.max()
 
     # iterate through the 10 bands and standardize the data based 
     # on a 1 and 99% scaler instead of a mean and std scaler (standard scalar)
     for band in range(0, unseen.shape[-1]):
-        
-        mins = np.percentile(unseen[..., band], 1)
-        maxs = np.percentile(unseen[..., band], 99)
-        
-        if maxs > mins:
-            
-            # clip values in each band based on min/max 
-            unseen[..., band] = np.clip(unseen[..., band], mins, maxs)
 
-            #calculate standardized data
-            midrange = (maxs + mins) / 2
-            rng = maxs - mins
+        min = mins[band]
+        max = maxs[band]
+        print(f'Band {band}: {min} - {max}')
+
+        if max > min:
+            
+            # clip values outside of min - max interval for unseen band
+            unseen[..., band] = np.clip(unseen[..., band], min, max)
+
+            # now calculate standardized data for unseen
+            midrange = (max + min) / 2
+            rng = max - min
             standardized = (unseen[..., band] - midrange) / (rng / 2)
 
-            # update each band in the array to the standardized data
+            # update each band in unseen to the standardized data
+            #unseen_s = unseen.copy()
             unseen[..., band] = standardized
-
-            min_all.append(mins)
-            max_all.append(maxs)
+            end_min, end_max = unseen.min(), unseen.max()
+            
         else:
+            print('Warning: mins > maxs')
             pass
     
     if verbose:
-        print(unseen.shape)
-        print(f"The data has been scaled to {np.min(unseen)}, {np.max(unseen)}")
-        print(min_all)
-        print(max_all)
+        print(f"The data has been scaled. Min {start_min} -> {end_min}, Max {start_max} -> {end_max},")
 
     # now reshape
     unseen_reshaped = np.reshape(unseen, (np.prod(unseen.shape[:-1]), unseen.shape[-1]))
@@ -608,9 +630,13 @@ def predict_classification(arr, model, sample_dims):
     with open(f'../models/{model}.pkl', 'rb') as file:  
         model_pretrained = pickle.load(file)
     
+    model = 'rfr'
     preds = model_pretrained.predict(arr)
+    if model == 'rfr':
+        preds = preds * 100
     reshaped_preds = preds.reshape(sample_dims[0], sample_dims[1])
-    # print(f'Predictions: {np.unique(reshaped_preds)}')
+    #print(f'Predictions: {np.unique(reshaped_preds)}')
+    print(reshaped_preds)
 
     return reshaped_preds
 
@@ -655,16 +681,19 @@ def write_tif(arr: np.ndarray, bbx, tile_idx, country, suffix = "preds") -> str:
 
 # Execute steps
 
-def execute(tile_idx, country, model):
+def execute(tile_idx, country, model, feats):
 
     ## make the training data version an input
     local_dir = '../tmp/' + country
     successful = download_raw_tile((tile_idx[0], tile_idx[1]), local_dir)
     if successful:
         bbx_df, bbx = make_bbox(country, (tile_idx[0], tile_idx[1]))
-        s2_proc, image_dates, interp, s1_proc, slope_proc, cloudshad = process_tile(tile_idx[0], tile_idx[1], bbx_df, local_dir, bbx)
-        sample, sample_dims = make_sample_nofeats(slope_proc, s1_proc, s2_proc)
-        unseen_ss = reshape_and_scale_manual(sample)
+        s2_proc, tml_feats, s1_proc, slope_proc = process_tile(tile_idx[0], tile_idx[1], bbx_df, local_dir, bbx, feats)
+        if feats:
+            sample, sample_dims = make_sample(slope_proc, s1_proc, s2_proc, tml_feats)
+        else:
+            sample, sample_dims = make_sample_nofeats(slope_proc, s1_proc, s2_proc)
+        unseen_ss = reshape_and_scale_manual('v11', sample, verbose=True)
         preds = predict_classification(unseen_ss, model, sample_dims)
         write_tif(preds, bbx, tile_idx, country, 'preds')
     else:
