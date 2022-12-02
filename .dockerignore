@@ -3,8 +3,13 @@
 tmp/*
 data/*
 notebooks/*
+models/*
 __pycache__/*
 
 *.pem
 *.ipynb
 *.tif
+
+!models/cat_model_v11.pkl
+!data/urbanmask.tif
+!data/ashanti.csv
