@@ -6,9 +6,9 @@ RUN apt-get update -y && apt-get install --no-install-recommends -y -q \
     ca-certificates gcc libffi-dev wget unzip git openssh-client gnupg curl \
     python3-dev python3-setuptools
 
-WORKDIR /src
+WORKDIR /app
 
-# create the environment (this is a Conda-based application)
+# create the environment for Conda-based application
 COPY environment.yaml .
 RUN conda env create -f environment.yaml
 
@@ -30,10 +30,13 @@ RUN apt-get update && apt-get install -y software-properties-common &&\
  	export C_INCLUDE_PATH=/usr/include/gdal &&\
  	pip install GDAL==$(gdal-config --version | awk -F'[.]' '{print $1"."$2}') --global-option=build_ext --global-option="-I/usr/include/gdal"
 
-# copy over the appropriate scripts
-COPY src/* src/
+# copy over the appropriate scripts/data
+COPY src/ /app/src/
+COPY data/ashanti.csv /app/data/ashanti.csv
+COPY data/urbanmask.tif /app/data/urbanmask.tif
+COPY models/cat_model_v11.pkl /app/models/cat_model_v11.pkl
 
 EXPOSE 8080
 
 # list of commands - removed args
-ENTRYPOINT ["conda", "run","--no-capture-output", "-n", "plantations3", "python3", "plantation_classifier.py"]
+ENTRYPOINT ["conda", "run","--no-capture-output", "-n", "plantations3", "python3", "src/plantation_classifier.py"]
