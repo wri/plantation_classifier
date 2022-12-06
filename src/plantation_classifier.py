@@ -9,8 +9,8 @@ import copy
 import os
 import boto3
 import botocore
-import confuse
 import rasterio as rs
+import yaml
 from osgeo import gdal
 import time
 from scipy.ndimage import median_filter
@@ -25,26 +25,63 @@ import cloud_removal
 from prototype import prepare_data 
 
 
-config = confuse.Configuration('plantation-classifier')
-config.set_file('/Users/jessica.ertel/plantation_classifier/config.yaml')
-aws_access_key = config['aws']['aws_access_key_id'].as_str()
-aws_secret_key = config['aws']['aws_secret_access_key'].as_str()
+with open("../config.yaml", 'r') as stream:
+    key = (yaml.safe_load(stream))
+    aak = key['aws']['aws_access_key_id']
+    ask = key['aws']['aws_secret_access_key']
 
 
 ## Step 1: Download raw data from s3
-
-def download_folder(s3_folder: str, local_dir: str, apikey: str, apisecret: str):
+def download_tile_ids(country: str, local_dir: str, aws_access_key: str, aws_secret_key: str):
     '''
-    Download the contents of the tof-output s3 folder directory
+    Checks to see if a country csv file exists locally,
+    if not downloads the file from s3 and creates
+    a list of tiles for processing.
+    '''
+    
+    # check if csv exists locally
+    folder_to_check = os.path.exists(f'../data/{country}.csv')
+    if folder_to_check:
+        print('CSV exists locally.')
+    
+    # if csv doesnt exist locally, check if available on s3
+    if not folder_to_check:
+        s3 = boto3.resource('s3',
+                            aws_access_key_id=aws_access_key, 
+                            aws_secret_access_key=aws_secret_key)
+
+        bucket = s3.Bucket('tof-output')
+        s3_file = f'2020/databases/{country}.csv'
+        
+        # turn the bucket + file into a object summary list
+        objs = list(bucket.objects.filter(Prefix=s3_file))
+        
+        if len(objs) > 0:
+            print(f"The s3 resource s3://{bucket}/{key} exists.")
+            bucket.download_file(objs.key, f'../data/{country}.csv')
+    
+    database = pd.read_csv(f'../data/{country}.csv')
+
+    # create a list of tiles 
+    tiles = database[['X_tile', 'Y_tile']].to_records(index=False)
+
+    return tiles
+
+
+def download_folder(s3_folder: str, local_dir: str, aws_access_key: str, aws_secret_key: str):
+    '''
+    Download the contents of the tof-output/s3-folder 
     into a local folder.
     '''
     
-    s3 = boto3.resource('s3', aws_access_key_id=apikey, aws_secret_access_key=apisecret)
+    s3 = boto3.resource('s3',
+                        aws_access_key_id=aws_access_key, 
+                        aws_secret_access_key=aws_secret_key)
+
     bucket = s3.Bucket('tof-output')
 
     for obj in bucket.objects.filter(Prefix=s3_folder):
-        target = obj.key if local_dir is None \
-            else os.path.join(local_dir, os.path.relpath(obj.key, s3_folder))
+        target = os.path.join(local_dir, os.path.relpath(obj.key, s3_folder))
         if not os.path.exists(os.path.dirname(target)):
             os.makedirs(os.path.dirname(target))
         if obj.key[-1] == '/':
@@ -54,7 +91,7 @@ def download_folder(s3_folder: str, local_dir: str, apikey: str, apisecret: str)
     return None
 
 
-def download_raw_tile(tile_idx: tuple, local_dir: str) -> None:
+def download_raw_tile(tile_idx: tuple, local_dir: str, access_key: str, secret_key: str) -> None:
     '''
     If data is not present locally, downloads raw data (clouds, DEM and 
     image dates, s1 and s2 (10 and 20m bands)) for the specified tile from s3. 
@@ -72,7 +109,7 @@ def download_raw_tile(tile_idx: tuple, local_dir: str) -> None:
     # check if the clouds folder already exists locally
     folder_to_check = os.path.exists(path_to_tile + "raw/clouds/")
     if folder_to_check:
-        print('Exists locally.')
+        print('Raw data exists locally.')
         return True
     
     # if the clouds folder doesn't exist locally, download raw tile
@@ -83,10 +120,11 @@ def download_raw_tile(tile_idx: tuple, local_dir: str) -> None:
             s3 = boto3.resource('s3')
             # confirm what this line is for?
             s3.Object('tof-output', s3_path_to_tile + f'raw/s1/{str(x)}X{str(y)}Y.hkl').load()
+            
             download_folder(s3_folder = s3_path_to_tile,
                             local_dir = path_to_tile,
-                            apikey = aws_access_key,
-                            apisecret = aws_secret_key)
+                            aws_access_key = access_key,
+                            aws_secret_key = secret_key)
             return True
 
         # TODO something to handle cases where there is no cloud free imagery for a tile?
@@ -99,7 +137,7 @@ def download_raw_tile(tile_idx: tuple, local_dir: str) -> None:
 
 ## Step 2: Create a cloud free composte
 
-def make_bbox(database: str, tile_idx: tuple, expansion: int = 10) -> list:
+def make_bbox(country: str, tile_idx: tuple, expansion: int = 10) -> list:
     """
     Makes a (min_x, min_y, max_x, max_y) bounding box that
     is 2 * expansion 300 x 300 meter ESA LULC pixels. 
@@ -111,7 +149,7 @@ def make_bbox(database: str, tile_idx: tuple, expansion: int = 10) -> list:
        Returns:
             bbx (list): expanded [min_x, min_y, max_x, max_y]
     """
-    data = pd.read_csv(f"../data/{database}.csv")
+    data = pd.read_csv(f"../data/{country}.csv")
 
     # this will remove quotes around x and y tile indexes (not needed for all countries)
     # data['X_tile'] = data['X_tile'].str.extract('(\d+)', expand=False)
@@ -146,7 +184,7 @@ def make_bbox(database: str, tile_idx: tuple, expansion: int = 10) -> list:
     bbx[3] += expansion * multiplier
     
     # return the dataframe and the array
-    return bbx_df, bbx
+    return bbx
 
 def convert_to_db(x: np.ndarray, min_db: int) -> np.ndarray:
     """ 
@@ -262,7 +300,7 @@ def process_tile(x: int, y: int, local_path: str, bbx: list, feats: bool, make_s
             
     folder = f"{local_path}/{str(x)}/{str(y)}/"
     tile_idx = f'{str(x)}X{str(y)}Y'
-    
+
     clouds_file = f'{folder}raw/clouds/clouds_{tile_idx}.hkl'
     cloud_mask_file = f'{folder}raw/clouds/cloudmask_{tile_idx}.hkl'
     shadows_file = f'{folder}raw/clouds/shadows_{tile_idx}.hkl'
@@ -271,17 +309,16 @@ def process_tile(x: int, y: int, local_path: str, bbx: list, feats: bool, make_s
     s2_10_file = f'{folder}raw/s2_10/{tile_idx}.hkl'
     s2_20_file = f'{folder}raw/s2_20/{tile_idx}.hkl'
     s2_dates_file = f'{folder}raw/misc/s2_dates_{tile_idx}.hkl'
-    s2_file = f'{folder}raw/s2/{tile_idx}.hkl'
     clean_steps_file = f'{folder}raw/clouds/clean_steps_{tile_idx}.hkl'
     dem_file = f'{folder}raw/misc/dem_{tile_idx}.hkl'
-    feats_file = f'{folder}raw/feats/{tile_idx}_feats.hkl'
-    
+
     # load and prep features here
     if feats:
+        feats_file = f'{folder}raw/feats/{tile_idx}_feats.hkl'
         feats_full = hkl.load(feats_file)
         if feats_full.shape[0] != 65:
             print(f'Warning: there are {feats_full.shape[0]} feats')
-            
+    
         # separate /combine preds and feats ... there's prob an easier way?
         preds = feats_full[0]
         feats = feats_full[1:, ...] / 1000
@@ -563,7 +600,7 @@ def reshape_and_scale(v_train_data: list, unseen, verbose=False):
 def reshape_and_scale_manual(v_train_data: str, unseen: np.array, verbose=False):
 
     ''' 
-    Manually standardizes the unseen array on a 1, 99% scaler 
+    Manually standardizes the unseen array on a 1%, 99% scaler 
     instead of applying a mean, std scaler (StandardScalar). Imports array of mins/maxs from
     appropriate training dataset for scaling of unseen data. Then reshapes the sample from 
     (x, x, 13 or 78) to (x, 13 or 78).
@@ -574,7 +611,7 @@ def reshape_and_scale_manual(v_train_data: str, unseen: np.array, verbose=False)
     maxs = np.load(f'../data/maxs_{v_train_data}.npy')
     start_min, start_max = unseen.min(), unseen.max()
 
-    # iterate through the 10 bands and standardize the data based 
+    # iterate through the bands and standardize the data based 
     # on a 1 and 99% scaler instead of a mean and std scaler (standard scalar)
     for band in range(0, unseen.shape[-1]):
 
@@ -593,7 +630,6 @@ def reshape_and_scale_manual(v_train_data: str, unseen: np.array, verbose=False)
             standardized = (unseen[..., band] - midrange) / (rng / 2)
 
             # update each band in unseen to the standardized data
-            #unseen_s = unseen.copy()
             unseen[..., band] = standardized
             end_min, end_max = unseen.min(), unseen.max()
             
@@ -634,7 +670,7 @@ def predict_classification(arr: np.array, model: str, sample_dims: tuple):
     return reshaped_preds
 
 
-# Step 6: Write predictions for that tile to a tif -- eventually this will be a separate script
+# Step 6: Write predictions for that tile to a tif -- eventually this will be a separate script?
 
 def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, suffix = "preds") -> str:
     '''
@@ -679,31 +715,35 @@ def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, suffix 
 
 # Execute steps
 
-def execute(tile_idx: tuple, country: str, model: str, feats: bool):
+def execute(country: str, model: str, feats: bool):
     '''
     Run through all steps in the modeling pipeline, except writing tif to file
     '''
-
-    ## make the training data version an input
     local_dir = '../tmp/' + country
-    successful = download_raw_tile((tile_idx[0], tile_idx[1]), local_dir)
-    if successful:
-        bbx_df, bbx = make_bbox(country, (tile_idx[0], tile_idx[1]))
-        s2_proc, tml_feats, s1_proc, dem_proc = process_tile(tile_idx[0], tile_idx[1], bbx_df, local_dir, bbx, feats)
-        if feats:
-            sample, sample_dims = make_sample(dem_proc, s1_proc, s2_proc, tml_feats)
-            unseen_ss = reshape_and_scale_manual('v11', sample, verbose=True)
-        # the option to incl feats will be removed in the future - just keeping for testing
+
+    tiles_to_process = download_tile_ids(country, local_dir, aak, ask)
+
+    for tile_idx in tiles_to_process:
+        successful = download_raw_tile((tile_idx[0], tile_idx[1]), local_dir, aak, ask)
+
+        if successful:
+            bbx = make_bbox(country, (tile_idx[0], tile_idx[1]))
+            s2_proc, tml_feats, s1_proc, dem_proc = process_tile(tile_idx[0], tile_idx[1], local_dir, bbx, feats)
+            
+            if feats:
+                sample, sample_dims = make_sample(dem_proc, s1_proc, s2_proc, tml_feats)
+                unseen_ss = reshape_and_scale_manual('v11', sample, verbose=True)
+            # the option to incl feats will be removed in the future - just keeping for testing
+            else:
+                sample, sample_dims = make_sample_nofeats(dem_proc, s1_proc, s2_proc)
+                unseen_ss = reshape_and_scale_manual('v11_nf', sample, verbose=True)
+            
+            preds = predict_classification(unseen_ss, model, sample_dims)
+            #write_tif(preds, bbx, tile_idx, country, 'preds')
         else:
-            sample, sample_dims = make_sample_nofeats(dem_proc, s1_proc, s2_proc)
-            unseen_ss = reshape_and_scale_manual('v11_nf', sample, verbose=True)
-        preds = predict_classification(unseen_ss, model, sample_dims)
-        write_tif(preds, bbx, tile_idx, country, 'preds')
-    else:
-        print(f'Raw data for {tile_idx} does not exist.')
+            print(f'Raw data for {tile_idx} does not exist on s3.')
 
     return None
-
 
 
 if __name__ == '__main__':
@@ -712,10 +752,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     print("Argument List:", str(sys.argv))
 
-    parser.add_argument('--tile_idx', dest='tile_idx', nargs='+', type=int)
     parser.add_argument('--country', dest='country', type=str)
     parser.add_argument('--model', dest='model', type=str)
+    parser.add_argument('--feats', dest='feats', default=False, type=bool) # update this default to True
+
 
     args = parser.parse_args()
     
-    execute(args.tile_idx, args.country, args.model)
+    execute(args.country, args.model, args.feats)
