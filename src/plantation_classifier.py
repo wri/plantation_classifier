@@ -19,16 +19,16 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 
 import sys
-sys.path.append('../src/')
+sys.path.append('src/')
 import interpolation
 import cloud_removal
 from prototype import prepare_data 
 
 
-with open("../config.yaml", 'r') as stream:
-    key = (yaml.safe_load(stream))
-    aak = key['aws']['aws_access_key_id']
-    ask = key['aws']['aws_secret_access_key']
+with open("config.yaml", 'r') as stream:
+    document = (yaml.safe_load(stream))
+    aak = document['aws']['aws_access_key_id']
+    ask = document['aws']['aws_secret_access_key']
 
 
 ## Step 1: Download raw data from s3
@@ -38,29 +38,33 @@ def download_tile_ids(country: str, local_dir: str, aws_access_key: str, aws_sec
     if not downloads the file from s3 and creates
     a list of tiles for processing.
     '''
-    
+    dest_file = f'data/{country}.csv'
+    s3_file = f'2020/databases/{country}.csv'
+
     # check if csv exists locally
-    folder_to_check = os.path.exists(f'../data/{country}.csv')
-    if folder_to_check:
-        print('CSV exists locally.')
-    
+    # confirm subdirectory exists otherwise download can fail
+    if os.path.exists(dest_file):
+        print('File exists locally.')
+    if not os.path.exists('data/'):
+        os.makedirs('data/')
+
     # if csv doesnt exist locally, check if available on s3
-    if not folder_to_check:
+    if not os.path.exists(dest_file):
         s3 = boto3.resource('s3',
                             aws_access_key_id=aws_access_key, 
                             aws_secret_access_key=aws_secret_key)
 
         bucket = s3.Bucket('tof-output')
-        s3_file = f'2020/databases/{country}.csv'
         
         # turn the bucket + file into a object summary list
         objs = list(bucket.objects.filter(Prefix=s3_file))
-        
+        print(s3_file, dest_file)
+
         if len(objs) > 0:
-            print(f"The s3 resource s3://{bucket}/{key} exists.")
-            bucket.download_file(objs.key, f'../data/{country}.csv')
-    
-    database = pd.read_csv(f'../data/{country}.csv')
+            print(f"The s3 resource s3://{bucket.name}/{s3_file} exists.")
+            bucket.download_file(s3_file, dest_file)
+            
+    database = pd.read_csv(dest_file)
 
     # create a list of tiles 
     tiles = database[['X_tile', 'Y_tile']].to_records(index=False)
@@ -117,9 +121,9 @@ def download_raw_tile(tile_idx: tuple, local_dir: str, access_key: str, secret_k
     if not folder_to_check:
         print(f"Downloading {s3_path_to_tile}")
         try: 
-            s3 = boto3.resource('s3')
-            # confirm what this line is for?
-            s3.Object('tof-output', s3_path_to_tile + f'raw/s1/{str(x)}X{str(y)}Y.hkl').load()
+            # s3 = boto3.resource('s3')
+            # # confirm what this line is for?
+            # s3.Object('tof-output', s3_path_to_tile + f'raw/s1/{str(x)}X{str(y)}Y.hkl').load()
             
             download_folder(s3_folder = s3_path_to_tile,
                             local_dir = path_to_tile,
@@ -149,7 +153,7 @@ def make_bbox(country: str, tile_idx: tuple, expansion: int = 10) -> list:
        Returns:
             bbx (list): expanded [min_x, min_y, max_x, max_y]
     """
-    data = pd.read_csv(f"../data/{country}.csv")
+    data = pd.read_csv(f"data/{country}.csv")
 
     # this will remove quotes around x and y tile indexes (not needed for all countries)
     # data['X_tile'] = data['X_tile'].str.extract('(\d+)', expand=False)
@@ -607,8 +611,8 @@ def reshape_and_scale_manual(v_train_data: str, unseen: np.array, verbose=False)
     '''
 
     # import mins and maxs from appropriate training dataset 
-    mins = np.load(f'../data/mins_{v_train_data}.npy')
-    maxs = np.load(f'../data/maxs_{v_train_data}.npy')
+    mins = np.load(f'data/mins_{v_train_data}.npy')
+    maxs = np.load(f'data/maxs_{v_train_data}.npy')
     start_min, start_max = unseen.min(), unseen.max()
 
     # iterate through the bands and standardize the data based 
@@ -617,7 +621,7 @@ def reshape_and_scale_manual(v_train_data: str, unseen: np.array, verbose=False)
 
         min = mins[band]
         max = maxs[band]
-        print(f'Band {band}: {min} - {max}')
+        # print(f'Band {band}: {min} - {max}')
 
         if max > min:
             
@@ -656,7 +660,7 @@ def predict_classification(arr: np.array, model: str, sample_dims: tuple):
     to get probability 0-100. Reshape array to permit writing to tif.
     '''
 
-    with open(f'../models/{model}.pkl', 'rb') as file:  
+    with open(f'models/{model}.pkl', 'rb') as file:  
         model_pretrained = pickle.load(file)
     
     preds = model_pretrained.predict(arr)
@@ -681,7 +685,7 @@ def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, suffix 
      # set x/y to the tile IDs
     x = tile_idx[0]
     y = tile_idx[1]
-    out_folder = f'../tmp/{country}/preds/'
+    out_folder = f'tmp/{country}/preds/'
     file = out_folder + f"{str(x)}X{str(y)}Y_{suffix}.tif"
 
     if not os.path.exists(out_folder):
@@ -719,11 +723,14 @@ def execute(country: str, model: str, feats: bool):
     '''
     Run through all steps in the modeling pipeline, except writing tif to file
     '''
-    local_dir = '../tmp/' + country
+    local_dir = 'tmp/' + country
 
     tiles_to_process = download_tile_ids(country, local_dir, aak, ask)
+    tile_count = len(tiles_to_process)
+    counter = 0
 
     for tile_idx in tiles_to_process:
+        counter += 1
         successful = download_raw_tile((tile_idx[0], tile_idx[1]), local_dir, aak, ask)
 
         if successful:
@@ -742,6 +749,9 @@ def execute(country: str, model: str, feats: bool):
             #write_tif(preds, bbx, tile_idx, country, 'preds')
         else:
             print(f'Raw data for {tile_idx} does not exist on s3.')
+        
+        if counter %10 == 0:
+            print(f'{counter}/{tile_count} tiles processed...')
 
     return None
 
