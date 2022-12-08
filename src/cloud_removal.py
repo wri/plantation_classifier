@@ -466,7 +466,7 @@ def detect_pfcp(arr, dem, bbx):
     pfps = np.logical_and(ndbi > 0, ndbi > ndvi)
     pfps = np.median(pfps, axis=0)
     pfps = pfps * (ndwi < 0)
-    pfps = mask_nonurban_areas("../data/urbanmask.tif", bbx, pfps)
+    pfps = mask_nonurban_areas("data/urbanmask.tif", bbx, pfps)
     pfps[(dem / 90) > 0.10] = 0.
     pfps = pfps[np.newaxis]
 
