@@ -15,14 +15,12 @@ from osgeo import gdal
 import time
 from scipy.ndimage import median_filter
 from skimage.transform import resize
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
 
 import sys
 sys.path.append('src/')
 import interpolation
 import cloud_removal
-from prototype import prepare_data 
+import mosaic
 
 
 with open("config.yaml", 'r') as stream:
@@ -32,7 +30,7 @@ with open("config.yaml", 'r') as stream:
 
 
 ## Step 1: Download raw data from s3
-def download_tile_ids(country: str, local_dir: str, aws_access_key: str, aws_secret_key: str):
+def download_tile_ids(country: str, aws_access_key: str, aws_secret_key: str):
     '''
     Checks to see if a country csv file exists locally,
     if not downloads the file from s3 and creates
@@ -44,7 +42,7 @@ def download_tile_ids(country: str, local_dir: str, aws_access_key: str, aws_sec
     # check if csv exists locally
     # confirm subdirectory exists otherwise download can fail
     if os.path.exists(dest_file):
-        print('File exists locally.')
+        print('Csv file exists locally.')
     if not os.path.exists('data/'):
         os.makedirs('data/')
 
@@ -74,7 +72,7 @@ def download_tile_ids(country: str, local_dir: str, aws_access_key: str, aws_sec
 
 def download_folder(s3_folder: str, local_dir: str, aws_access_key: str, aws_secret_key: str):
     '''
-    Download the contents of the tof-output/s3-folder 
+    Download the contents of the tof-output + s3-folder 
     into a local folder.
     '''
     
@@ -110,30 +108,25 @@ def download_raw_tile(tile_idx: tuple, local_dir: str, access_key: str, secret_k
     path_to_tile = f'{local_dir}/{str(x)}/{str(y)}/'
     s3_path_to_tile = f'2020/raw/{str(x)}/{str(y)}/'
     
-    # check if the clouds folder already exists locally
-    folder_to_check = os.path.exists(path_to_tile + "raw/clouds/")
-    if folder_to_check:
+    # check if feats folder exists locally
+    folder_check = os.path.exists(path_to_tile + "raw/feats/")
+
+    if folder_check:
         print('Raw data exists locally.')
         return True
     
-    # if the clouds folder doesn't exist locally, download raw tile
+    # if feats folder doesn't exist locally, download raw tile
     # and return True
-    if not folder_to_check:
-        print(f"Downloading {s3_path_to_tile}")
+    if not folder_check:
+        print(f"Downloading data for {(x, y)}")
         try: 
-            # s3 = boto3.resource('s3')
-            # # confirm what this line is for?
-            # s3.Object('tof-output', s3_path_to_tile + f'raw/s1/{str(x)}X{str(y)}Y.hkl').load()
-            
             download_folder(s3_folder = s3_path_to_tile,
                             local_dir = path_to_tile,
                             aws_access_key = access_key,
                             aws_secret_key = secret_key)
             return True
 
-        # TODO something to handle cases where there is no cloud free imagery for a tile?
-        # if the tiles do not exist on s3, catch the error
-        # and return False
+        # if the tiles do not exist on s3, catch the error and return False
         except botocore.exceptions.ClientError as e:
             if e.response['Error']['Code'] == "404":
                 return False
@@ -561,46 +554,6 @@ def make_sample_nofeats(dem: np.array, s1: np.array, s2: np.array):
 
 # Step 4: reshape and scale the sample
 
-def reshape_and_scale(v_train_data: list, unseen, verbose=False):
-    
-    '''
-    NOT USING -- Takes in a tile (sample) with dimensions (x, x, 13) and 
-    reshapes to (x, 13), then applies standardization.
-    '''
-    # prepare original training data for vectorizer
-    # drop feats for now - UPDATE LATER
-    X, y = prepare_data.create_xy((14,14), v_train_data, drop_prob=False, drop_feats=True, verbose=False)
-
-    # train test split before reshaping to ensure plot is not mixed samples
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=22)
-
-    # reshape arrays (only Xtrain and unseen)
-    X_train_reshaped = np.reshape(X_train, (np.prod(X_train.shape[:-1]), X_train.shape[-1]))
-    unseen_reshaped = np.reshape(unseen, (np.prod(unseen.shape[:-1]), unseen.shape[-1]))
-    if verbose:
-        print(f'Xtrain Original: {X_train.shape} Xtrain Reshaped: {X_train_reshaped.shape}')
-        print(f'Unseen Original: {unseen.shape} Unseen Reshaped: {unseen_reshaped.shape}')
-
-    # apply standardization on a copy
-    X_train_ss = X_train_reshaped.copy()
-    unseen_ss = unseen_reshaped.copy()
-
-    scaler = StandardScaler()
-    X_train_ss = scaler.fit_transform(X_train_ss)
-    print(f'Scaler mean: {scaler.mean_}')
-    print(f'Scaler scale: {scaler.scale_}')
-
-    unseen_ss = scaler.transform(unseen_ss)
-    print(f'Scaler mean: {scaler.mean_}')
-    print(f'Scaler scale: {scaler.scale_}')
-
-    if verbose:
-        print(f'Scaled to {np.min(X_train_ss)}, {np.max(X_train_ss)}')
-        print(f'Scaled to {np.min(unseen_ss)}, {np.max(unseen_ss)}')
-        
-    return unseen_ss
-
-
 def reshape_and_scale_manual(v_train_data: str, unseen: np.array, verbose=False):
 
     ''' 
@@ -621,7 +574,8 @@ def reshape_and_scale_manual(v_train_data: str, unseen: np.array, verbose=False)
 
         min = mins[band]
         max = maxs[band]
-        # print(f'Band {band}: {min} - {max}')
+        if verbose:
+            print(f'Band {band}: {min} - {max}')
 
         if max > min:
             
@@ -669,7 +623,7 @@ def predict_classification(arr: np.array, model: str, sample_dims: tuple):
         preds = preds * 100
 
     reshaped_preds = preds.reshape(sample_dims[0], sample_dims[1])
-    print(reshaped_preds)
+    #print(reshaped_preds)
 
     return reshaped_preds
 
@@ -721,15 +675,16 @@ def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, suffix 
 
 def execute(country: str, model: str, feats: bool):
     '''
-    Run through all steps in the modeling pipeline, except writing tif to file
+    Executes all steps in the preprocessing and modeling pipeline
     '''
     local_dir = 'tmp/' + country
 
-    tiles_to_process = download_tile_ids(country, local_dir, aak, ask)
+    tiles_to_process = download_tile_ids(country, aak, ask)
     tile_count = len(tiles_to_process)
     counter = 0
 
-    for tile_idx in tiles_to_process:
+    # right now this will just process 20 tiles
+    for tile_idx in tiles_to_process[:2]:
         counter += 1
         successful = download_raw_tile((tile_idx[0], tile_idx[1]), local_dir, aak, ask)
 
@@ -737,22 +692,28 @@ def execute(country: str, model: str, feats: bool):
             bbx = make_bbox(country, (tile_idx[0], tile_idx[1]))
             s2_proc, tml_feats, s1_proc, dem_proc = process_tile(tile_idx[0], tile_idx[1], local_dir, bbx, feats)
             
+            # feats option will be removed in the future
             if feats:
                 sample, sample_dims = make_sample(dem_proc, s1_proc, s2_proc, tml_feats)
-                unseen_ss = reshape_and_scale_manual('v11', sample, verbose=True)
-            # the option to incl feats will be removed in the future - just keeping for testing
+                unseen_ss = reshape_and_scale_manual('v11', sample, verbose=False)
+    
             else:
                 sample, sample_dims = make_sample_nofeats(dem_proc, s1_proc, s2_proc)
-                unseen_ss = reshape_and_scale_manual('v11_nf', sample, verbose=True)
+                unseen_ss = reshape_and_scale_manual('v11_nf', sample, verbose=False)
             
             preds = predict_classification(unseen_ss, model, sample_dims)
-            #write_tif(preds, bbx, tile_idx, country, 'preds')
+            write_tif(preds, bbx, tile_idx, country, 'preds')
+        
         else:
             print(f'Raw data for {tile_idx} does not exist on s3.')
         
         if counter %10 == 0:
             print(f'{counter}/{tile_count} tiles processed...')
-
+    
+    # for now mosaic and upload to s3 bucket
+    mosaic.mosaic_tif(country, model)
+    mosaic.upload_mosaic(country, model, aak, ask)
+    
     return None
 
 
@@ -764,7 +725,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--country', dest='country', type=str)
     parser.add_argument('--model', dest='model', type=str)
-    parser.add_argument('--feats', dest='feats', default=False, type=bool) # update this default to True
+    parser.add_argument('--feats', dest='feats', default=True, type=bool) 
 
 
     args = parser.parse_args()
