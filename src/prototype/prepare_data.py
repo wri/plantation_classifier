@@ -12,13 +12,18 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
+import random
 
-# Load Data
+# Load Data -- download from s3 via jupyter notebook
+# Plot ID Labeling
+# Plot IDs are numbered according to ceo survey
+# the last three digits refer to the plot number and the first two digits refer to the survey
+# for ex: 25th plot in ceo-plantations-train-v04.csv will be 04025.npy or 04025.hkl
 
 def load_slope(idx, directory = '../data/train-slope/'):
     """
     Slope is stored as a 32 x 32 float32 array with border information.
-    Needs to be converted to 14 x 14 to match the labels w/ new axis.
+    Needs to be converted to 1 x 14 x 14 array to match the labels w/ new axis.
     directory = '../data/train-slope/'
     """
     # Remove axes of length one with .squeeze (32 x 32 x 1)
@@ -65,8 +70,8 @@ def load_s1(idx, directory = '../data/train-s1/'):
 def load_s2(idx, directory = '../data/train-s2/'):
     
     """
-    S2 is stored as a (12, 28, 28, 11) uint16 array. The last axis index is the 
-    date of the imagery in the first axis. Remove. Convert monthly images to an 
+    S2 is stored as a (12, 28, 28, 11) uint16 array. Remove the last axis index - the 
+    date of the imagery. Convert monthly images to an 
     annual median. Remove the border to correspond to the labels.
     Convert to float32.
     
@@ -94,7 +99,7 @@ def load_s2(idx, directory = '../data/train-s2/'):
     border_y = (s2.shape[1] - 14) // 2
     s2 = s2[border_x:-border_x, border_y:-border_y].astype(np.float32)
 
-    #print(f'{idx} s2: {original_shape} -> {s2.shape}, {s2.dtype}')
+    # print(f'{idx} s2: {original_shape} -> {s2.shape}, {s2.dtype}')
     return s2
 
 
@@ -109,11 +114,11 @@ def load_feats(idx, drop_prob, directory = '../data/train-features/'):
     Index 33 - 65 are low level features
     '''
     feats = hkl.load(directory + str(idx) + '.hkl').astype(np.float32)
-    
+
     if drop_prob == True:
         feats = feats[..., :64]
         
-    #print(f'{idx} feats: {feats.shape}, {feats.dtype}')
+    # print(f'{idx} feats: {feats.shape}, {feats.dtype}')
     return feats
 
 
@@ -180,19 +185,28 @@ def create_xy(sample_shape, v_train_data, drop_prob, drop_feats, verbose=False):
     # use CEO csv to gather plot id numbers
     if len(v_train_data) == 1:
         df = pd.read_csv(f'../data/ceo-plantations-train-{v_train_data[0]}.csv')
-        plot_ids = df.plotid.drop_duplicates().tolist()
-    
+        plot_ids = df.PLOT_FNAME.drop_duplicates().tolist()
+
     elif len(v_train_data) > 1:
         plot_ids = []
         for i in v_train_data:
             df = pd.read_csv(f'../data/ceo-plantations-train-{i}.csv')
-            plot_ids = plot_ids + df.plotid.drop_duplicates().tolist()
+            plot_ids = plot_ids + df.PLOT_FNAME.drop_duplicates().tolist()
     
+    # if the plot_ids do not have 5 digits, change to str and add leading 0
+    plot_ids = [str(item).zfill(5) if len(str(item)) < 5 else item for item in plot_ids]
+
     # check and remove any plot ids where there are no cloud free images (no feats or s2)
     for plot in plot_ids:
         if not os.path.exists(f'../data/train-s2/{plot}.hkl') and not os.path.exists(f'../data/train-features/{plot}.hkl'):
             print(f'Plot id {plot} has no cloud free imagery and will be removed.')
             plot_ids.remove(plot)
+
+    # manually remove this plot that was getting skipped for unknown reason
+    # plot_ids.remove('04008')
+    plot_ids.remove('08182')
+    # plot_ids.remove('09168')
+    # plot_ids.remove('09224')
 
     if verbose:
         print(f'Training data includes {len(plot_ids)} plot ids.')
@@ -229,79 +243,96 @@ def create_xy(sample_shape, v_train_data, drop_prob, drop_feats, verbose=False):
         
     # check class balance and baseline accuracy
     labels, counts = np.unique(y_all, return_counts=True)
-    if verbose:
-        print(f'Baseline: {round(counts[0] / (counts[0] + counts[1]), 3)}')
+    print(f'Baseline: {round(counts[0] / (counts[0] + counts[1]), 3)}')
 
     return x_all, y_all
 
 
-def reshape_and_scale(X, y, verbose=False):
+# def reshape_and_scale(X, y, verbose=False):
 
-    # train test split before reshaping to ensure plot is not mixed samples
+#     # train test split before reshaping to ensure plot is not mixed samples
+#     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=22)
+#     if verbose:
+#         print(f'X_train: {X_train.shape} X_test: {X_test.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}')
+
+#     # save 14x14 plot for visualization
+#     X_test_visualize = np.copy(X_test)
+#     y_test_visualize = np.copy(y_test)
+
+#     # reshape arrays with np.prod()
+#     # apply flattening function, add np.newaxis bc flatten calls arr.shape[-1]
+#     # manual reshapping - removed np.newaxis because ytrain had shape (1234, 1)
+#     X_train = np.reshape(X_train, (np.prod(X_train.shape[:-1]), X_train.shape[-1]))
+#     X_test = np.reshape(X_test, (np.prod(X_test.shape[:-1]), X_test.shape[-1]))
+#     y_train = np.reshape(y_train, (np.prod(y_train.shape[:])))
+#     y_test = np.reshape(y_test, (np.prod(y_test.shape[:])))
+#     if verbose:
+#         print(f'Reshaped X_train: {X_train.shape} X_test: {X_test.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}')
+
+#     # apply standardization on a copy
+#     X_train_ss = X_train.copy()
+#     X_test_ss = X_test.copy()
+
+#     # scaler = StandardScaler()
+#     # X_train_ss = scaler.fit_transform(X_train_ss)
+#     # X_test_ss = scaler.transform(X_test_ss)
+#     # if verbose:
+#     #     print(f'Scaled to {np.min(X_train_ss)}, {np.max(X_train_ss)}')
+    
+#     return X_train_ss, X_test_ss, y_train, y_test
+
+
+
+def reshape_and_scale_manual(X, y, v_train_data, verbose=False):
+
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=22)
+    start_min, start_max = X_train.min(), X_train.max()
+
     if verbose:
         print(f'X_train: {X_train.shape} X_test: {X_test.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}')
 
-    # save 14x14 plot for visualization
-    X_test_visualize = np.copy(X_test)
-    y_test_visualize = np.copy(y_test)
+    # standardize train/test data 
+    min_all = []
+    max_all = []
 
-    # reshape arrays with np.prod()
-    # apply flattening function, add np.newaxis bc flatten calls arr.shape[-1]
-    # manual reshapping - removed np.newaxis because ytrain had shape (1234, 1)
-    X_train = np.reshape(X_train, (np.prod(X_train.shape[:-1]), X_train.shape[-1]))
-    X_test = np.reshape(X_test, (np.prod(X_test.shape[:-1]), X_test.shape[-1]))
+    for band in range(0, X_train.shape[-1]):
+        
+        mins = np.percentile(X_train[..., band], 1)
+        maxs = np.percentile(X_train[..., band], 99)
+        
+        if maxs > mins:
+            
+            # clip values in each band based on min/max of training dataset
+            X_train[..., band] = np.clip(X_train[..., band], mins, maxs)
+            X_test[..., band] = np.clip(X_test[..., band], mins, maxs)
+
+            #calculate standardized data
+            midrange = (maxs + mins) / 2
+            rng = maxs - mins
+            X_train_std = (X_train[..., band] - midrange) / (rng / 2)
+            X_test_std = (X_test[..., band] - midrange) / (rng / 2)
+
+            # update each band in X_train and X_test to hold standardized data
+            X_train[..., band] = X_train_std
+            X_test[..., band] = X_test_std
+            end_min, end_max = X_train.min(), X_train.max()
+            
+            min_all.append(mins)
+            max_all.append(maxs)
+        else:
+            pass
+    
+    # save mins and maxs 
+    np.save(f'../data/mins_{v_train_data}', min_all)
+    np.save(f'../data/maxs_{v_train_data}', max_all)
+
+    ## reshape
+    X_train_ss = np.reshape(X_train, (np.prod(X_train.shape[:-1]), X_train.shape[-1]))
+    X_test_ss = np.reshape(X_test, (np.prod(X_test.shape[:-1]), X_test.shape[-1]))
     y_train = np.reshape(y_train, (np.prod(y_train.shape[:])))
     y_test = np.reshape(y_test, (np.prod(y_test.shape[:])))
     if verbose:
-        print(f'Flattened X_train: {X_train.shape} X_test: {X_test.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}')
+        print(f'Reshaped X_train: {X_train_ss.shape} X_test: {X_test_ss.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}')
+        print(f"The data was scaled to: Min {start_min} -> {end_min}, Max {start_max} -> {end_max}")
 
-    # apply standardization on a copy
-    X_train_ss = X_train.copy()
-    X_test_ss = X_test.copy()
-
-    scaler = StandardScaler()
-    X_train_ss = scaler.fit_transform(X_train_ss)
-    X_test_ss = scaler.transform(X_test_ss)
-    if verbose:
-        print(f'Scaled to {np.min(X_train_ss)}, {np.max(X_train_ss)}')
-    
     return X_train_ss, X_test_ss, y_train, y_test
-
-def load_large_feats(shape, directory='../data/large-features/'):
-    
-    # load slope
-    slope = hkl.load(directory + 'slope.hkl').squeeze()
-    #original_shape = slope.shape
-    slope = slope[np.newaxis]
-    
-    # load s1
-    s1 = hkl.load(directory + 's1.hkl') 
-    if len(s1.shape) == 4:
-        s1 = np.median(s1, axis = 0)
-    s1 = s1.astype(np.float32)
-    
-    # load s2
-    s2 = hkl.load(directory + 's2.hkl')
-    #original_shape = s2.shape
-    if s2.shape[-1] == 11:
-        s2 = np.delete(s2, -1, -1)
-    if len(s2.shape) == 4:
-        s2 = np.median(s2, axis = 0)
-    if not isinstance(s2.flat[0], np.floating):
-        assert np.max(s2) > 1
-        s2 = s2.astype(np.float32) / 65535
-        assert np.max(s2) < 1
-        
-    # load features
-    feats = hkl.load(directory + 'features.hkl').astype(np.float32)
-        
-    # create the sample and reshape -- input shape should be (500, 500)
-    x2 = make_sample(shape, slope, s1, s2, feats)
-    x2_reshape = np.reshape(x2, (np.prod(x2.shape[:-1]), x2.shape[-1]))
-    
-    # return scaled data
-    scaler = StandardScaler()
-    x2_ss = scaler.fit_transform(x2_reshape)
-    
-    return x2_ss

@@ -9,48 +9,81 @@ import copy
 import os
 import boto3
 import botocore
-import confuse
 import rasterio as rs
+import yaml
 from osgeo import gdal
 import time
 from scipy.ndimage import median_filter
 from skimage.transform import resize
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
-from catboost import CatBoostClassifier
 
 import sys
-sys.path.append('../src/')
+sys.path.append('src/')
 import interpolation
 import cloud_removal
-from prototype import prepare_data 
+import mosaic
 
 
-config = confuse.Configuration('plantation-classifier')
-config.set_file('/Users/jessica.ertel/plantation_classifier/config.yaml')
-aws_access_key = config['aws']['aws_access_key_id'].as_str()
-aws_secret_key = config['aws']['aws_secret_access_key'].as_str()
+with open("config.yaml", 'r') as stream:
+    document = (yaml.safe_load(stream))
+    aak = document['aws']['aws_access_key_id']
+    ask = document['aws']['aws_secret_access_key']
 
 
 ## Step 1: Download raw data from s3
+def download_tile_ids(country: str, aws_access_key: str, aws_secret_key: str):
+    '''
+    Checks to see if a country csv file exists locally,
+    if not downloads the file from s3 and creates
+    a list of tiles for processing.
+    '''
+    dest_file = f'data/{country}.csv'
+    s3_file = f'2020/databases/{country}.csv'
 
-def download_folder(s3_folder: str, local_dir: str, apikey, apisecret):
-    """
-    Download the contents of the tof-output s3 folder directory
+    # check if csv exists locally
+    # confirm subdirectory exists otherwise download can fail
+    if os.path.exists(dest_file):
+        print('Csv file exists locally.')
+    if not os.path.exists('data/'):
+        os.makedirs('data/')
+
+    # if csv doesnt exist locally, check if available on s3
+    if not os.path.exists(dest_file):
+        s3 = boto3.resource('s3',
+                            aws_access_key_id=aws_access_key, 
+                            aws_secret_access_key=aws_secret_key)
+
+        bucket = s3.Bucket('tof-output')
+        
+        # turn the bucket + file into a object summary list
+        objs = list(bucket.objects.filter(Prefix=s3_file))
+        print(s3_file, dest_file)
+
+        if len(objs) > 0:
+            print(f"The s3 resource s3://{bucket.name}/{s3_file} exists.")
+            bucket.download_file(s3_file, dest_file)
+            
+    database = pd.read_csv(dest_file)
+
+    # create a list of tiles 
+    tiles = database[['X_tile', 'Y_tile']].to_records(index=False)
+
+    return tiles
+
+
+def download_folder(s3_folder: str, local_dir: str, aws_access_key: str, aws_secret_key: str):
+    '''
+    Download the contents of the tof-output + s3-folder 
     into a local folder.
-
-    Args:
-        s3_folder: the folder path in the s3 bucket
-        local_dir: a relative or absolute directory path in the local file system
-    """
+    '''
     
-    s3 = boto3.resource('s3', aws_access_key_id=apikey, aws_secret_access_key=apisecret)
+    s3 = boto3.resource('s3',
+                        aws_access_key_id=aws_access_key, 
+                        aws_secret_access_key=aws_secret_key)
+
     bucket = s3.Bucket('tof-output')
 
-    
     for obj in bucket.objects.filter(Prefix=s3_folder):
-        target = obj.key if local_dir is None \
-            else os.path.join(local_dir, os.path.relpath(obj.key, s3_folder))
+        target = os.path.join(local_dir, os.path.relpath(obj.key, s3_folder))
         if not os.path.exists(os.path.dirname(target)):
             os.makedirs(os.path.dirname(target))
         if obj.key[-1] == '/':
@@ -60,13 +93,11 @@ def download_folder(s3_folder: str, local_dir: str, apikey, apisecret):
     return None
 
 
-def download_raw_tile(tile_idx: tuple, local_dir: str = "../tmp") -> None:
-    
+def download_raw_tile(tile_idx: tuple, local_dir: str, access_key: str, secret_key: str) -> None:
     '''
+    If data is not present locally, downloads raw data (clouds, DEM and 
+    image dates, s1 and s2 (10 and 20m bands)) for the specified tile from s3. 
     Not free to run downloads to local - use sparingly.
-    Downloads all files (clouds, misc: DEM and image dates, s1 and s2 (10 and 20m bands))
-    for the specified tile.
-    
     '''
 
     # set x/y to the tile IDs
@@ -77,27 +108,25 @@ def download_raw_tile(tile_idx: tuple, local_dir: str = "../tmp") -> None:
     path_to_tile = f'{local_dir}/{str(x)}/{str(y)}/'
     s3_path_to_tile = f'2020/raw/{str(x)}/{str(y)}/'
     
-    # check if the clouds folder already exists locally
-    folder_to_check = os.path.exists(path_to_tile + "raw/clouds/")
-    if folder_to_check:
-        print('Exists locally.')
+    # check if feats folder exists locally
+    folder_check = os.path.exists(path_to_tile + "raw/feats/")
+
+    if folder_check:
+        print('Raw data exists locally.')
         return True
     
-    # if the clouds folder doesn't exist locally, download raw tile
+    # if feats folder doesn't exist locally, download raw tile
     # and return True
-    if not folder_to_check:
-        print(f"Downloading {s3_path_to_tile}")
+    if not folder_check:
+        print(f"Downloading data for {(x, y)}")
         try: 
-            s3 = boto3.resource('s3')
-            s3.Object('tof-output', s3_path_to_tile + f'raw/s1/{str(x)}X{str(y)}Y.hkl').load()
             download_folder(s3_folder = s3_path_to_tile,
                             local_dir = path_to_tile,
-                            apikey = aws_access_key,
-                            apisecret = aws_secret_key)
+                            aws_access_key = access_key,
+                            aws_secret_key = secret_key)
             return True
 
-        # if the tiles do not exist on s3, catch the error
-        # and return False
+        # if the tiles do not exist on s3, catch the error and return False
         except botocore.exceptions.ClientError as e:
             if e.response['Error']['Code'] == "404":
                 return False
@@ -105,10 +134,10 @@ def download_raw_tile(tile_idx: tuple, local_dir: str = "../tmp") -> None:
 
 ## Step 2: Create a cloud free composte
 
-def make_bbox(database, tile_idx: tuple, expansion: int = 10) -> list:
+def make_bbox(country: str, tile_idx: tuple, expansion: int = 10) -> list:
     """
     Makes a (min_x, min_y, max_x, max_y) bounding box that
-       is 2 * expansion 300 x 300 meter ESA LULC pixels
+    is 2 * expansion 300 x 300 meter ESA LULC pixels. 
 
        Parameters:
             initial_bbx (list): [min_x, min_y, max_x, max_y]
@@ -117,7 +146,7 @@ def make_bbox(database, tile_idx: tuple, expansion: int = 10) -> list:
        Returns:
             bbx (list): expanded [min_x, min_y, max_x, max_y]
     """
-    data = pd.read_csv(f"../data/{database}.csv")
+    data = pd.read_csv(f"data/{country}.csv")
 
     # this will remove quotes around x and y tile indexes (not needed for all countries)
     # data['X_tile'] = data['X_tile'].str.extract('(\d+)', expand=False)
@@ -152,18 +181,19 @@ def make_bbox(database, tile_idx: tuple, expansion: int = 10) -> list:
     bbx[3] += expansion * multiplier
     
     # return the dataframe and the array
-    return bbx_df, bbx
+    return bbx
 
 def convert_to_db(x: np.ndarray, min_db: int) -> np.ndarray:
-    """ Converts Sentinel 1unitless backscatter coefficient
-        to db with a min_db lower threshold
-        
-        Parameters:
-         x (np.ndarray): unitless backscatter (T, X, Y, B) array
-         min_db (int): integer from -50 to 0
+    """ 
+    Converts Sentinel 1 unitless backscatter coefficient
+    to db with a min_db lower threshold
     
-        Returns:
-         x (np.ndarray): db backscatter (T, X, Y, B) array
+    Parameters:
+        x (np.ndarray): unitless backscatter (T, X, Y, B) array
+        min_db (int): integer from -50 to 0
+
+    Returns:
+        x (np.ndarray): db backscatter (T, X, Y, B) array
     """
     
     x = 10 * np.log10(x + 1/65535)
@@ -173,23 +203,30 @@ def convert_to_db(x: np.ndarray, min_db: int) -> np.ndarray:
 
 def to_float32(array: np.array) -> np.array:
     """
-    Converts an int array to float32
+    Ensures input array is not already a float and does not range from 0-1, 
+    then converts int16 to float32.
+
+    Data is stored as uint16 (0-65535), so must divide by 65535 to get on 0-1 scale.
+    Using assertions to ensure the division only happens when it needs to, 
+    i.e. why we use this function instead of just calling np.float32(array) 
     """
 
-    print(f'The original max value is {np.max(array)}')
+    # print(f'The original max value is {np.max(array)}')
     if not isinstance(array.flat[0], np.floating):
         assert np.max(array) > 1
         array = np.float32(array) / 65535.
     assert np.max(array) <= 1
     assert array.dtype == np.float32
+    
     return array
 
 def adjust_shape(arr: np.ndarray, width: int, height: int) -> np.ndarray:
     """
-    Assures that the shape of arr is width x height
+    Ensures that the shape of arr is width x height.
     Used to align 10, 20, 40, 160, 640 meter resolution Sentinel data
+    Applied to s1, s2 and dem data in process_tile()
     """
-    print(f"Input array shape: {arr.shape}")
+    # print(f"Input array shape: {arr.shape}")
     arr = arr[:, :, :, np.newaxis] if len(arr.shape) == 3 else arr
     arr = arr[np.newaxis, :, :, np.newaxis] if len(arr.shape) == 2 else arr
     
@@ -235,7 +272,7 @@ def adjust_shape(arr: np.ndarray, width: int, height: int) -> np.ndarray:
 
     return arr.squeeze()
 
-def process_tile(x: int, y: int, data: pd.DataFrame, local_path: str, bbx: list, make_shadow: bool = True, verbose=False) -> np.ndarray:
+def process_tile(x: int, y: int, local_path: str, bbx: list, feats: bool, make_shadow: bool = True, verbose=False) -> np.ndarray:
     """
     Transforms raw data structure (in temp/raw/*) to processed data structure
         - align shapes of different data sources (clouds / shadows / s1 / s2 / dem)
@@ -260,7 +297,7 @@ def process_tile(x: int, y: int, data: pd.DataFrame, local_path: str, bbx: list,
             
     folder = f"{local_path}/{str(x)}/{str(y)}/"
     tile_idx = f'{str(x)}X{str(y)}Y'
-    
+
     clouds_file = f'{folder}raw/clouds/clouds_{tile_idx}.hkl'
     cloud_mask_file = f'{folder}raw/clouds/cloudmask_{tile_idx}.hkl'
     shadows_file = f'{folder}raw/clouds/shadows_{tile_idx}.hkl'
@@ -269,9 +306,31 @@ def process_tile(x: int, y: int, data: pd.DataFrame, local_path: str, bbx: list,
     s2_10_file = f'{folder}raw/s2_10/{tile_idx}.hkl'
     s2_20_file = f'{folder}raw/s2_20/{tile_idx}.hkl'
     s2_dates_file = f'{folder}raw/misc/s2_dates_{tile_idx}.hkl'
-    s2_file = f'{folder}raw/s2/{tile_idx}.hkl'
     clean_steps_file = f'{folder}raw/clouds/clean_steps_{tile_idx}.hkl'
     dem_file = f'{folder}raw/misc/dem_{tile_idx}.hkl'
+
+    # load and prep features here
+    if feats:
+        feats_file = f'{folder}raw/feats/{tile_idx}_feats.hkl'
+        feats_full = hkl.load(feats_file)
+        if feats_full.shape[0] != 65:
+            print(f'Warning: there are {feats_full.shape[0]} feats')
+    
+        # separate /combine preds and feats ... there's prob an easier way?
+        preds = feats_full[0]
+        feats = feats_full[1:, ...] / 1000
+        comb = np.empty((feats_full.shape[0], feats_full.shape[1], feats_full.shape[2]))
+        comb[0,...] = preds
+        comb[1:,...] = feats
+
+        # adjust shape (65, 614, 618) ->  (618, 614, 65) 
+        # and make sure float32
+        comb = np.rollaxis(comb, 0, 3)
+        comb = np.rollaxis(comb, 0, 2)
+        tml_feats = np.float32(comb)
+
+    else:
+        tml_feats = []
     
     clouds = hkl.load(clouds_file)
     if os.path.exists(cloud_mask_file):
@@ -429,73 +488,62 @@ def process_tile(x: int, y: int, data: pd.DataFrame, local_path: str, bbx: list,
         """
     else:
         interp = np.zeros(
-            (sentinel2.shape[0], sentinel2.shape[1], sentinel2.shape[2]), dtype = np.float32
-        )
+            (sentinel2.shape[0], sentinel2.shape[1], sentinel2.shape[2]), dtype = np.float32)
         cloudshad = np.zeros(
-            (sentinel2.shape[0], sentinel2.shape[1], sentinel2.shape[2]), dtype = np.float32
-        )
+            (sentinel2.shape[0], sentinel2.shape[1], sentinel2.shape[2]), dtype = np.float32)
 
     dem = dem / 90
     sentinel2 = np.clip(sentinel2, 0, 1)
-    sns.heatmap(sentinel2[0, ..., 0])
-
-    return sentinel2, image_dates, interp, s1, dem, cloudshad
-
-## PLACEHOLDER download feats (identify input and output )
-
-## Step 3: Create a sample for input into the model -- right now using no TML features
-
-def make_sample(slope, s1, s2, feats):
-    
-    ''' 
-    Takes the output of process_tile() and calculates the monthly median
-    Defines dimensions and then combines slope, s1, s2 and TML features from a plot
-    into a sample with shape (x, x, 78)
-    '''
-    
-    # define the last dimension of the array
-    n_feats = 1 + s1.shape[-1] + s2.shape[-1] + feats.shape[-1]
-
-    # Confirm if sample shape is a 2D array 
-    sample = np.empty((slope.shape[0], slope.shape[1], n_feats))
 
     # switch from monthly to annual median
     s1 = np.median(s1, axis = 0)
-    s2 = np.median(s2, axis = 0)
+    s2 = np.median(sentinel2, axis = 0)
+    
+    # removing return of image_dates, interp, cloudshad as not used
+    return s2, tml_feats, s1, dem
+
+
+## Step 3: Combine raw data into a sample for input into the model 
+
+def make_sample(dem: np.array, s1: np.array, s2: np.array, tml_feats: np.array):
+    
+    ''' 
+    Takes processed data, defines dimensions for the sample, then 
+    combines dem, s1, s2 and features into a single array with shape (x, x, 78)
+    '''
+
+    # define number of features in the sample
+    n_feats = 1 + s1.shape[-1] + s2.shape[-1] + tml_feats.shape[-1] 
+
+    # Create the empty array using shape of inputs
+    sample = np.empty((dem.shape[0], dem.shape[1], n_feats))
     
     # populate empty array with each feature
-    sample[..., 0] = slope
+    sample[..., 0] = dem
     sample[..., 1:3] = s1
     sample[..., 3:13] = s2
-    sample[..., 13:] = feats
+    sample[..., 13:] = tml_feats
 
     # save dims for future use
     arr_dims = (sample.shape[0], sample.shape[1])
-    
+
     return sample, arr_dims
 
-def make_sample_nofeats(slope, s1, s2):
+def make_sample_nofeats(dem: np.array, s1: np.array, s2: np.array):
     
     ''' 
-    Takes the output of process_tile(), defines dimensions 
-    and then combines slope, s1 and s2 features from a tile
-    into a sample with shape (x, x, 13). 
+    Takes processed data, defines dimensions for the sample and then 
+    combines dem, s1, s2 into a single array with shape (x, x, 13). 
     TML features are excluded from the sample - No transfer learning. 
     '''
     
     # define the last dimension of the array
     n_feats = 1 + s1.shape[-1] + s2.shape[-1] 
-    print(f'features: {n_feats}')
 
-    sample = np.empty((slope.shape[0], slope.shape[1], n_feats))
-    print(f'sample shape: {sample.shape}')
-
-    # convert monthly images to annual median
-    s1 = np.median(s1, axis = 0) 
-    s2 = np.median(s2, axis = 0)
+    sample = np.empty((dem.shape[0], dem.shape[1], n_feats))
     
     # populate empty array with each feature
-    sample[..., 0] = slope
+    sample[..., 0] = dem
     sample[..., 1:3] = s1
     sample[..., 3:13] = s2
     
@@ -506,70 +554,92 @@ def make_sample_nofeats(slope, s1, s2):
 
 # Step 4: reshape and scale the sample
 
-def reshape_and_scale(v_train_data: list, unseen, verbose=False):
+def reshape_and_scale_manual(v_train_data: str, unseen: np.array, verbose=False):
+
+    ''' 
+    Manually standardizes the unseen array on a 1%, 99% scaler 
+    instead of applying a mean, std scaler (StandardScalar). Imports array of mins/maxs from
+    appropriate training dataset for scaling of unseen data. Then reshapes the sample from 
+    (x, x, 13 or 78) to (x, 13 or 78).
+    '''
+
+    # import mins and maxs from appropriate training dataset 
+    mins = np.load(f'data/mins_{v_train_data}.npy')
+    maxs = np.load(f'data/maxs_{v_train_data}.npy')
+    start_min, start_max = unseen.min(), unseen.max()
+
+    # iterate through the bands and standardize the data based 
+    # on a 1 and 99% scaler instead of a mean and std scaler (standard scalar)
+    for band in range(0, unseen.shape[-1]):
+
+        min = mins[band]
+        max = maxs[band]
+        if verbose:
+            print(f'Band {band}: {min} - {max}')
+
+        if max > min:
+            
+            # clip values outside of min - max interval for unseen band
+            unseen[..., band] = np.clip(unseen[..., band], min, max)
+
+            # now calculate standardized data for unseen
+            midrange = (max + min) / 2
+            rng = max - min
+            standardized = (unseen[..., band] - midrange) / (rng / 2)
+
+            # update each band in unseen to the standardized data
+            unseen[..., band] = standardized
+            end_min, end_max = unseen.min(), unseen.max()
+            
+        else:
+            print('Warning: mins > maxs')
+            pass
     
-    '''
-    V_training_data: list of training data version
-    unseen: new sample 
+    if verbose:
+        print(f"The data has been scaled. Min {start_min} -> {end_min}, Max {start_max} -> {end_max},")
 
-    Takes in a tile (sample) with dimensions (x, x, 13) and 
-    reshapes to (x, 13), then applies standardization.
-    '''
-    # prepare original training data for vectorizer
-    # drop feats for now - UPDATE LATER
-    X, y = prepare_data.create_xy((14,14), v_train_data, drop_prob=False, drop_feats=True, verbose=False)
-
-    # train test split before reshaping to ensure plot is not mixed samples
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=22)
-
-    # reshape arrays (only Xtrain and unseen)
-    X_train_reshaped = np.reshape(X_train, (np.prod(X_train.shape[:-1]), X_train.shape[-1]))
+    # now reshape
     unseen_reshaped = np.reshape(unseen, (np.prod(unseen.shape[:-1]), unseen.shape[-1]))
-    if verbose:
-        print(f'Xtrain Original: {X_train.shape} Xtrain Reshaped: {X_train_reshaped.shape}')
-        print(f'Unseen Original: {unseen.shape} Unseen Reshaped: {unseen_reshaped.shape}')
 
-    # apply standardization on a copy
-    X_train_ss = X_train_reshaped.copy()
-    unseen_ss = unseen_reshaped.copy()
-
-    scaler = StandardScaler()
-    X_train_ss = scaler.fit_transform(X_train_ss)
-    unseen_ss = scaler.transform(unseen_ss)
-    if verbose:
-        print(f'Scaled to {np.min(X_train_ss)}, {np.max(X_train_ss)}')
-        print(f'Scaled to {np.min(unseen_ss)}, {np.max(unseen_ss)}')
-    
-    return unseen_ss
+    return unseen_reshaped
 
 
 # Step 5: import classification model, run predictions
 
-def predict_classification(arr, model, sample_dims):
+def predict_classification(arr: np.array, model: str, sample_dims: tuple):
 
     '''
-    Import the reshaped and scaled data and model version,
-    run predictions and output a numpy array of predictions per 6x6 km tile
+    Import pretrained model and run predictions on arr.
+    If using a regression model, multiply results by 100
+    to get probability 0-100. Reshape array to permit writing to tif.
     '''
 
-    with open(f'../models/{model}.pkl', 'rb') as file:  
+    with open(f'models/{model}.pkl', 'rb') as file:  
         model_pretrained = pickle.load(file)
     
     preds = model_pretrained.predict(arr)
+    
+    if 'rfr' in model:
+        preds = preds * 100
+
     reshaped_preds = preds.reshape(sample_dims[0], sample_dims[1])
-    #print(np.unique(reshaped_preds))
+    #print(reshaped_preds)
 
     return reshaped_preds
 
 
-# Step 6: Write predictions for that tile to a tif 
+# Step 6: Write predictions for that tile to a tif -- eventually this will be a separate script?
 
-def write_tif(arr: np.ndarray, bbx, tile_idx, country, suffix = "preds") -> str:
+def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, suffix = "preds") -> str:
+    '''
+    Write predictions to a geotiff, using the same bounding box 
+    to determine north, south, east, west corners of the tile
+    '''
     
      # set x/y to the tile IDs
     x = tile_idx[0]
     y = tile_idx[1]
-    out_folder = f'../tmp/{country}/preds/'
+    out_folder = f'tmp/{country}/preds/'
     file = out_folder + f"{str(x)}X{str(y)}Y_{suffix}.tif"
 
     if not os.path.exists(out_folder):
@@ -583,17 +653,18 @@ def write_tif(arr: np.ndarray, bbx, tile_idx, country, suffix = "preds") -> str:
 
     # create the file based on the size of the array
     transform = rs.transform.from_bounds(west = west, south = south,
-                                               east = east, north = north,
-                                               width = arr.shape[1],
-                                               height = arr.shape[0])
+                                         east = east, north = north,
+                                         width = arr.shape[1],
+                                         height = arr.shape[0])
 
     print("Writing", file)
-    new_dataset = rs.open(file, 'w', driver = 'GTiff',
-                               height = arr.shape[0], width = arr.shape[1], count = 1,
-                               dtype = "uint8",
-                               compress = 'lzw',
-                               crs = '+proj=longlat +datum=WGS84 +no_defs',
-                               transform=transform)
+    new_dataset = rs.open(file, 'w', 
+                            driver = 'GTiff',
+                            height = arr.shape[0], width = arr.shape[1], count = 1,
+                            dtype = "uint8",
+                            compress = 'lzw',
+                            crs = '+proj=longlat +datum=WGS84 +no_defs',
+                            transform=transform)
     new_dataset.write(arr, 1)
     new_dataset.close()
     
@@ -602,25 +673,49 @@ def write_tif(arr: np.ndarray, bbx, tile_idx, country, suffix = "preds") -> str:
 
 # Execute steps
 
-def execute(tile_idx, country, model):
+def execute(country: str, model: str, feats: bool):
+    '''
+    Executes all steps in the preprocessing and modeling pipeline
+    '''
+    local_dir = 'tmp/' + country
 
-    ## make the training data and model an input
+    tiles_to_process = download_tile_ids(country, aak, ask)
+    tile_count = len(tiles_to_process)
+    counter = 0
+
+    # right now this will just process 20 tiles
+    for tile_idx in tiles_to_process[:20]:
+        counter += 1
+        successful = download_raw_tile((tile_idx[0], tile_idx[1]), local_dir, aak, ask)
+
+        if successful:
+            bbx = make_bbox(country, (tile_idx[0], tile_idx[1]))
+            s2_proc, tml_feats, s1_proc, dem_proc = process_tile(tile_idx[0], tile_idx[1], local_dir, bbx, feats)
+            
+            # feats option will be removed in the future
+            if feats:
+                sample, sample_dims = make_sample(dem_proc, s1_proc, s2_proc, tml_feats)
+                unseen_ss = reshape_and_scale_manual('v11', sample, verbose=False)
     
-    local_dir = '../tmp/' + country
-    successful = download_raw_tile((tile_idx[0], tile_idx[1]), local_dir)
-    if successful:
-        bbx_df, bbx = make_bbox(country, (tile_idx[0], tile_idx[1]))
-        s2_proc, image_dates, interp, s1_proc, slope_proc, cloudshad = process_tile(tile_idx[0], tile_idx[1], bbx_df, local_dir, bbx)
-        sample, sample_dims = make_sample_nofeats(slope_proc, s1_proc, s2_proc)
-        unseen_ss = reshape_and_scale(['v8'], sample)
-        preds = predict_classification(unseen_ss, model, sample_dims)
-        write_tif(preds, bbx, tile_idx, country, 'preds')
-    else:
-        print(f'Raw data for {tile_idx} does not exist.')
+            else:
+                sample, sample_dims = make_sample_nofeats(dem_proc, s1_proc, s2_proc)
+                unseen_ss = reshape_and_scale_manual('v11_nf', sample, verbose=False)
+            
+            preds = predict_classification(unseen_ss, model, sample_dims)
+            write_tif(preds, bbx, tile_idx, country, 'preds')
+        
+        else:
+            print(f'Raw data for {tile_idx} does not exist on s3.')
+        
+        if counter %10 == 0:
+            print(f'{counter}/{tile_count} tiles processed...')
+    
+    # for now mosaic and upload to s3 bucket
+    mosaic.mosaic_tif(country, model)
+    mosaic.upload_mosaic(country, model, aak, ask)
+    
     return None
 
-
-###
 
 if __name__ == '__main__':
    
@@ -628,10 +723,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     print("Argument List:", str(sys.argv))
 
-    parser.add_argument('--tile_idx', dest='tile_idx', nargs='+', type=int)
     parser.add_argument('--country', dest='country', type=str)
     parser.add_argument('--model', dest='model', type=str)
+    parser.add_argument('--feats', dest='feats', default=True, type=bool) 
+
 
     args = parser.parse_args()
     
-    execute(args.tile_idx, args.country, args.model)
+    execute(args.country, args.model, args.feats)

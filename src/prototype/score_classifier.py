@@ -1,11 +1,15 @@
-from sklearn.metrics import roc_curve, roc_auc_score, precision_recall_curve, f1_score, precision_score, recall_score, confusion_matrix, ConfusionMatrixDisplay
+from sklearn.metrics import roc_auc_score, f1_score, precision_score, recall_score
 from sklearn.model_selection import cross_val_score
+import pickle
 
 def print_scores(model, X_train, X_test, y_train, y_test):
 
     '''
     Produces classification scores for a given model and train/test dataset.
     '''
+    
+    # with open(f'../models/{model}.pkl', 'rb') as file:  
+    #          model = pickle.load(file)
 
     # get scores and probabilities
     cv = cross_val_score(model, X_train, y_train, cv=3).mean()

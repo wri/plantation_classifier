@@ -1,7 +1,16 @@
+# data/models/credentials
 config.yaml
 tmp/*
 data/*
 models/*
 *.DS_Store
 plantations-packageslist.txt
-Dockerfile
+src/fil-result/*
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+
+# Jupyter Notebook
+.ipynb_checkpoints
+notebooks/catboost_info/*

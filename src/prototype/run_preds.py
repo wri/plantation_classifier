@@ -10,8 +10,7 @@ import glob
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import GridSearchCV, train_test_split, cross_val_score
+from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import learning_curve
 from sklearn.metrics import roc_curve, roc_auc_score, precision_recall_curve, f1_score, precision_score, recall_score, confusion_matrix, ConfusionMatrixDisplay
 from lightgbm import LGBMClassifier
@@ -20,6 +19,47 @@ from sklearn.svm import SVC
 import h5py
 from catboost import CatBoostClassifier
 import sys
+from datetime import datetime
+
+def fit_eval_regressor(X_train, X_test, y_train, y_test, model_name, v_train_data):
+    '''
+    Based on arguments provided, fits and evaluates a regression model
+    saving the model to a pkl file and saving score in a csv.
+    '''
+
+    if model_name == 'rfr':
+        model = RandomForestRegressor(random_state=22)  
+        model.fit(X_train, y_train)
+
+    # save trained model
+    filename = f'../models/{model_name}_model_{v_train_data}.pkl'
+    with open(filename, 'wb') as file:
+        pickle.dump(model, file)
+       
+    # get scores and probabilities
+    cv = cross_val_score(model, X_train, y_train, cv=3).mean()
+    train_score = model.score(X_train, y_train)
+    test_score = model.score(X_test, y_test)
+
+     # add new scores
+    scores = {'model': f'{model_name}_model_{v_train_data}', 
+            'cv': cv, 
+            'train_score': train_score, 
+            'test_score': test_score, 
+            'roc_auc': np.NaN,
+            'precision': np.NaN,
+            'recall': np.NaN,
+            'f1': np.NaN,
+            'date': datetime.today().strftime('%Y-%m-%d')}
+
+    eval_df = pd.DataFrame([scores]).round(4)
+        
+    # write scores to new line of csv
+    with open('../models/mvp_scores.csv', 'a') as f:
+        f.write('\n')
+        eval_df.to_csv('../models/mvp_scores.csv', mode='a', index=False, header=False)
+
+    return eval_df
 
 
 def fit_eval_classifier(X_train, X_test, y_train, y_test, model_name, v_train_data):
@@ -66,7 +106,6 @@ def fit_eval_classifier(X_train, X_test, y_train, y_test, model_name, v_train_da
     precision = precision_score(y_test, pred)
     recall = recall_score(y_test, pred)    
 
-
     # calculate AUC score
     probs_pos = probs[:, 1]
     roc_auc = roc_auc_score(y_test, probs_pos)
@@ -79,16 +118,18 @@ def fit_eval_classifier(X_train, X_test, y_train, y_test, model_name, v_train_da
             'roc_auc': roc_auc,
             'precision': precision,
             'recall': recall,
-            'f1': f1}
+            'f1': f1,
+            'date': datetime.today().strftime('%Y-%m-%d')}
 
     eval_df = pd.DataFrame([scores]).round(4)
         
     # write scores to new line of csv
-    # this is not working
-    # with open('../models/mvp_scores.csv', 'a') as f:
-    #     eval_df.to_csv('../models/mvp_scores.csv', mode='a', index=False, header=False)
+    with open('../models/mvp_scores.csv', 'a') as f:
+        f.write('\n')
+        eval_df.to_csv('../models/mvp_scores.csv', mode='a', index=False, header=False)
     
-    eval_df.to_csv('../models/mvp_scores.csv', mode='a', index=False, header=False)
+    # this is not working - testing above again
+    #eval_df.to_csv('../models/mvp_scores.csv', mode='a', index=False, header=False)
     
     # Confusion Matrix
     cm = confusion_matrix(y_test, pred, labels=model.classes_)
@@ -184,7 +225,7 @@ def roc_curve_comp(X_train, X_test, y_train, y_test, model_names, v_train_data):
 
 def learning_curve_comp(model_names, v_train_data, X_train, y_train):
 
-    plt.figure(figsize = (15,8))
+    plt.figure(figsize = (13,6))
     
     colors = ['royalblue',
               'maroon', 
@@ -194,7 +235,7 @@ def learning_curve_comp(model_names, v_train_data, X_train, y_train):
 
     for i, x in zip(model_names, colors):
 
-        filename = f'../models/{i}_model_{v_train_data}.pkl'
+        filename = f'../models/round_1/{i}_model_{v_train_data}.pkl'
 
         with open(filename, 'rb') as file:
             model = pickle.load(file)
@@ -204,12 +245,13 @@ def learning_curve_comp(model_names, v_train_data, X_train, y_train):
                                                                               y_train, 
                                                                               cv=5, 
                                                                               return_times=True)
+
         train_scores_mean = np.mean(train_scores, axis=1)
         test_scores_mean = np.mean(test_scores, axis=1)
 
         plt.grid()
-        plt.plot(train_sizes, train_scores_mean, "x-", color=x, label=f"{i} Train score")
-        plt.plot(train_sizes, test_scores_mean, "o-", color=x, label=f"{i} CV score")
+        plt.plot(train_sizes, train_scores_mean, "x-", color=x, label=f"{i} Train")
+        plt.plot(train_sizes, test_scores_mean, ".-", color=x, label=f"{i} Test")
     
     plt.xlim([1000, 32000])
     plt.ylim([0.0, 1.2])
@@ -220,14 +262,3 @@ def learning_curve_comp(model_names, v_train_data, X_train, y_train):
         
     return None
 
-
-def visualize_large_feats(model_name, v_train_data, train_data):
-
-    filename = f'../models/{model_name}_model_{v_train_data}.pkl'
-    with open(filename, 'rb') as file:
-        model = pickle.load(file)
-
-    preds = model.predict(train_data)
-    sns.heatmap(preds.reshape((500, 500)), vmin=0, vmax=.8).set_title(model_name)
-
-    return None

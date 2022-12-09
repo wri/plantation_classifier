@@ -6,8 +6,8 @@ import rasterio as rs
 from rasterio.merge import merge
 import os
 import sys
-sys.path.append('../src/')
-
+from datetime import datetime
+import boto3
 
 def mosaic_tif(country: str, model: str):
 
@@ -16,9 +16,22 @@ def mosaic_tif(country: str, model: str):
     '''
 
     # use the list of tiles to create a list of filenames
+    # this will need to be updated to take in a specific list of tiles to mosaic
     tifs_to_mosaic = []
-    for tile in os.listdir(f'../tmp/{country}/preds/'):
-        tifs_to_mosaic.append(tile)
+
+    database = pd.read_csv(f'data/{country}.csv')
+    tiles = database[['X_tile', 'Y_tile']].to_records(index=False)
+
+    # for now only mosaicing 20 tiles
+    for tile_idx in tiles[:20]:
+        x = tile_idx[0]
+        y = tile_idx[1]
+        filename = f'{str(x)}X{str(y)}Y_preds.tif'
+        tifs_to_mosaic.append(filename)
+    
+    # tifs_to_mosaic = []
+    # for tile in [x for x in os.listdir(f'../tmp/{country}/preds/') if x != 'mosaic' and x != '.DS_Store']:
+    #     tifs_to_mosaic.append(tile)
 
     # potential to use this -- gdal not cooperating at the moment
     # gdal.BuildVRT(f'../tmp/preds/{filename}.vrt', tifs_to_mosaic, options=gdal.BuildVRTOptions(srcNodata=255, VRTNodata=255))
@@ -29,14 +42,17 @@ def mosaic_tif(country: str, model: str):
     # now open each item in dataset reader mode (required to merge)
     reader_mode = []
     for file in tifs_to_mosaic:
-        src = rs.open(f'../tmp/{country}/preds/{file}')
+        src = rs.open(f'tmp/{country}/preds/{file}')
         reader_mode.append(src) 
     
-    print(f'Merging {len(reader_mode)} tifs...')
+    print(f'Merging {len(reader_mode)} tifs.')
     mosaic, out_transform = merge(reader_mode)
+
+    date = datetime.today().strftime('%Y-%m-%d')
     
     # outpath will be the new filename
-    outpath = f'../tmp/{country}/preds/{country}_{model}.tif'
+    suffix = f'{country}_{model}_{date}.tif'
+    outpath = f'tmp/{country}/preds/mosaic/{suffix}'
     out_meta = src.meta.copy()
     out_meta.update({'driver': "GTiff",
                      'dtype': 'uint8',
@@ -51,7 +67,27 @@ def mosaic_tif(country: str, model: str):
     return None
 
 
+def upload_mosaic(country: str, model: str, aws_access_key: str, aws_secret_key: str):
+    '''
+    Uploads the combined tif to an s3 bucket
+    '''
+    date = datetime.today().strftime('%Y-%m-%d')
+    
+    # outpath will be the new filename
+    suffix = f'{country}_{model}_{date}.tif'
+    mosaic_filepath = f'tmp/{country}/preds/mosaic/{suffix}'
 
+    s3 = boto3.resource('s3',
+                        aws_access_key_id=aws_access_key, 
+                        aws_secret_access_key=aws_secret_key)
+    
+    print(f'Uploading {mosaic_filepath} to s3.')
+
+    s3.meta.client.upload_file(mosaic_filepath, 
+                              'restoration-monitoring', 
+                              'plantation-mapping/data/samples/' + suffix)
+
+    return None
 
 
 if __name__ == '__main__':
@@ -60,10 +96,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     print("Argument List:", str(sys.argv))
 
-    parser.add_argument('--tile_list', dest='tiles', nargs='+', type=list)
     parser.add_argument('--country', dest='country', type=str)
     parser.add_argument('--model', dest='model', type=str)
 
     args = parser.parse_args()
     
-    mosaic_tif(args.tiles, args.country, args.model)
+    mosaic_tif(args.country, args.model)

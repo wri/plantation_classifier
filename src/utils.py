@@ -6,22 +6,13 @@ import matplotlib.pyplot as plt
 import math
 import os
 import scipy.sparse as sparse
-import yaml
-
 from collections import Counter
-# from random import shuffle
-# from scipy.sparse.linalg import splu
-# from sentinelhub import WmsRequest, WcsRequest, MimeType
-# from sentinelhub import CRS, BBox, constants, DataSource, CustomUrlParam
-# from skimage.transform import resize
-# from pyproj import Proj, transform
-# from typing import List, Any, Tuple
-# from shapely.geometry import Point, Polygon
+
 
 # Documentation
 
 
-def calculate_proximal_steps(date: int, satisfactory: list) -> (int, int):
+def calculate_proximal_steps(date: int, satisfactory: list):
     """Returns proximal steps that are cloud and shadow free
          Parameters:
           date (int): current time step
@@ -49,7 +40,7 @@ def calculate_proximal_steps(date: int, satisfactory: list) -> (int, int):
     return arg_before, arg_after
 
 
-def calculate_proximal_steps_two(date: int, satisfactory: list) -> (int, int):
+def calculate_proximal_steps_two(date: int, satisfactory: list):
     """Returns proximal steps that are cloud and shadow free
          Parameters:
           date (int): current time step
@@ -103,5 +94,3 @@ def calculate_proximal_steps_two(date: int, satisfactory: list) -> (int, int):
         arg_before = arg_after
 
     return np.array(arg_before).astype(int), np.array(arg_after).astype(int)
-
-
