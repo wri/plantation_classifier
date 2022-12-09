@@ -7,8 +7,9 @@ def print_scores(model, X_train, X_test, y_train, y_test):
     '''
     Produces classification scores for a given model and train/test dataset.
     '''
-    with open(f'../models/{model}.pkl', 'rb') as file:  
-             model = pickle.load(file)
+    
+    # with open(f'../models/{model}.pkl', 'rb') as file:  
+    #          model = pickle.load(file)
 
     # get scores and probabilities
     cv = cross_val_score(model, X_train, y_train, cv=3).mean()
