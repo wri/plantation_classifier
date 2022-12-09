@@ -3,7 +3,6 @@ from typing import List, Any, Tuple
 import rasterio as rs
 from functools import reduce
 from skimage.transform import resize
-# from tqdm import tnrange, tqdm_notebook
 import math
 from copy import deepcopy
 from scipy import signal
@@ -16,8 +15,6 @@ import bottleneck as bn
 from sklearn.cross_decomposition import CCA
 from sklearn.linear_model import LinearRegression
 import sys
-
-#sys.path.append('../')
 
 ## Documentation
 
