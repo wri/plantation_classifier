@@ -5,6 +5,7 @@ data/*
 notebooks/*
 models/*
 __pycache__/*
+fil-result/*
 
 *.pem
 *.ipynb
@@ -12,4 +13,5 @@ __pycache__/*
 
 !models/cat_model_v11.pkl
 !data/urbanmask.tif
-!data/ashanti.csv
+!data/mins_v11.npy
+!data/maxs_v11.npy
