@@ -684,7 +684,7 @@ def execute(country: str, model: str, feats: bool):
     counter = 0
 
     # right now this will just process 20 tiles
-    for tile_idx in tiles_to_process[:2]:
+    for tile_idx in tiles_to_process[:20]:
         counter += 1
         successful = download_raw_tile((tile_idx[0], tile_idx[1]), local_dir, aak, ask)
 
