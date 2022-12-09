@@ -6,9 +6,10 @@ import rasterio as rs
 from rasterio.merge import merge
 import os
 import sys
+from datetime import datetime
+import boto3
 
-
-def mosaic_tif(country: str, model: str, date: str):
+def mosaic_tif(country: str, model: str):
 
     ''''
     Takes in a list of tiles and merges them to form a single tif.
@@ -22,7 +23,7 @@ def mosaic_tif(country: str, model: str, date: str):
     tiles = database[['X_tile', 'Y_tile']].to_records(index=False)
 
     # for now only mosaicing 20 tiles
-    for tile_idx in tiles[:20]:
+    for tile_idx in tiles[:2]:
         x = tile_idx[0]
         y = tile_idx[1]
         filename = f'{str(x)}X{str(y)}Y_preds.tif'
@@ -46,6 +47,8 @@ def mosaic_tif(country: str, model: str, date: str):
     
     print(f'Merging {len(reader_mode)} tifs.')
     mosaic, out_transform = merge(reader_mode)
+
+    date = datetime.today().strftime('%Y-%m-%d')
     
     # outpath will be the new filename
     suffix = f'{country}_{model}_{date}.tif'
@@ -64,7 +67,27 @@ def mosaic_tif(country: str, model: str, date: str):
     return None
 
 
+def upload_mosaic(country: str, model: str, aws_access_key: str, aws_secret_key: str):
+    '''
+    Uploads the combined tif to an s3 bucket
+    '''
+    date = datetime.today().strftime('%Y-%m-%d')
+    
+    # outpath will be the new filename
+    suffix = f'{country}_{model}_{date}.tif'
+    mosaic_filepath = f'tmp/{country}/preds/mosaic/{suffix}'
 
+    s3 = boto3.resource('s3',
+                        aws_access_key_id=aws_access_key, 
+                        aws_secret_access_key=aws_secret_key)
+    
+    print(f'Uploading {mosaic_filepath} to s3.')
+
+    s3.meta.client.upload_file(mosaic_filepath, 
+                              'restoration-monitoring', 
+                              'plantation-mapping/data/samples/' + suffix)
+
+    return None
 
 
 if __name__ == '__main__':
@@ -75,8 +98,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--country', dest='country', type=str)
     parser.add_argument('--model', dest='model', type=str)
-    parser.add_argument('--date', dest='date', type=str)
 
     args = parser.parse_args()
     
-    mosaic_tif(args.country, args.model, args.date)
+    mosaic_tif(args.country, args.model)
