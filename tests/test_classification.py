@@ -2,7 +2,7 @@ import numpy as np
 import hickle as hkl
 import pytest
 
-# first shot at some unit tests
+# first shot at some unit tests, this will eventually be turned into a class
 # when would this be triggered? After download of each tile?
 
 ##### GROUP 1
@@ -116,4 +116,8 @@ def test_regression_scores():
 ##### GROUP 4
 # separate test file for testing functions are performing as expected
 
-def test_
+# ideas:
+## given input 10, it should be scaled to output 0
+## apply it to a test numpy array
+## if the array is sorted before and after, its logical
+## reshaping - should always be multiple of xx and dimensions should always be smaller
