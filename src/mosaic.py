@@ -23,7 +23,7 @@ def mosaic_tif(country: str, model: str):
     tiles = database[['X_tile', 'Y_tile']].to_records(index=False)
 
     # for now only mosaicing 20 tiles
-    for tile_idx in tiles[:2]:
+    for tile_idx in tiles[:20]:
         x = tile_idx[0]
         y = tile_idx[1]
         filename = f'{str(x)}X{str(y)}Y_preds.tif'
