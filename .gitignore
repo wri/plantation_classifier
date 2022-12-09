@@ -4,5 +4,5 @@ data/*
 models/*
 *.DS_Store
 plantations-packageslist.txt
-__pycache__/*
-fil-result/*
+src/__pycache__/*
+src/fil-result/*
