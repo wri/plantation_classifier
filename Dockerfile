@@ -16,10 +16,6 @@ RUN conda env create -f environment.yaml
 # override the default shell with SHELL command
 SHELL ["conda", "run", "-n", "plantations3", "/bin/bash", "-c"]
 
-# Demonstrate the environment is activated:
-RUN echo "Make sure boto3 is installed:"
-RUN python -c "import boto3"
-
 # separately install the C++ version of GDAL
 # add-apt-repository is not in base image, so first install software properties
 RUN apt-get update && apt-get install -y software-properties-common &&\
@@ -32,11 +28,13 @@ RUN apt-get update && apt-get install -y software-properties-common &&\
 
 # copy over the appropriate scripts/data
 COPY src/ /app/src/
-COPY data/ashanti.csv /app/data/ashanti.csv
 COPY data/urbanmask.tif /app/data/urbanmask.tif
+COPY data/mins_v11.npy /app/data/mins_v11.npy
+COPY data/maxs_v11.npy /app/data/maxs_v11.npy
 COPY models/cat_model_v11.pkl /app/models/cat_model_v11.pkl
+COPY config.yaml /app/config.yaml
 
 EXPOSE 8080
 
-# list of commands - removed args
+# list of commands - supply args with docker run?
 ENTRYPOINT ["conda", "run","--no-capture-output", "-n", "plantations3", "python3", "src/plantation_classifier.py"]
