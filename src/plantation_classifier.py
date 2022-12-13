@@ -15,6 +15,7 @@ from osgeo import gdal
 import time
 from scipy.ndimage import median_filter
 from skimage.transform import resize
+import glob
 
 import sys
 sys.path.append('src/')
@@ -272,7 +273,7 @@ def adjust_shape(arr: np.ndarray, width: int, height: int) -> np.ndarray:
 
     return arr.squeeze()
 
-def process_tile(x: int, y: int, local_path: str, bbx: list, feats: bool, make_shadow: bool = True, verbose=False) -> np.ndarray:
+def process_tile(x: int, y: int, local_path: str, bbx: list, feats: bool, make_shadow: bool = True, verbose: bool = False) -> np.ndarray:
     """
     Transforms raw data structure (in temp/raw/*) to processed data structure
         - align shapes of different data sources (clouds / shadows / s1 / s2 / dem)
@@ -554,7 +555,7 @@ def make_sample_nofeats(dem: np.array, s1: np.array, s2: np.array):
 
 # Step 4: reshape and scale the sample
 
-def reshape_and_scale_manual(v_train_data: str, unseen: np.array, verbose=False):
+def reshape_and_scale_manual(v_train_data: str, unseen: np.array, verbose: bool = False):
 
     ''' 
     Manually standardizes the unseen array on a 1%, 99% scaler 
@@ -670,10 +671,31 @@ def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, suffix 
     
     return None
 
+def remove_folder(tile_idx: tuple, local_dir, uploader):
+    '''
+    Deletes temporary raw data files in path_to_tile/raw/*
+    after predictions are written to file
+    '''
+    # set x/y to the tile IDs
+    x = tile_idx[0]
+    y = tile_idx[1]
+    
+    path_to_tile = f'{local_dir}/{str(x)}/{str(y)}/'
+
+    # remove every folder/file in raw/
+    for folder in glob(path_to_tile + "raw/*/"):
+        for file in os.listdir(folder):
+            _file = folder + file
+            internal_folder = folder[len(path_to_tile):]
+            key = f'2020/raw/{x}/{y}/' + internal_folder + file
+            uploader.upload(bucket='tof-output', key=key, file=_file)
+            os.remove(_file)
+    return None
+
 
 # Execute steps
 
-def execute(country: str, model: str, feats: bool):
+def execute(country: str, model: str, verbose: bool, feats: bool):
     '''
     Executes all steps in the preprocessing and modeling pipeline
     '''
@@ -690,16 +712,16 @@ def execute(country: str, model: str, feats: bool):
 
         if successful:
             bbx = make_bbox(country, (tile_idx[0], tile_idx[1]))
-            s2_proc, tml_feats, s1_proc, dem_proc = process_tile(tile_idx[0], tile_idx[1], local_dir, bbx, feats)
+            s2_proc, tml_feats, s1_proc, dem_proc = process_tile(tile_idx[0], tile_idx[1], local_dir, bbx, feats, verbose)
             
             # feats option will be removed in the future
             if feats:
                 sample, sample_dims = make_sample(dem_proc, s1_proc, s2_proc, tml_feats)
-                unseen_ss = reshape_and_scale_manual('v11', sample, verbose=False)
+                unseen_ss = reshape_and_scale_manual('v11', sample, verbose)
     
             else:
                 sample, sample_dims = make_sample_nofeats(dem_proc, s1_proc, s2_proc)
-                unseen_ss = reshape_and_scale_manual('v11_nf', sample, verbose=False)
+                unseen_ss = reshape_and_scale_manual('v11_nf', sample, verbose)
             
             preds = predict_classification(unseen_ss, model, sample_dims)
             write_tif(preds, bbx, tile_idx, country, 'preds')
@@ -725,9 +747,10 @@ if __name__ == '__main__':
 
     parser.add_argument('--country', dest='country', type=str)
     parser.add_argument('--model', dest='model', type=str)
+    parser.add_argument('--verbose', dest='verbose', default=False, type=bool) 
     parser.add_argument('--feats', dest='feats', default=True, type=bool) 
 
 
     args = parser.parse_args()
     
-    execute(args.country, args.model, args.feats)
+    execute(args.country, args.model, args.verbose, args.feats)
