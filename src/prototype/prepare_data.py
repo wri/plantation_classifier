@@ -203,8 +203,8 @@ def create_xy(sample_shape, v_train_data, drop_prob, drop_feats, verbose=False):
             plot_ids.remove(plot)
 
     # manually remove this plot that was getting skipped for unknown reason
-    # plot_ids.remove('04008')
-    plot_ids.remove('08182')
+    plot_ids.remove('04008')
+    # plot_ids.remove('08182')
     # plot_ids.remove('09168')
     # plot_ids.remove('09224')
 
@@ -246,40 +246,6 @@ def create_xy(sample_shape, v_train_data, drop_prob, drop_feats, verbose=False):
     print(f'Baseline: {round(counts[0] / (counts[0] + counts[1]), 3)}')
 
     return x_all, y_all
-
-
-# def reshape_and_scale(X, y, verbose=False):
-
-#     # train test split before reshaping to ensure plot is not mixed samples
-#     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=22)
-#     if verbose:
-#         print(f'X_train: {X_train.shape} X_test: {X_test.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}')
-
-#     # save 14x14 plot for visualization
-#     X_test_visualize = np.copy(X_test)
-#     y_test_visualize = np.copy(y_test)
-
-#     # reshape arrays with np.prod()
-#     # apply flattening function, add np.newaxis bc flatten calls arr.shape[-1]
-#     # manual reshapping - removed np.newaxis because ytrain had shape (1234, 1)
-#     X_train = np.reshape(X_train, (np.prod(X_train.shape[:-1]), X_train.shape[-1]))
-#     X_test = np.reshape(X_test, (np.prod(X_test.shape[:-1]), X_test.shape[-1]))
-#     y_train = np.reshape(y_train, (np.prod(y_train.shape[:])))
-#     y_test = np.reshape(y_test, (np.prod(y_test.shape[:])))
-#     if verbose:
-#         print(f'Reshaped X_train: {X_train.shape} X_test: {X_test.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}')
-
-#     # apply standardization on a copy
-#     X_train_ss = X_train.copy()
-#     X_test_ss = X_test.copy()
-
-#     # scaler = StandardScaler()
-#     # X_train_ss = scaler.fit_transform(X_train_ss)
-#     # X_test_ss = scaler.transform(X_test_ss)
-#     # if verbose:
-#     #     print(f'Scaled to {np.min(X_train_ss)}, {np.max(X_train_ss)}')
-    
-#     return X_train_ss, X_test_ss, y_train, y_test
 
 
 
