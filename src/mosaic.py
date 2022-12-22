@@ -29,16 +29,6 @@ def mosaic_tif(country: str, model: str):
         filename = f'{str(x)}X{str(y)}Y_preds.tif'
         tifs_to_mosaic.append(filename)
     
-    # tifs_to_mosaic = []
-    # for tile in [x for x in os.listdir(f'../tmp/{country}/preds/') if x != 'mosaic' and x != '.DS_Store']:
-    #     tifs_to_mosaic.append(tile)
-
-    # potential to use this -- gdal not cooperating at the moment
-    # gdal.BuildVRT(f'../tmp/preds/{filename}.vrt', tifs_to_mosaic, options=gdal.BuildVRTOptions(srcNodata=255, VRTNodata=255))
-    # translateoptions = gdal.TranslateOptions(gdal.ParseCommandLine("-ot Byte -co COMPRESS=LZW -a_nodata 255 -co BIGTIFF=YES"))
-    # ds = gdal.Open(f'../tmp/preds/{filename}.vrt')
-    # ds  = gdal.Translate(f'../tmp/preds/{filename}.tif', ds, options=translateoptions)
-    
     # now open each item in dataset reader mode (required to merge)
     reader_mode = []
     for file in tifs_to_mosaic:
