@@ -14,7 +14,10 @@ def mosaic_tif(country: str, model: str):
     ''''
     Takes in a list of tiles and merges them to form a single tif.
     '''
-
+    
+    if not os.path.exists(f'tmp/{country}/preds/mosaic/'):
+        os.makedirs(f'tmp/{country}/preds/mosaic/')
+        
     # use the list of tiles to create a list of filenames
     # this will need to be updated to take in a specific list of tiles to mosaic
     tifs_to_mosaic = []
