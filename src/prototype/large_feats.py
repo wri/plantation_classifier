@@ -9,6 +9,7 @@ import seaborn as sns
 import prepare_data as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
+from prepare_data import convert_to_db
 
 ## requires make sample and training data
 
@@ -32,18 +33,20 @@ def load_large_feats(shape, directory='../data/large-features/', verbose=False):
     if len(s1.shape) == 4:
         s1 = np.median(s1, axis = 0)
     s1 = s1.astype(np.float32)
+    s1[..., -1] = convert_to_db(s1[..., -1], 22)
+    s1[..., -2] = convert_to_db(s1[..., -2], 22)
     
     # load s2
     s2 = hkl.load(directory + 's2.hkl')
     s2_orig = s2.shape
     if s2.shape[-1] == 11:
         s2 = np.delete(s2, -1, -1)
-    if len(s2.shape) == 4:
-        s2 = np.median(s2, axis = 0)
     if not isinstance(s2.flat[0], np.floating):
         assert np.max(s2) > 1
         s2 = s2.astype(np.float32) / 65535
         assert np.max(s2) < 1
+    if len(s2.shape) == 4:
+        s2 = np.median(s2, axis = 0)
         
     # load features
     feats = hkl.load(directory + 'features.hkl').astype(np.float32)
@@ -56,15 +59,6 @@ def load_large_feats(shape, directory='../data/large-features/', verbose=False):
         
     # create the sample and reshape -- input shape should be (500, 500)
     largefeats = pd.make_sample(shape, slope, s1, s2, feats)
-    
-    
-    #largefeats_reshape = np.reshape(largefeats, (np.prod(largefeats.shape[:-1]), largefeats.shape[-1]))
-   
-    # this data needs to be train/test/split?
-
-    # return scaled data
-    # scaler = StandardScaler()
-    #largefeats_scaled = scaler.fit_transform(largefeats_reshape)
     
     return largefeats
 
@@ -95,12 +89,12 @@ def reshape_and_scale(v_train_data: list, unseen, verbose=False):
     X_train_ss = X_train_reshaped.copy()
     unseen_ss = unseen_reshaped.copy()
 
-    scaler = StandardScaler()
-    X_train_ss = scaler.fit_transform(X_train_ss)
-    unseen_ss = scaler.transform(unseen_ss)
-    if verbose:
-        print(f'Scaled to {np.min(X_train_ss)}, {np.max(X_train_ss)}')
-        print(f'Scaled to {np.min(unseen_ss)}, {np.max(unseen_ss)}')
+    # scaler = StandardScaler()
+    # X_train_ss = scaler.fit_transform(X_train_ss)
+    # unseen_ss = scaler.transform(unseen_ss)
+    # if verbose:
+    #     print(f'Scaled to {np.min(X_train_ss)}, {np.max(X_train_ss)}')
+    #     print(f'Scaled to {np.min(unseen_ss)}, {np.max(unseen_ss)}')
     
     return unseen_ss
 
