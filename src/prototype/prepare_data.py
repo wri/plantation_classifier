@@ -6,19 +6,36 @@ import pickle
 import pandas as pd
 import numpy as np
 import os
-from natsort import natsorted
 import glob
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 import random
+import sys
+import validate_io as validate
 
-# Load Data -- download from s3 via jupyter notebook
-# Plot ID Labeling
+### Plot ID Labeling ###
 # Plot IDs are numbered according to ceo survey
 # the last three digits refer to the plot number and the first two digits refer to the survey
 # for ex: 25th plot in ceo-plantations-train-v04.csv will be 04025.npy or 04025.hkl
+
+def convert_to_db(x: np.ndarray, min_db: int) -> np.ndarray:
+    """ 
+    Converts Sentinel 1 unitless backscatter coefficient
+    to db with a min_db lower threshold
+    
+    Parameters:
+        x (np.ndarray): unitless backscatter (T, X, Y, B) array
+        min_db (int): integer from -50 to 0
+
+    Returns:
+        x (np.ndarray): db backscatter (T, X, Y, B) array
+    """
+    
+    x = 10 * np.log10(x + 1/65535)
+    x[x < -min_db] = -min_db
+    x = (x + min_db) / min_db
+    return np.clip(x, 0, 1)
 
 def load_slope(idx, directory = '../data/train-slope/'):
     """
@@ -41,7 +58,6 @@ def load_slope(idx, directory = '../data/train-slope/'):
     #print(f'{idx} slope: {original_shape} -> {slope.shape}, {slope.dtype}')
     return slope
 
-
 def load_s1(idx, directory = '../data/train-s1/'):
     """
     S1 is stored as a (12, 32, 32, 2) float64 array with border information.
@@ -51,17 +67,51 @@ def load_s1(idx, directory = '../data/train-s1/'):
     
     s1 = hkl.load(directory + str(idx) + '.hkl')
     original_shape = s1.shape
+    print(s1.shape)
     
     # get the median across flattened array
     if len(s1.shape) == 4:
         s1 = np.median(s1, axis = 0)
-        
+    print(s1.shape)
     # slice out border information
     border_x = (s1.shape[0] - 14) // 2
     border_y = (s1.shape[1] - 14) // 2
     s1 = s1[border_x:-border_x, border_y:-border_y]
-   
+    print(s1.shape)
+
     s1 = s1.astype(np.float32)
+    
+    #print(f'{idx} s1: {original_shape} -> {s1.shape}, {s1.dtype}')
+    return s1
+
+    
+def load_s1(idx, directory = '../data/train-s1/'):
+    """
+    S1 is stored as a (12, 32, 32, 2) float64 array with border information.
+    Needs to be converted from monthly mosaics to an annual median, 
+    and to 14 x 14 x 2 to match labels. Dtype needs to be converted to float32 (divide by 65535).
+    """
+
+    s1 = hkl.load(directory + str(idx) + '.hkl')
+
+    # checks for floating datatype, if not converts to float32
+    if not isinstance(s1.flat[0], np.floating):
+        assert np.max(s1) > 1
+        s1 = s1.astype(np.float32) / 65535
+        assert np.max(s1) < 1
+
+    # get the median across flattened array
+    if len(s1.shape) == 4:
+        s1 = np.median(s1, axis = 0)
+
+    # slice out border information
+    border_x = (s1.shape[0] - 14) // 2
+    border_y = (s1.shape[1] - 14) // 2
+    s1 = s1[border_x:-border_x, border_y:-border_y]
+
+    # convert to decible
+    s1[..., -1] = convert_to_db(s1[..., -1], 22)
+    s1[..., -2] = convert_to_db(s1[..., -2], 22)
     
     #print(f'{idx} s1: {original_shape} -> {s1.shape}, {s1.dtype}')
     return s1
@@ -74,7 +124,6 @@ def load_s2(idx, directory = '../data/train-s2/'):
     date of the imagery. Convert monthly images to an 
     annual median. Remove the border to correspond to the labels.
     Convert to float32.
-    
     """
     
     s2 = hkl.load(directory + str(idx) + '.hkl')
@@ -83,23 +132,23 @@ def load_s2(idx, directory = '../data/train-s2/'):
     # remove date of imagery (last axis)
     if s2.shape[-1] == 11:
         s2 = np.delete(s2, -1, -1)
-    
-    # convert monthly images to annual median
-    if len(s2.shape) == 4:
-        s2 = np.median(s2, axis = 0)
-    
-    # checks for floating datatype
+
+    # checks for floating datatype, if not converts to float32
     if not isinstance(s2.flat[0], np.floating):
         assert np.max(s2) > 1
         s2 = s2.astype(np.float32) / 65535
         assert np.max(s2) < 1
-            
+ 
+    # convert monthly images to annual median
+    if len(s2.shape) == 4:
+        s2 = np.median(s2, axis = 0)
+
     # slice out border information
     border_x = (s2.shape[0] - 14) // 2
     border_y = (s2.shape[1] - 14) // 2
     s2 = s2[border_x:-border_x, border_y:-border_y].astype(np.float32)
 
-    # print(f'{idx} s2: {original_shape} -> {s2.shape}, {s2.dtype}')
+    #print(f'{idx} s2: {original_shape} -> {s2.shape}, {s2.dtype}')
     return s2
 
 
@@ -113,11 +162,16 @@ def load_feats(idx, drop_prob, directory = '../data/train-features/'):
     Index 1 - 33 are high level features
     Index 33 - 65 are low level features
     '''
-    feats = hkl.load(directory + str(idx) + '.hkl').astype(np.float32)
+    feats = hkl.load(directory + str(idx) + '.hkl')
 
     if drop_prob == True:
         feats = feats[..., :64]
-        
+
+    # feats are multiplyed by 1000 before saving
+    feats[...,1:] = feats[...,1:] / 1000  
+
+    feats = feats.astype(np.float32)
+
     # print(f'{idx} feats: {feats.shape}, {feats.dtype}')
     return feats
 
@@ -127,9 +181,11 @@ def load_label(idx, directory = '../data/train-labels/'):
     The labels are stored as a binary 14 x 14 float64 array.
     Dtype needs to be converted to float32.
     '''
-    labels = np.load(directory + str(idx) + '.npy').astype(np.float32)
+    labels = np.load(directory + str(idx) + '.npy')
     original_shape = labels.shape
 
+    lables = labels.astype(np.float32)
+    
     #print(f'{idx} labels: {labels.shape}, {labels.dtype}')
     return labels
 
@@ -141,7 +197,9 @@ def make_sample(sample_shape, slope, s1, s2, feats):
     Defines dimensions and then combines slope, s1, s2 and TML features from a plot
     into a sample with shape (14, 14, 78)
     '''
-    
+    # validate that all the inputs are correct
+    validate.train_output_range_dtype(slope, s1, s2, feats)
+
     # define the last dimension of the array
     n_feats = 1 + s1.shape[-1] + s2.shape[-1] + feats.shape[-1]
 
@@ -161,7 +219,9 @@ def make_sample_nofeats(sample_shape, slope, s1, s2):
     Defines dimensions and then combines slope, s1 and s2 features from a plot
     into a sample with shape (14, 14, 13). 
     '''
-    
+    # validate that the inputs are correct -- TODO adapt to do no feats
+    # validate.train_output_range_dtype(slope, s1, s2)
+
     # define the last dimension of the array
     n_feats = 1 + s1.shape[-1] + s2.shape[-1] 
 
@@ -203,9 +263,9 @@ def create_xy(sample_shape, v_train_data, drop_prob, drop_feats, verbose=False):
             plot_ids.remove(plot)
 
     # manually remove this plot that was getting skipped for unknown reason
-    plot_ids.remove('04008')
-    # plot_ids.remove('08182')
-    # plot_ids.remove('09168')
+    #plot_ids.remove('04008')
+    plot_ids.remove('08182')
+    #plot_ids.remove('09168')
     # plot_ids.remove('09224')
 
     if verbose:
@@ -247,8 +307,6 @@ def create_xy(sample_shape, v_train_data, drop_prob, drop_feats, verbose=False):
 
     return x_all, y_all
 
-
-
 def reshape_and_scale_manual(X, y, v_train_data, verbose=False):
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=22)
@@ -265,7 +323,7 @@ def reshape_and_scale_manual(X, y, v_train_data, verbose=False):
         
         mins = np.percentile(X_train[..., band], 1)
         maxs = np.percentile(X_train[..., band], 99)
-        
+
         if maxs > mins:
             
             # clip values in each band based on min/max of training dataset
@@ -297,8 +355,27 @@ def reshape_and_scale_manual(X, y, v_train_data, verbose=False):
     X_test_ss = np.reshape(X_test, (np.prod(X_test.shape[:-1]), X_test.shape[-1]))
     y_train = np.reshape(y_train, (np.prod(y_train.shape[:])))
     y_test = np.reshape(y_test, (np.prod(y_test.shape[:])))
+    
     if verbose:
         print(f'Reshaped X_train: {X_train_ss.shape} X_test: {X_test_ss.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}')
         print(f"The data was scaled to: Min {start_min} -> {end_min}, Max {start_max} -> {end_max}")
+
+    return X_train_ss, X_test_ss, y_train, y_test
+
+def reshape_no_scaling(X, y, verbose=False):
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=22)
+
+    if verbose:
+        print(f'X_train: {X_train.shape} X_test: {X_test.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}')
+
+    ## reshape
+    X_train_ss = np.reshape(X_train, (np.prod(X_train.shape[:-1]), X_train.shape[-1]))
+    X_test_ss = np.reshape(X_test, (np.prod(X_test.shape[:-1]), X_test.shape[-1]))
+    y_train = np.reshape(y_train, (np.prod(y_train.shape[:])))
+    y_test = np.reshape(y_test, (np.prod(y_test.shape[:])))
+    
+    if verbose:
+        print(f'Reshaped X_train: {X_train_ss.shape} X_test: {X_test_ss.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}')
 
     return X_train_ss, X_test_ss, y_train, y_test
