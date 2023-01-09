@@ -12,13 +12,33 @@ import seaborn as sns
 from sklearn.model_selection import train_test_split
 import random
 import sys
-import validate_io as validate
+
 
 ### Plot ID Labeling ###
 # Plot IDs are numbered according to ceo survey
 # the last three digits refer to the plot number and the first two digits refer to the survey
 # for ex: 25th plot in ceo-plantations-train-v04.csv will be 04025.npy or 04025.hkl
 
+# these checks are performed on the training data
+# TODO move this to validate_io file
+def train_output_range_dtype(dem, s1, s2, feats):
+    '''
+    Sentinel-1, float32, range from 0-1 (divided by 65535), unscaled decibels >-22
+    Sentinel-2, float32, range from 0-1 (divided by 65535), unscaled
+    Features, float32, range from ~-3 to ~ + 3 (divided by 1000)
+    TML prediction, float32, range from 0-1 (divided by 100)
+    '''
+
+    assert s1.dtype == np.float32
+    assert s2.dtype == np.float32
+    assert feats.dtype == np.float32
+    assert dem.dtype == np.float32
+
+    assert np.logical_and(s1.min() >= 0, s1.max() <= 1)
+    assert np.logical_and(s2.min() >= 0, s2.max() <= 1)
+    assert np.logical_and(feats[..., 1:].min() >= -3, feats[..., 1:].max() <= 3)
+    assert np.logical_and(feats[..., 0].min() >= 0, feats[..., 0].max() <= 1)
+    
 def convert_to_db(x: np.ndarray, min_db: int) -> np.ndarray:
     """ 
     Converts Sentinel 1 unitless backscatter coefficient
@@ -57,33 +77,6 @@ def load_slope(idx, directory = '../data/train-slope/'):
     
     #print(f'{idx} slope: {original_shape} -> {slope.shape}, {slope.dtype}')
     return slope
-
-def load_s1(idx, directory = '../data/train-s1/'):
-    """
-    S1 is stored as a (12, 32, 32, 2) float64 array with border information.
-    Needs to be converted from monthly mosaics to an annual median, 
-    and to 14 x 14 x 2 to match labels. Dtype needs to be converted to float32.
-    """
-    
-    s1 = hkl.load(directory + str(idx) + '.hkl')
-    original_shape = s1.shape
-    print(s1.shape)
-    
-    # get the median across flattened array
-    if len(s1.shape) == 4:
-        s1 = np.median(s1, axis = 0)
-    print(s1.shape)
-    # slice out border information
-    border_x = (s1.shape[0] - 14) // 2
-    border_y = (s1.shape[1] - 14) // 2
-    s1 = s1[border_x:-border_x, border_y:-border_y]
-    print(s1.shape)
-
-    s1 = s1.astype(np.float32)
-    
-    #print(f'{idx} s1: {original_shape} -> {s1.shape}, {s1.dtype}')
-    return s1
-
     
 def load_s1(idx, directory = '../data/train-s1/'):
     """
@@ -93,12 +86,10 @@ def load_s1(idx, directory = '../data/train-s1/'):
     """
 
     s1 = hkl.load(directory + str(idx) + '.hkl')
+    original_shape = s1.shape
 
-    # checks for floating datatype, if not converts to float32
-    if not isinstance(s1.flat[0], np.floating):
-        assert np.max(s1) > 1
-        s1 = s1.astype(np.float32) / 65535
-        assert np.max(s1) < 1
+    # since s1 is a float64, no need to check, just convert
+    s1 = s1.astype(np.float32) / 65535
 
     # get the median across flattened array
     if len(s1.shape) == 4:
@@ -172,7 +163,7 @@ def load_feats(idx, drop_prob, directory = '../data/train-features/'):
 
     feats = feats.astype(np.float32)
 
-    # print(f'{idx} feats: {feats.shape}, {feats.dtype}')
+    #print(f'{idx} feats: {feats.shape}, {feats.dtype}')
     return feats
 
 
@@ -197,20 +188,21 @@ def make_sample(sample_shape, slope, s1, s2, feats):
     Defines dimensions and then combines slope, s1, s2 and TML features from a plot
     into a sample with shape (14, 14, 78)
     '''
-    # validate that all the inputs are correct
-    validate.train_output_range_dtype(slope, s1, s2, feats)
+
+    # validate data
+    train_output_range_dtype(slope, s1, s2, feats)
 
     # define the last dimension of the array
     n_feats = 1 + s1.shape[-1] + s2.shape[-1] + feats.shape[-1]
 
     sample = np.empty((sample_shape[1], sample_shape[-1], n_feats))
-    
+
     # populate empty array with each feature
     sample[..., 0] = slope
     sample[..., 1:3] = s1
     sample[..., 3:13] = s2
     sample[..., 13:] = feats
-    
+
     return sample
 
 def make_sample_nofeats(sample_shape, slope, s1, s2):
@@ -254,22 +246,22 @@ def create_xy(sample_shape, v_train_data, drop_prob, drop_feats, verbose=False):
             plot_ids = plot_ids + df.PLOT_FNAME.drop_duplicates().tolist()
     
     # if the plot_ids do not have 5 digits, change to str and add leading 0
-    plot_ids = [str(item).zfill(5) if len(str(item)) < 5 else item for item in plot_ids]
+    plot_ids = [str(item).zfill(5) if len(str(item)) < 5 else str(item) for item in plot_ids]
 
-    # check and remove any plot ids where there are no cloud free images (no feats or s2)
-    for plot in plot_ids:
-        if not os.path.exists(f'../data/train-s2/{plot}.hkl') and not os.path.exists(f'../data/train-features/{plot}.hkl'):
+    # check and remove any plot ids where there are no cloud free images (no s2 hkl file)
+    for plot in plot_ids:            
+        if not os.path.exists(f'../data/train-s2/{plot}.hkl'.strip()):
             print(f'Plot id {plot} has no cloud free imagery and will be removed.')
             plot_ids.remove(plot)
-
-    # manually remove this plot that was getting skipped for unknown reason
-    #plot_ids.remove('04008')
-    plot_ids.remove('08182')
-    #plot_ids.remove('09168')
-    # plot_ids.remove('09224')
+    
+    # cannot figure out why some plots persist
+    if '04008' in plot_ids: plot_ids.remove('04008')
+    if '08182' in plot_ids: plot_ids.remove('08182')
+    if '09168' in plot_ids: plot_ids.remove('09168')
+    if '09224' in plot_ids: plot_ids.remove('09224')
 
     if verbose:
-        print(f'Training data includes {len(plot_ids)} plot ids.')
+        print(f'Training data includes {len(plot_ids)} plots.')
 
     # create empty x and y array based on number of plots (dropping TML probability changes dimensions from 78 -> 77)
     n_samples = len(plot_ids)

@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import yaml
 import confuse
 import hickle as hkl
@@ -20,6 +22,7 @@ import h5py
 from catboost import CatBoostClassifier
 import sys
 from datetime import datetime
+
 
 def fit_eval_regressor(X_train, X_test, y_train, y_test, model_name, v_train_data):
     '''
@@ -110,7 +113,7 @@ def fit_eval_classifier(X_train, X_test, y_train, y_test, model_name, v_train_da
     probs_pos = probs[:, 1]
     roc_auc = roc_auc_score(y_test, probs_pos)
 
-    # add new scores
+    # add new scores to df
     scores = {'model': f'{model_name}_model_{v_train_data}', 
             'cv': cv, 
             'train_score': train_score, 
@@ -122,13 +125,13 @@ def fit_eval_classifier(X_train, X_test, y_train, y_test, model_name, v_train_da
             'date': datetime.today().strftime('%Y-%m-%d')}
 
     eval_df = pd.DataFrame([scores]).round(4)
-        
+    
     # write scores to new line of csv
     with open('../models/mvp_scores.csv', 'a') as f:
         f.write('\n')
-        eval_df.to_csv('../models/mvp_scores.csv', mode='a', index=False, header=False)
+    eval_df.to_csv('../models/mvp_scores.csv', mode='a', index=False, header=False)
     
-    # this is not working - testing above again
+    # doesn't work
     #eval_df.to_csv('../models/mvp_scores.csv', mode='a', index=False, header=False)
     
     # Confusion Matrix
@@ -166,7 +169,48 @@ def fit_eval_classifier(X_train, X_test, y_train, y_test, model_name, v_train_da
     plt.ylabel('Precision')
     plt.legend(loc='lower left');
     
-    return eval_df
+    return pred, probs
+
+## TBD
+def write_train_test_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, suffix = "preds") -> str:
+    '''
+    Write predictions to a geotiff, using the same bounding box 
+    to determine north, south, east, west corners of the tile
+    '''
+    
+     # set x/y to the tile IDs
+    x = tile_idx[0]
+    y = tile_idx[1]
+    out_folder = f'tmp/{country}/preds/'
+    file = out_folder + f"{str(x)}X{str(y)}Y_{suffix}.tif"
+
+    if not os.path.exists(out_folder):
+        os.makedirs(out_folder)
+
+    # uses bbx to figure out the corners
+    west, east = bbx[0], bbx[2]
+    north, south = bbx[3], bbx[1]
+    
+    arr = arr.astype(np.uint8)
+
+    # create the file based on the size of the array
+    transform = rs.transform.from_bounds(west = west, south = south,
+                                         east = east, north = north,
+                                         width = arr.shape[1],
+                                         height = arr.shape[0])
+
+    print("Writing", file)
+    new_dataset = rs.open(file, 'w', 
+                            driver = 'GTiff',
+                            height = arr.shape[0], width = arr.shape[1], count = 1,
+                            dtype = "uint8",
+                            compress = 'lzw',
+                            crs = '+proj=longlat +datum=WGS84 +no_defs',
+                            transform=transform)
+    new_dataset.write(arr, 1)
+    new_dataset.close()
+    
+    return None
 
 
 def roc_curve_comp(X_train, X_test, y_train, y_test, model_names, v_train_data):
@@ -262,3 +306,16 @@ def learning_curve_comp(model_names, v_train_data, X_train, y_train):
         
     return None
 
+
+## TBD
+def visualize_plotpreds(model_name, v_train_data, X_test):
+    
+    filename = f'../models/{model_name}_model_{v_train_data}.pkl'
+    with open(filename, 'rb') as file:
+        model = pickle.load(file)
+
+    preds = model.predict(X_test)
+ 
+    sns.heatmap(preds.reshape((14,14)), vmin=0, vmax=.8).set_title(model_name)
+
+    return None
