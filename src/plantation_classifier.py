@@ -315,18 +315,27 @@ def process_tile(tile_idx: tuple, local_path: str, bbx: list, feats: bool, verbo
     # load and prep features here
     if feats:
         feats_file = f'{folder}raw/feats/{tile_str}_feats.hkl'
-        feats = hkl.load(feats_file).astype(np.float32)
+        feats_raw = hkl.load(feats_file).astype(np.float32)
     
         # adjust TML predictions feats[0] to match training data (0-1)
         # adjust shape by rolling axis (65, 614, 618) ->  (618, 614, 65) 
-        feats[0] = feats[0] / 100 
-        feats[1:] = feats[1:] / 1000  
-        tml_feats = np.rollaxis(feats, 0, 3)
-        tml_feats = np.rollaxis(tml_feats, 0, 2)
+        feats_raw[0] = feats_raw[0] / 100 
+        feats_raw[1:] = feats_raw[1:] / 1000  # feats are multiplyed by 1000 before saving
+        feats_rolled = np.rollaxis(feats_raw, 0, 3)
+        feats_rolled = np.rollaxis(feats_rolled, 0, 2)
 
-    # remove once updated to feat only pipeline
+        # now switch the feats
+        feats_ = feats_rolled.copy()
+
+        high_feats = [np.arange(1,33)]
+        low_feats = [np.arange(33,65)]
+
+        feats_[:, :, [low_feats]] = feats_[:, :, [high_feats]]
+        feats_[:, :, [high_feats]] = feats_[:, :, [low_feats]]
+
+    # remove this once pipeline updated to feat only 
     else:
-        tml_feats = []
+        feats_ = []
     
     clouds = hkl.load(clouds_file)
     if os.path.exists(cloud_mask_file):
@@ -499,7 +508,7 @@ def process_tile(tile_idx: tuple, local_path: str, bbx: list, feats: bool, verbo
     s2 = np.median(sentinel2, axis = 0)
     
     # removing return of image_dates, interp, cloudshad as not used
-    return s2, tml_feats, s1, dem
+    return s2, feats_, s1, dem
 
 
 ## Step 3: Combine raw data into a sample for input into the model 
@@ -600,6 +609,18 @@ def reshape_and_scale_manual(v_train_data: str, unseen: np.array, verbose: bool 
     
     # if verbose:
     #     print(f"The data has been scaled. Min {start_min} -> {end_min}, Max {start_max} -> {end_max},")
+
+    # now reshape
+    unseen_reshaped = np.reshape(unseen, (np.prod(unseen.shape[:-1]), unseen.shape[-1]))
+
+    return unseen_reshaped
+
+
+def reshape_no_scaling(unseen: np.array, verbose: bool = False):
+
+    ''' 
+    Do not apply scaling and only reshape the unseen data.
+    '''
 
     # now reshape
     unseen_reshaped = np.reshape(unseen, (np.prod(unseen.shape[:-1]), unseen.shape[-1]))
@@ -710,7 +731,7 @@ def execute(country: str, model: str, verbose: bool, feats: bool):
     counter = 0
 
     # right now this will just process 20 tiles
-    for tile_idx in tiles_to_process[:20]:
+    for tile_idx in tiles_to_process[50:60]:
         print(f'Processing tile: {tile_idx}')
         counter += 1
         successful = download_raw_tile(tile_idx, local_dir, aak, ask)
@@ -725,7 +746,8 @@ def execute(country: str, model: str, verbose: bool, feats: bool):
             # feats option will be removed in the future
             if feats:
                 sample, no_data_flag, sample_dims = make_sample(dem_proc, s1_proc, s2_proc, tml_feats)
-                unseen_ss = reshape_and_scale_manual('v11', sample, verbose)
+                unseen_ss = reshape_no_scaling(sample, verbose)
+                #unseen_ss = reshape_and_scale_manual('v11', sample, verbose)
     
             else:
                 sample, sample_dims = make_sample_nofeats(dem_proc, s1_proc, s2_proc)
