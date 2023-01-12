@@ -16,6 +16,9 @@ import time
 from scipy.ndimage import median_filter
 from skimage.transform import resize
 from glob import glob
+import functools
+from time import time, strftime
+from datetime import datetime
 
 import sys
 sys.path.append('src/')
@@ -29,6 +32,22 @@ with open("config.yaml", 'r') as stream:
     document = (yaml.safe_load(stream))
     aak = document['aws']['aws_access_key_id']
     ask = document['aws']['aws_secret_access_key']
+
+
+def timer(func):
+    '''
+    Prints the runtime of the decorated function.
+    '''
+    
+    @functools.wraps(func)
+    def wrapper_timer(*args, **kwargs):
+        start = datetime.now() 
+        value = func(*args, **kwargs)
+        end = datetime.now() 
+        run_time = end - start
+        print(f'Completed {func.__name__!r} in {run_time}.')
+        return value
+    return wrapper_timer
 
 
 ## Step 1: Download raw data from s3
@@ -330,8 +349,8 @@ def process_tile(tile_idx: tuple, local_path: str, bbx: list, feats: bool, verbo
         high_feats = [np.arange(1,33)]
         low_feats = [np.arange(33,65)]
 
-        feats_[:, :, [low_feats]] = feats_[:, :, [high_feats]]
-        feats_[:, :, [high_feats]] = feats_[:, :, [low_feats]]
+        feats_[:, :, [low_feats]] = feats_rolled[:, :, [high_feats]]
+        feats_[:, :, [high_feats]] = feats_rolled[:, :, [low_feats]]
 
     # remove this once pipeline updated to feat only 
     else:
@@ -356,7 +375,7 @@ def process_tile(tile_idx: tuple, local_path: str, bbx: list, feats: bool, verbo
     # slice off last index (no data mask) if present
     if s2_20.shape[3] == 7:
         s2_20 = s2_20[..., :6]
-        print(f's2_20 data mask removed.')
+        #print(f's2_20 data mask removed.')
 
     dem = hkl.load(dem_file)
     dem = median_filter(dem, size = 5)
@@ -718,7 +737,7 @@ def remove_folder(tile_idx: tuple, local_dir: str):
 
 
 # Execute steps
-
+@timer
 def execute(country: str, model: str, verbose: bool, feats: bool):
     '''
     Executes all preprocessing and modeling steps in the pipeline
@@ -731,7 +750,7 @@ def execute(country: str, model: str, verbose: bool, feats: bool):
     counter = 0
 
     # right now this will just process 20 tiles
-    for tile_idx in tiles_to_process[50:60]:
+    for tile_idx in tiles_to_process:
         print(f'Processing tile: {tile_idx}')
         counter += 1
         successful = download_raw_tile(tile_idx, local_dir, aak, ask)
@@ -751,13 +770,13 @@ def execute(country: str, model: str, verbose: bool, feats: bool):
     
             else:
                 sample, sample_dims = make_sample_nofeats(dem_proc, s1_proc, s2_proc)
-                unseen_ss = reshape_and_scale_manual('v11', sample, verbose)
+                unseen_ss = reshape_and_scale_manual('v10', sample, verbose)
             
             validate.model_inputs(unseen_ss)
             preds = predict_classification(unseen_ss, model, no_data_flag, sample_dims)
             validate.classification_scores(preds)
             write_tif(preds, bbx, tile_idx, country, 'preds')
-            remove_folder(tile_idx, local_dir)
+            #remove_folder(tile_idx, local_dir)
         
         else:
             print(f'Raw data for {tile_idx} does not exist on s3.')
@@ -767,7 +786,7 @@ def execute(country: str, model: str, verbose: bool, feats: bool):
     
     # for now mosaic and upload to s3 bucket
     mosaic.mosaic_tif(country, model)
-    mosaic.upload_mosaic(country, model, aak, ask)
+    #mosaic.upload_mosaic(country, model, aak, ask)
     
     return None
 
