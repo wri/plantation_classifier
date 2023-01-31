@@ -20,7 +20,7 @@ import sys
 # for ex: 25th plot in ceo-plantations-train-v04.csv will be 04025.npy or 04025.hkl
 
 # these checks are performed on the training data
-# TODO move this to validate_io file
+# TODO move this to validate_io file once determined how to import
 def train_output_range_dtype(dem, s1, s2, feats):
     '''
     Sentinel-1, float32, range from 0-1 (divided by 65535), unscaled decibels >-22
@@ -42,7 +42,7 @@ def train_output_range_dtype(dem, s1, s2, feats):
 def convert_to_db(x: np.ndarray, min_db: int) -> np.ndarray:
     """ 
     Converts Sentinel 1 unitless backscatter coefficient
-    to db with a min_db lower threshold
+    to decible with a min_db lower threshold
     
     Parameters:
         x (np.ndarray): unitless backscatter (T, X, Y, B) array
@@ -170,14 +170,24 @@ def load_feats(idx, drop_prob, directory = '../data/train-features/'):
 def load_label(idx, directory = '../data/train-labels/'):
     '''
     The labels are stored as a binary 14 x 14 float64 array.
+    Unless they are stored as (196,) and need to be reshaped.
     Dtype needs to be converted to float32.
     '''
-    labels = np.load(directory + str(idx) + '.npy')
-    original_shape = labels.shape
+    labels_raw = np.load(directory + str(idx) + '.npy')
+    original_shape = labels_raw.shape
 
-    lables = labels.astype(np.float32)
+    if len(labels_raw.shape) == 1:
+        labels_raw = labels_raw.reshape(14, 14)
+
+    # assumes labels are multi and converts to binary
+    # there should only be 0, 1, 2 classes
+    # this is just converting AF label (2) to 1
+    # binary = labels_raw.copy()
+    # binary[labels_raw == 2] = 1
+    # labels = binary.astype(np.float32)
+    labels = labels_raw.astype(np.float32)
     
-    #print(f'{idx} labels: {labels.shape}, {labels.dtype}')
+    #print(f'{idx} labels: {original_shape} --> {labels.shape}, {labels.dtype}')
     return labels
 
 # Create X and y variables
@@ -226,24 +236,35 @@ def make_sample_nofeats(sample_shape, slope, s1, s2):
     
     return sample
 
-def create_xy(sample_shape, v_train_data, drop_prob, drop_feats, verbose=False):
+# see if i can combine two ceo surveys
+def binary_ceo(v_train_data):
     '''
-    Creates an empty array for x and y based on the training data set
-    then creates samples and labels by loading data by plot ID. Removes ids where 
-    there is no cloud-free imagery available.
-    Combines all samples into a single array as input to the model.
-    Also returns a baseline accuracy score (indicating class imbalance)
+    Creates a list of plot ids to process from collect earth surveys 
+    with binary class labels (0, 1). Drops all plots w/o s2 imagery. 
+    Returns list of plot_ids.
     '''
+    
     # use CEO csv to gather plot id numbers
-    if len(v_train_data) == 1:
-        df = pd.read_csv(f'../data/ceo-plantations-train-{v_train_data[0]}.csv')
-        plot_ids = df.PLOT_FNAME.drop_duplicates().tolist()
+    plot_ids = []
 
-    elif len(v_train_data) > 1:
-        plot_ids = []
-        for i in v_train_data:
-            df = pd.read_csv(f'../data/ceo-plantations-train-{i}.csv')
-            plot_ids = plot_ids + df.PLOT_FNAME.drop_duplicates().tolist()
+    for i in v_train_data:
+        
+        df = pd.read_csv(f'../data/ceo-plantations-train-{i}.csv')
+        
+        # for multiclass surveys, change labels
+        if i == 'v14' or i == 'v15':
+
+            # confirm that unknown labels are always a full 14x14 (196 points) of unknowns
+            # if assertion fails, will print count of points
+            unknowns = df[df.PLANTATION == 'Unknown']
+            for plot in set(list(unknowns.PLOT_ID)):
+                assert len(unknowns[unknowns.PLOT_ID == plot]) == 196, f'{plot} has {len(unknowns[unknowns.PLOT_ID == plot])}/196 points labeled unknown.'
+
+            # drop unknown samples
+            df_new = df.drop(df[df.PLANTATION == 'Unknown'].index)
+            print(f'{(len(df) - len(df_new)) / 196} plots labeled unknown were dropped.')
+
+        plot_ids = plot_ids + df.PLOT_FNAME.drop_duplicates().tolist()
     
     # if the plot_ids do not have 5 digits, change to str and add leading 0
     plot_ids = [str(item).zfill(5) if len(str(item)) < 5 else str(item) for item in plot_ids]
@@ -259,11 +280,87 @@ def create_xy(sample_shape, v_train_data, drop_prob, drop_feats, verbose=False):
     if '08182' in plot_ids: plot_ids.remove('08182')
     if '09168' in plot_ids: plot_ids.remove('09168')
     if '09224' in plot_ids: plot_ids.remove('09224')
+    
+    return plot_ids
 
+def multiclass_ceo(v_train_data):
+    '''
+    Creates a list of plot ids to process from collect earth surveys 
+    with multi-class labels (0, 1, 2, 255). Drops all plots with 
+    "unknown" labels and plots w/o s2 imagery. Returns list of plot_ids.
+    '''
+
+    # use CEO csv to gather plot id numbers
+    plot_ids = []
+
+    for i in v_train_data:
+        df = pd.read_csv(f'../data/ceo-plantations-train-{i}.csv')
+
+        # map label categories to ints
+        # this step might not be needed but leaving for now.
+        df['PLANTATION_MULTI'] = df['SYSTEM'].map({'Monoculture': 1,
+                                                    'Agroforestry': 2,
+                                                    'Not plantation': 0,
+                                                    'Unknown': 255})
+
+        # confirm that unknown labels are always a full 14x14 (196 points) of unknowns
+        # if assertion fails, will print count of points
+        unknowns = df[df.PLANTATION_MULTI == 255]
+        for plot in set(list(unknowns.PLOT_ID)):
+            assert len(unknowns[unknowns.PLOT_ID == plot]) == 196, f'{plot} has {len(unknowns[unknowns.PLOT_ID == plot])}/196 points labeled unknown.'
+
+        # drop unknown samples
+        df_new = df.drop(df[df.PLANTATION_MULTI == 255].index)
+        print(f'{(len(df) - len(df_new)) / 196} plots labeled unknown were dropped.')
+
+        # now create list of plot_ids
+        plot_ids = plot_ids + df_new.PLOT_FNAME.drop_duplicates().tolist()
+
+        # if the plot_ids do not have 5 digits, change to str and add leading 0
+        plot_ids = [str(item).zfill(5) if len(str(item)) < 5 else str(item) for item in plot_ids]
+
+        # check and remove any plot ids where there are no cloud free images (no s2 hkl file)
+        for plot in plot_ids:            
+            if not os.path.exists(f'../data/train-s2/{plot}.hkl'.strip()):
+                print(f'Plot id {plot} has no cloud free imagery and will be removed.')
+                plot_ids.remove(plot)
+
+    return plot_ids
+
+def create_xy(v_train_data, classes, drop_prob, drop_feats, verbose=False):
+    '''
+    Gathers training data plots from collect earth surveys (v1, v2, v3, etc)
+    and loads data to create a sample for each plot. Removes ids where there is no
+    cloud-free imagery or "unknown" labels. Option to process binary or multiclass
+    labels.
+    Combines samples as X and loads labels as y for input to the model. 
+    Returns baseline accuracy score?
+
+    TODO: finish documentation
+
+    v_train_data:
+    drop_prob:
+    drop_feats:
+    convert_binary:
+    
+    '''
+    
+    # need to be able to create xy for 1) binary only 2) multiclass only 3) binary and multi
+    if classes == 'binary':
+        plot_ids = binary_ceo(v_train_data)
+    elif classes == 'multi':
+        plot_ids = multiclass_ceo(v_train_data)
+    
+    #TODO: add code to handle combined datasets
+    # elif classes == 'comb':
+        # do something here??
+    
     if verbose:
         print(f'Training data includes {len(plot_ids)} plots.')
 
+
     # create empty x and y array based on number of plots (dropping TML probability changes dimensions from 78 -> 77)
+    sample_shape = (14, 14)
     n_samples = len(plot_ids)
     y_all = np.empty(shape=(n_samples, 14, 14))
 
@@ -289,13 +386,14 @@ def create_xy(sample_shape, v_train_data, drop_prob, drop_feats, verbose=False):
             x_all[num] = X
             y_all[num] = y
 
-        if verbose:
-            print(f'Sample: {num}')
-            print(f'Features: {X.shape}, Labels: {y.shape}')
+        # if verbose:
+        #     print(f'Sample: {num}')
+        #     print(f'Features: {X.shape}, Labels: {y.shape}')
         
     # check class balance and baseline accuracy
     labels, counts = np.unique(y_all, return_counts=True)
-    print(f'Baseline: {round(counts[0] / (counts[0] + counts[1]), 3)}')
+    print(f'Class count {dict(zip(labels, counts))}')
+    #print(f'Baseline: {round(counts[0] / (counts[0] + counts[1]), 3)}')
 
     return x_all, y_all
 
