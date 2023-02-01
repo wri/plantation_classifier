@@ -17,11 +17,10 @@ def cm_roc_pr(model, y_test, pred, probs_pos):
     with open(f'../models/{model}.pkl', 'rb') as file:  
         model = pickle.load(file)
 
-        
-    # Confusion Matrix
+     # Confusion Matrix
     cm = confusion_matrix(y_test, pred, labels=model.classes_)
     ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=model.classes_).plot();
- 
+
     # ROC AUC and Precision Recall Curves
     plt.figure(figsize=(17,6)) 
     
@@ -56,7 +55,11 @@ def cm_roc_pr(model, y_test, pred, probs_pos):
     return None
 
 
-def roc_curve_comp(X_train, X_test, y_train, y_test, model_names, v_train_data):
+def roc_curve_comp(X_test, y_test, model_names, v_train_data):
+
+    '''
+    Plots the ROC Curve for all listed models,
+    '''
     
     plt.figure(figsize=(17,6)) 
     
@@ -112,6 +115,10 @@ def roc_curve_comp(X_train, X_test, y_train, y_test, model_names, v_train_data):
 
 def learning_curve_comp(model_names, v_train_data, X_train, y_train):
 
+    '''
+    Plots a learning curve for all listed models.
+    '''
+
     plt.figure(figsize = (13,6))
     
     colors = ['royalblue',
@@ -150,7 +157,7 @@ def learning_curve_comp(model_names, v_train_data, X_train, y_train):
     return None
 
 
-## TBD
+## in progress
 def visualize_plotpreds(model_name, v_train_data, X_test):
     
     filename = f'../models/{model_name}_model_{v_train_data}.pkl'
@@ -161,4 +168,30 @@ def visualize_plotpreds(model_name, v_train_data, X_test):
  
     sns.heatmap(preds.reshape((14,14)), vmin=0, vmax=.8).set_title(model_name)
 
+    return None
+
+
+## in progress
+
+def make_gpro_friendly(raster_filepath):
+    '''
+    transforms a raster into format that can be imported into
+    Google Earth Pro
+    '''
+    
+    ds = gdal.Open(raster_filepath, 1)
+    band = ds.GetRasterBand(1)
+    colors = gdal.ColorTable()
+
+    # set color for each value
+    colors.SetColorEntry(0, (240, 247, 240)) 
+    colors.SetColorEntry(1, (240, 247, 240))
+    
+    # set color table and color interpretation
+    band.SetRasterColorTable(colors)
+    band.SetRasterColorInterpretation(gdal.GCI_PaletteIndex)
+
+    # close and save file
+    del band, ds
+    
     return None
