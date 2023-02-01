@@ -8,11 +8,13 @@ import os
 import sys
 from datetime import datetime
 import boto3
+import glob
 
-def mosaic_tif(country: str, model: str):
+def mosaic_tif(country: str, model: str, compile_from: str):
 
     ''''
     Takes in a list of tiles and merges them to form a single tif.
+    Alternatively... merges all tifs in a folder.
     '''
     
     if not os.path.exists(f'tmp/{country}/preds/mosaic/'):
@@ -22,23 +24,35 @@ def mosaic_tif(country: str, model: str):
     # this will need to be updated to take in a specific list of tiles to mosaic
     tifs_to_mosaic = []
 
-    database = pd.read_csv(f'data/{country}.csv')
-    tiles = database[['X_tile', 'Y_tile']].to_records(index=False)
+    if compile_from == 'csv':
+        database = pd.read_csv(f'data/{country}.csv')
+        tiles = database[['X_tile', 'Y_tile']].to_records(index=False)
 
-    # for now only mosaicing 20 tiles
-    for tile_idx in tiles[:20]:
-        x = tile_idx[0]
-        y = tile_idx[1]
-        filename = f'{str(x)}X{str(y)}Y_preds.tif'
-        tifs_to_mosaic.append(filename)
-    
+        # specify here if there's a specific set of tiles to merge
+        for tile_idx in tiles[8:11]:
+            x = tile_idx[0]
+            y = tile_idx[1]
+            filename = f'{str(x)}X{str(y)}Y_preds.tif'
+            tifs_to_mosaic.append(filename)
+
+
+    # get a list of files to merge from preds dir
+    # filename slice specific to puntarenas -- update
+    # use this in the event some tiles need to be skipped
+    if compile_from == 'dir':
+        tifs = glob.glob(f'../tmp/{country}/preds/*.tif')  
+        for file in tifs:
+            tifs_to_mosaic.append(file[21:])
+
     # now open each item in dataset reader mode (required to merge)
     reader_mode = []
+
     for file in tifs_to_mosaic:
         src = rs.open(f'tmp/{country}/preds/{file}')
         reader_mode.append(src) 
-    
+
     print(f'Merging {len(reader_mode)} tifs.')
+
     mosaic, out_transform = merge(reader_mode)
 
     date = datetime.today().strftime('%Y-%m-%d')
@@ -46,7 +60,7 @@ def mosaic_tif(country: str, model: str):
     # outpath will be the new filename
     suffix = f'{country}_{model}_{date}.tif'
     outpath = f'tmp/{country}/preds/mosaic/{suffix}'
-    out_meta = src.meta.copy()
+    out_meta = src.meta.copy()  
     out_meta.update({'driver': "GTiff",
                      'dtype': 'uint8',
                      'height': mosaic.shape[1],
@@ -58,6 +72,55 @@ def mosaic_tif(country: str, model: str):
         dest.write(mosaic)
 
     return None
+
+
+# def mosaic_tif(country: str, model: str):
+
+#     ''''
+#     Takes in a list of tiles and merges them to form a single tif.
+#     Alternatively... merges all tifs in a folder.
+#     NOTE: filepaths are based on relative path!
+#     '''
+    
+#     if not os.path.exists(f'../tmp/{country}/preds/mosaic/'):
+#         os.makedirs(f'../tmp/{country}/preds/mosaic/')
+        
+#     # use the list of tiles to create a list of filenames
+#     # this will need to be updated to take in a specific list of tiles to mosaic
+#     tifs_to_mosaic = []
+    
+#     tifs = glob.glob(f'../tmp/{country}/preds/*.tif')  
+#     for file in tifs:
+#         tifs_to_mosaic.append(file)
+
+#     # now open each item in dataset reader mode (required to merge)
+#     reader_mode = []
+
+#     for file in tifs_to_mosaic:
+#         src = rs.open(file)
+#         reader_mode.append(src) 
+    
+#     print(f'Merging {len(reader_mode)} tifs.')
+#     mosaic, out_transform = merge(reader_mode)
+
+#     date = datetime.today().strftime('%Y-%m-%d')
+    
+#     # outpath will be the new filename
+#     suffix = f'{country}_{model}_{date}.tif'
+#     outpath = f'../tmp/{country}/preds/mosaic/{suffix}'
+#     out_meta = src.meta.copy()  
+#     out_meta.update({'driver': "GTiff",
+#                      'dtype': 'uint8',
+#                      'height': mosaic.shape[1],
+#                      'width': mosaic.shape[2],
+#                      'transform': out_transform,
+#                      'compress':'lzw'})
+
+#     with rs.open(outpath, "w", **out_meta) as dest:
+#         dest.write(mosaic)
+
+#     return None
+
 
 
 def upload_mosaic(country: str, model: str, aws_access_key: str, aws_secret_key: str):
@@ -91,7 +154,8 @@ if __name__ == '__main__':
 
     parser.add_argument('--country', dest='country', type=str)
     parser.add_argument('--model', dest='model', type=str)
+    parser.add_argument('--compile', dest='compile_from', type=str)
 
     args = parser.parse_args()
     
-    mosaic_tif(args.country, args.model)
+    mosaic_tif(args.country, args.model, args.compile_from)
