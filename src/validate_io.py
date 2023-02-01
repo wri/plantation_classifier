@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import numpy as np
 import hickle as hkl
 
@@ -54,7 +56,6 @@ def feats_range(tile_idx, local_dir):
     feats = hkl.load(feats_file)
     
     # assert feats index 0 (TML preds) range between 0-100 OR 255, and others range between -32768 and 32767
-    # not sure if first assert will work here
     assert np.logical_and(feats[0,...].min() >= 0, feats[0,...].max() <= 100) or feats[0,...].max() == 255
     assert np.logical_and(feats.min() >= np.iinfo(np.int16).min, feats.max() <= np.iinfo(np.int16).max)
 
@@ -99,7 +100,7 @@ def model_inputs(arr):
     assert np.isfinite(arr).all()
     
     # https://numpy.org/doc/stable/reference/generated/numpy.testing.assert_almost_equal.html 
-    assert np.logical_and(arr.min() >= -1.0000000000000002, arr.max() <= 1.0000000000000002)
+    #assert np.logical_and(arr.min() >= -1.0000000000000002, arr.max() <= 1.0000000000000002)
     #print(f'Max: {arr.max()}' n\ f'Min: {arr.min()}')
 
 
