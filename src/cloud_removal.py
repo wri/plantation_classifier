@@ -24,6 +24,7 @@ def identify_pifs(src, ref):
     # While land-use change or cloud cover is non-linear
     # We select the points between src and ref that are the most correlated
     # By doing CCA and selecting the pixels where the components are the closest
+    
     cca = CCA(n_components=2, tol=1e-5, max_iter=400)
     xs, ys = cca.fit_transform(src[..., :4], ref[..., :4])
     diffs = xs - ys
@@ -502,6 +503,7 @@ def detect_pfcp(arr, dem, bbx):
                             (b7down.shape[0] // 2, 2, b7down.shape[1] // 2, 2))
         b7down = np.mean(b7down, axis=(1, 3))
 
+        ## Runtime Warning (divide by 0)
         r8a = b8down / b8adown
         r8a7 = b7down / b8adown
 
@@ -514,6 +516,8 @@ def detect_pfcp(arr, dem, bbx):
                                        mean_op,
                                        mode='same',
                                        boundary='symm')**2
+        
+        # Runtime Warning: invalid value encountered in subtract                               
         r8a = mean_of_sq - sq_of_mean
 
         mean_of_sq = signal.convolve2d(r8a7**2,
