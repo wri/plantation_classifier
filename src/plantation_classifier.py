@@ -12,7 +12,6 @@ import botocore
 import rasterio as rs
 import yaml
 from osgeo import gdal
-import time
 from scipy.ndimage import median_filter
 from skimage.transform import resize
 from glob import glob
@@ -145,6 +144,7 @@ def download_raw_tile(tile_idx: tuple, local_dir: str, access_key: str, secret_k
                             local_dir = path_to_tile,
                             aws_access_key = access_key,
                             aws_secret_key = secret_key)
+
             return True
 
         # if the tiles do not exist on s3, catch the error and return False
@@ -457,7 +457,7 @@ def process_tile(tile_idx: tuple, local_path: str, bbx: list, feats: bool, verbo
     # Otherwise... set the missing values to the median value.
     sentinel2 = interpolation.interpolate_missing_vals(sentinel2)
     if make_shadow:
-        time1 = time.time()
+        time1 = time()
         # Bounding box passed to remove_missed_clouds to mask 
         # out non-urban areas from the false positive cloud removal
         cloudshad, fcps = cloud_removal.remove_missed_clouds(sentinel2, dem, bbx)
@@ -508,7 +508,7 @@ def process_tile(tile_idx: tuple, local_path: str, bbx: list, feats: bool, verbo
                 sentinel2, cloudshad, cloudshad, image_dates, pfcps = fcps, wsize = 8, step = 8, thresh = 4)
 
         if verbose:
-            time2 = time.time()
+            time2 = time()
             print(f"Cloud/shadow interp:{np.around(time2 - time1, 1)} seconds")
             print(f"{100*np.sum(interp > 0.0, axis = (1, 2))/(interp.shape[1] * interp.shape[2])}%")
             print("Cloud/shad", np.mean(cloudshad, axis = (1, 2)))
@@ -544,7 +544,8 @@ def make_sample(dem: np.array, s1: np.array, s2: np.array, tml_feats: np.array):
 
     # create the no data flag for TML (boolean mask)
     # note that the feats shape is (x, x, 65)
-    no_data_flag = tml_feats[...,0] == 255
+    no_data_flag = tml_feats[...,0] == 255.
+    no_tree_flag = tml_feats[...,0] == 0.
 
     # Create the empty array using shape of inputs
     sample = np.empty((dem.shape[0], dem.shape[1], n_feats))
@@ -558,7 +559,7 @@ def make_sample(dem: np.array, s1: np.array, s2: np.array, tml_feats: np.array):
     # save dims for future use
     arr_dims = (sample.shape[0], sample.shape[1])
 
-    return sample, no_data_flag, arr_dims
+    return sample, no_data_flag, no_tree_flag, arr_dims
 
 def make_sample_nofeats(dem: np.array, s1: np.array, s2: np.array):
     
@@ -649,7 +650,7 @@ def reshape_no_scaling(unseen: np.array, verbose: bool = False):
 
 # Step 5: import classification model, run predictions
 
-def predict_classification(arr: np.array, model: str, no_data_flag: np.array, sample_dims: tuple):
+def predict_classification(arr: np.array, model: str, no_data_flag: np.array, no_tree_flag: np.array, sample_dims: tuple):
 
     '''
     Import pretrained model and run predictions on arr.
@@ -667,9 +668,10 @@ def predict_classification(arr: np.array, model: str, no_data_flag: np.array, sa
 
     reshaped_preds = preds.reshape(sample_dims[0], sample_dims[1])
 
-    # apply no data flag to predictions
-    # this will only identify where true?
+    # apply no data and no tree flag to predictions
+    # to clean up noise
     reshaped_preds[no_data_flag] = 255.
+    reshaped_preds[no_tree_flag] = 0.
 
     return reshaped_preds
 
@@ -750,7 +752,7 @@ def execute(country: str, model: str, verbose: bool, feats: bool):
     counter = 0
 
     # right now this will just process 20 tiles
-    for tile_idx in tiles_to_process:
+    for tile_idx in tiles_to_process[8:11]:
         print(f'Processing tile: {tile_idx}')
         counter += 1
         successful = download_raw_tile(tile_idx, local_dir, aak, ask)
@@ -764,17 +766,17 @@ def execute(country: str, model: str, verbose: bool, feats: bool):
 
             # feats option will be removed in the future
             if feats:
-                sample, no_data_flag, sample_dims = make_sample(dem_proc, s1_proc, s2_proc, tml_feats)
+                sample, no_data_flag, no_tree_flag, sample_dims = make_sample(dem_proc, s1_proc, s2_proc, tml_feats)
                 unseen_ss = reshape_no_scaling(sample, verbose)
                 #unseen_ss = reshape_and_scale_manual('v11', sample, verbose)
     
             else:
                 sample, sample_dims = make_sample_nofeats(dem_proc, s1_proc, s2_proc)
-                unseen_ss = reshape_and_scale_manual('v10', sample, verbose)
+                #unseen_ss = reshape_and_scale_manual('v10', sample, verbose)
             
             validate.model_inputs(unseen_ss)
-            preds = predict_classification(unseen_ss, model, no_data_flag, sample_dims)
-            validate.classification_scores(preds)
+            preds = predict_classification(unseen_ss, model, no_data_flag, no_tree_flag, sample_dims)
+            #validate.classification_scores(preds)
             write_tif(preds, bbx, tile_idx, country, 'preds')
             #remove_folder(tile_idx, local_dir)
         
@@ -785,7 +787,7 @@ def execute(country: str, model: str, verbose: bool, feats: bool):
             print(f'{counter}/{tile_count} tiles processed...')
     
     # for now mosaic and upload to s3 bucket
-    mosaic.mosaic_tif(country, model)
+    mosaic.mosaic_tif(country, model, compile_from='csv')
     #mosaic.upload_mosaic(country, model, aak, ask)
     
     return None
