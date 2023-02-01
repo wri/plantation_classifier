@@ -167,7 +167,7 @@ def load_feats(idx, drop_prob, directory = '../data/train-features/'):
     return feats
 
 
-def load_label(idx, directory = '../data/train-labels/'):
+def load_label(idx, classes, directory = '../data/train-labels/'):
     '''
     The labels are stored as a binary 14 x 14 float64 array.
     Unless they are stored as (196,) and need to be reshaped.
@@ -179,14 +179,17 @@ def load_label(idx, directory = '../data/train-labels/'):
     if len(labels_raw.shape) == 1:
         labels_raw = labels_raw.reshape(14, 14)
 
-    # assumes labels are multi and converts to binary
-    # there should only be 0, 1, 2 classes
-    # this is just converting AF label (2) to 1
-    # binary = labels_raw.copy()
-    # binary[labels_raw == 2] = 1
-    # labels = binary.astype(np.float32)
-    labels = labels_raw.astype(np.float32)
+    # makes sure that a binary classification exercise updates
+    # any multiclass labels (this is just converting AF label (2) to 1)
+    if classes == 'binary':
+        labels = labels_raw.copy()
+        labels[labels_raw == 2] = 1
+        labels = labels.astype(np.float32)
+        
+    else:
+        labels = labels_raw.astype(np.float32)
     
+    #print(idx, np.unique(labels))
     #print(f'{idx} labels: {original_shape} --> {labels.shape}, {labels.dtype}')
     return labels
 
@@ -253,19 +256,30 @@ def binary_ceo(v_train_data):
         
         # for multiclass surveys, change labels
         if i == 'v14' or i == 'v15':
+        
+            # map label categories to ints
+            # this step might not be needed but leaving for now.
+            df['PLANTATION_MULTI'] = df['PLANTATION'].map({'Monoculture': 1,
+                                                        'Agroforestry': 2,
+                                                        'Not plantation': 0,
+                                                        'Unknown': 255})
 
             # confirm that unknown labels are always a full 14x14 (196 points) of unknowns
             # if assertion fails, will print count of points
-            unknowns = df[df.PLANTATION == 'Unknown']
+            unknowns = df[df.PLANTATION_MULTI == 255]
             for plot in set(list(unknowns.PLOT_ID)):
                 assert len(unknowns[unknowns.PLOT_ID == plot]) == 196, f'{plot} has {len(unknowns[unknowns.PLOT_ID == plot])}/196 points labeled unknown.'
 
             # drop unknown samples
-            df_new = df.drop(df[df.PLANTATION == 'Unknown'].index)
+            df_new = df.drop(df[df.PLANTATION_MULTI == 255].index)
             print(f'{(len(df) - len(df_new)) / 196} plots labeled unknown were dropped.')
+            
+            plot_ids = plot_ids + df_new.PLOT_FNAME.drop_duplicates().tolist()
 
-        plot_ids = plot_ids + df.PLOT_FNAME.drop_duplicates().tolist()
-    
+        # for binary surveys add to list
+        else:
+            plot_ids = plot_ids + df.PLOT_FNAME.drop_duplicates().tolist()
+
     # if the plot_ids do not have 5 digits, change to str and add leading 0
     plot_ids = [str(item).zfill(5) if len(str(item)) < 5 else str(item) for item in plot_ids]
 
@@ -351,10 +365,6 @@ def create_xy(v_train_data, classes, drop_prob, drop_feats, verbose=False):
     elif classes == 'multi':
         plot_ids = multiclass_ceo(v_train_data)
     
-    #TODO: add code to handle combined datasets
-    # elif classes == 'comb':
-        # do something here??
-    
     if verbose:
         print(f'Training data includes {len(plot_ids)} plots.')
 
@@ -375,14 +385,14 @@ def create_xy(v_train_data, classes, drop_prob, drop_feats, verbose=False):
 
         if drop_feats:
             X = make_sample_nofeats(sample_shape, load_slope(plot), load_s1(plot), load_s2(plot))
-            y = load_label(plot)
+            y = load_label(plot, classes)
             x_all[num] = X
             y_all[num] = y
 
         else:
             # at index i, load and create the sample, then append to empty array
             X = make_sample(sample_shape, load_slope(plot), load_s1(plot), load_s2(plot), load_feats(plot, drop_prob))
-            y = load_label(plot)
+            y = load_label(plot, classes)
             x_all[num] = X
             y_all[num] = y
 
