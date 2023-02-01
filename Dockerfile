@@ -29,9 +29,9 @@ RUN apt-get update && apt-get install -y software-properties-common &&\
 # copy over the appropriate scripts/data
 COPY src/ /app/src/
 COPY data/urbanmask.tif /app/data/urbanmask.tif
-COPY data/mins_v11.npy /app/data/mins_v11.npy
-COPY data/maxs_v11.npy /app/data/maxs_v11.npy
-COPY models/cat_model_v11.pkl /app/models/cat_model_v11.pkl
+# COPY data/mins_v11.npy /app/data/mins_v11.npy
+# COPY data/maxs_v11.npy /app/data/maxs_v11.npy
+COPY models/cat_v11.pkl /app/models/cat_model_v11.pkl
 COPY config.yaml /app/config.yaml
 
 EXPOSE 8080
