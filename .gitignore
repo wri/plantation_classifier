@@ -10,7 +10,9 @@ src/fil-result/*
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
+*.pyc 
 
 # Jupyter Notebook
 .ipynb_checkpoints
 notebooks/catboost_info/*
+notebooks/conclusions.ipynb

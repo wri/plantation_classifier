@@ -12,22 +12,41 @@ import botocore
 import rasterio as rs
 import yaml
 from osgeo import gdal
-import time
 from scipy.ndimage import median_filter
 from skimage.transform import resize
-import glob
+from glob import glob
+import functools
+from time import time, strftime
+from datetime import datetime
 
 import sys
 sys.path.append('src/')
 import interpolation
 import cloud_removal
 import mosaic
+import validate_io as validate
 
 
 with open("config.yaml", 'r') as stream:
     document = (yaml.safe_load(stream))
     aak = document['aws']['aws_access_key_id']
     ask = document['aws']['aws_secret_access_key']
+
+
+def timer(func):
+    '''
+    Prints the runtime of the decorated function.
+    '''
+    
+    @functools.wraps(func)
+    def wrapper_timer(*args, **kwargs):
+        start = datetime.now() 
+        value = func(*args, **kwargs)
+        end = datetime.now() 
+        run_time = end - start
+        print(f'Completed {func.__name__!r} in {run_time}.')
+        return value
+    return wrapper_timer
 
 
 ## Step 1: Download raw data from s3
@@ -110,7 +129,7 @@ def download_raw_tile(tile_idx: tuple, local_dir: str, access_key: str, secret_k
     s3_path_to_tile = f'2020/raw/{str(x)}/{str(y)}/'
     
     # check if feats folder exists locally
-    folder_check = os.path.exists(path_to_tile + "raw/feats/")
+    folder_check = os.path.exists(path_to_tile + f"raw/feats/{str(x)}X{str(y)}Y_feats.hkl")
 
     if folder_check:
         print('Raw data exists locally.')
@@ -125,6 +144,7 @@ def download_raw_tile(tile_idx: tuple, local_dir: str, access_key: str, secret_k
                             local_dir = path_to_tile,
                             aws_access_key = access_key,
                             aws_secret_key = secret_key)
+
             return True
 
         # if the tiles do not exist on s3, catch the error and return False
@@ -273,7 +293,7 @@ def adjust_shape(arr: np.ndarray, width: int, height: int) -> np.ndarray:
 
     return arr.squeeze()
 
-def process_tile(x: int, y: int, local_path: str, bbx: list, feats: bool, make_shadow: bool = True, verbose: bool = False) -> np.ndarray:
+def process_tile(tile_idx: tuple, local_path: str, bbx: list, feats: bool, verbose: bool = False, make_shadow: bool = True) -> np.ndarray:
     """
     Transforms raw data structure (in temp/raw/*) to processed data structure
         - align shapes of different data sources (clouds / shadows / s1 / s2 / dem)
@@ -289,49 +309,52 @@ def process_tile(x: int, y: int, local_path: str, bbx: list, feats: bool, make_s
          image_dates (np.ndarray)
          interp (np.ndarray)
          s1 (np.ndarray)
+         s2 (np.ndarray)
     """
     
-    x = str(int(x))
-    y = str(int(y))
+    x = str(tile_idx[0])
+    y = str(tile_idx[1])
     x = x[:-2] if ".0" in x else x
     y = y[:-2] if ".0" in y else y
             
     folder = f"{local_path}/{str(x)}/{str(y)}/"
-    tile_idx = f'{str(x)}X{str(y)}Y'
+    tile_str = f'{str(x)}X{str(y)}Y'
 
-    clouds_file = f'{folder}raw/clouds/clouds_{tile_idx}.hkl'
-    cloud_mask_file = f'{folder}raw/clouds/cloudmask_{tile_idx}.hkl'
-    shadows_file = f'{folder}raw/clouds/shadows_{tile_idx}.hkl'
-    s1_file = f'{folder}raw/s1/{tile_idx}.hkl'
-    s1_dates_file = f'{folder}raw/misc/s1_dates_{tile_idx}.hkl'
-    s2_10_file = f'{folder}raw/s2_10/{tile_idx}.hkl'
-    s2_20_file = f'{folder}raw/s2_20/{tile_idx}.hkl'
-    s2_dates_file = f'{folder}raw/misc/s2_dates_{tile_idx}.hkl'
-    clean_steps_file = f'{folder}raw/clouds/clean_steps_{tile_idx}.hkl'
-    dem_file = f'{folder}raw/misc/dem_{tile_idx}.hkl'
+    clouds_file = f'{folder}raw/clouds/clouds_{tile_str}.hkl'
+    cloud_mask_file = f'{folder}raw/clouds/cloudmask_{tile_str}.hkl'
+    shadows_file = f'{folder}raw/clouds/shadows_{tile_str}.hkl'
+    s1_file = f'{folder}raw/s1/{tile_str}.hkl'
+    s1_dates_file = f'{folder}raw/misc/s1_dates_{tile_str}.hkl'
+    s2_10_file = f'{folder}raw/s2_10/{tile_str}.hkl'
+    s2_20_file = f'{folder}raw/s2_20/{tile_str}.hkl'
+    s2_dates_file = f'{folder}raw/misc/s2_dates_{tile_str}.hkl'
+    clean_steps_file = f'{folder}raw/clouds/clean_steps_{tile_str}.hkl'
+    dem_file = f'{folder}raw/misc/dem_{tile_str}.hkl'
 
     # load and prep features here
     if feats:
-        feats_file = f'{folder}raw/feats/{tile_idx}_feats.hkl'
-        feats_full = hkl.load(feats_file)
-        if feats_full.shape[0] != 65:
-            print(f'Warning: there are {feats_full.shape[0]} feats')
+        feats_file = f'{folder}raw/feats/{tile_str}_feats.hkl'
+        feats_raw = hkl.load(feats_file).astype(np.float32)
     
-        # separate /combine preds and feats ... there's prob an easier way?
-        preds = feats_full[0]
-        feats = feats_full[1:, ...] / 1000
-        comb = np.empty((feats_full.shape[0], feats_full.shape[1], feats_full.shape[2]))
-        comb[0,...] = preds
-        comb[1:,...] = feats
+        # adjust TML predictions feats[0] to match training data (0-1)
+        # adjust shape by rolling axis (65, 614, 618) ->  (618, 614, 65) 
+        feats_raw[0] = feats_raw[0] / 100 
+        feats_raw[1:] = feats_raw[1:] / 1000  # feats are multiplyed by 1000 before saving
+        feats_rolled = np.rollaxis(feats_raw, 0, 3)
+        feats_rolled = np.rollaxis(feats_rolled, 0, 2)
 
-        # adjust shape (65, 614, 618) ->  (618, 614, 65) 
-        # and make sure float32
-        comb = np.rollaxis(comb, 0, 3)
-        comb = np.rollaxis(comb, 0, 2)
-        tml_feats = np.float32(comb)
+        # now switch the feats
+        feats_ = feats_rolled.copy()
 
+        high_feats = [np.arange(1,33)]
+        low_feats = [np.arange(33,65)]
+
+        feats_[:, :, [low_feats]] = feats_rolled[:, :, [high_feats]]
+        feats_[:, :, [high_feats]] = feats_rolled[:, :, [low_feats]]
+
+    # remove this once pipeline updated to feat only 
     else:
-        tml_feats = []
+        feats_ = []
     
     clouds = hkl.load(clouds_file)
     if os.path.exists(cloud_mask_file):
@@ -348,6 +371,11 @@ def process_tile(x: int, y: int, local_path: str, bbx: list, feats: bool, make_s
     
     s2_10 = to_float32(hkl.load(s2_10_file))
     s2_20 = to_float32(hkl.load(s2_20_file))
+    
+    # slice off last index (no data mask) if present
+    if s2_20.shape[3] == 7:
+        s2_20 = s2_20[..., :6]
+        #print(f's2_20 data mask removed.')
 
     dem = hkl.load(dem_file)
     dem = median_filter(dem, size = 5)
@@ -360,17 +388,17 @@ def process_tile(x: int, y: int, local_path: str, bbx: list, feats: bool, make_s
     s2_10 = adjust_shape(s2_10, width, height)
     dem = adjust_shape(dem, width, height)
 
-    if verbose:
-        print(f'Clouds: {clouds.shape}, \n'
-            f'S1: {s1.shape} \n'
-            f'S2: {s2_10.shape}, {s2_20.shape} \n'
-            f'DEM: {dem.shape}')
-
     # Deal with cases w/ only 1 image
     if len(s2_10.shape) == 3:
         s2_10 = s2_10[np.newaxis]
     if len(s2_20.shape) == 3:
         s2_20 = s2_20[np.newaxis]
+
+    if verbose:
+        print(f'Clouds: {clouds.shape}, \n'
+                f'S1: {s1.shape} \n'
+                f'S2: {s2_10.shape}, {s2_20.shape} \n'
+                f'DEM: {dem.shape}')
 
     # bilinearly upsample 20m bands to 10m for superresolution
     sentinel2 = np.zeros((s2_10.shape[0], width, height, 10), np.float32)
@@ -380,8 +408,7 @@ def process_tile(x: int, y: int, local_path: str, bbx: list, feats: bool, make_s
     for band in range(4):
         for step in range(sentinel2.shape[0]):
             sentinel2[step, ..., band + 4] = resize(
-                s2_20[step,..., band], (width, height), 1
-            )
+                s2_20[step,..., band], (width, height), 1)
 
     for band in range(4, 6):
         # indices 4, 5 are 40m and may be a different shape
@@ -396,22 +423,22 @@ def process_tile(x: int, y: int, local_path: str, bbx: list, feats: bool, make_s
                 mid_misaligned_x = mid[0, :]
                 mid_misaligned_y = mid[:, 0]
                 mid = mid[1:, 1:].reshape(
-                    np.int(np.floor(mid.shape[0] / 2)), 2,
-                    np.int(np.floor(mid.shape[1] / 2)), 2)
+                    int(np.floor(mid.shape[0] / 2)), 2,
+                    int(np.floor(mid.shape[1] / 2)), 2)
                 mid = np.mean(mid, axis = (1, 3))
                 sentinel2[step, 1:, 1:, band + 4] = resize(mid, (width - 1, height - 1), 1)
                 sentinel2[step, 0, :, band + 4] = mid_misaligned_x.repeat(2)
                 sentinel2[step, :, 0, band + 4] = mid_misaligned_y.repeat(2)
             elif mid.shape[0] % 2 != 0:
                 mid_misaligned = mid[0, :]
-                mid = mid[1:].reshape(np.int(np.floor(mid.shape[0] / 2)), 2, mid.shape[1] // 2, 2)
+                mid = mid[1:].reshape(int(np.floor(mid.shape[0] / 2)), 2, mid.shape[1] // 2, 2)
                 mid = np.mean(mid, axis = (1, 3))
                 sentinel2[step, 1:, :, band + 4] = resize(mid, (width - 1, height), 1)
                 sentinel2[step, 0, :, band + 4] = mid_misaligned.repeat(2)
             elif mid.shape[1] % 2 != 0:
                 mid_misaligned = mid[:, 0]
                 mid = mid[:, 1:]
-                mid = mid.reshape(mid.shape[0] // 2, 2, np.int(np.floor(mid.shape[1] / 2)), 2)
+                mid = mid.reshape(mid.shape[0] // 2, 2, int(np.floor(mid.shape[1] / 2)), 2)
                 mid = np.mean(mid, axis = (1, 3))
                 sentinel2[step, :, 1:, band + 4] = resize(mid, (width, height - 1), 1)
                 sentinel2[step, :, 0, band + 4] = mid_misaligned.repeat(2)
@@ -430,7 +457,7 @@ def process_tile(x: int, y: int, local_path: str, bbx: list, feats: bool, make_s
     # Otherwise... set the missing values to the median value.
     sentinel2 = interpolation.interpolate_missing_vals(sentinel2)
     if make_shadow:
-        time1 = time.time()
+        time1 = time()
         # Bounding box passed to remove_missed_clouds to mask 
         # out non-urban areas from the false positive cloud removal
         cloudshad, fcps = cloud_removal.remove_missed_clouds(sentinel2, dem, bbx)
@@ -463,8 +490,7 @@ def process_tile(x: int, y: int, local_path: str, bbx: list, feats: bool, make_s
                 cloudshad = np.maximum(cloudshad, clm)
 
             interp = cloud_removal.id_areas_to_interp(
-                sentinel2, cloudshad, cloudshad, image_dates, pfcps = fcps
-            )
+                sentinel2, cloudshad, cloudshad, image_dates, pfcps = fcps)
 
         to_remove = np.argwhere(np.mean(interp == 1, axis = (1, 2)) > 0.98).flatten()
         if len(to_remove) > 0:
@@ -479,14 +505,14 @@ def process_tile(x: int, y: int, local_path: str, bbx: list, feats: bool, make_s
                 cloudshad = np.maximum(cloudshad, clm)
 
         sentinel2, interp = cloud_removal.remove_cloud_and_shadows(
-                sentinel2, cloudshad, cloudshad, image_dates, pfcps = fcps, wsize = 8, step = 8, thresh = 4
-            )
-        """
-        time2 = time.time()
-        print(f"Cloud/shadow interp:{np.around(time2 - time1, 1)} seconds")
-        print(f"{100*np.sum(interp > 0.0, axis = (1, 2))/(interp.shape[1] * interp.shape[2])}%")
-        #print("Cloud/shad", np.mean(cloudshad, axis = (1, 2)))
-        """
+                sentinel2, cloudshad, cloudshad, image_dates, pfcps = fcps, wsize = 8, step = 8, thresh = 4)
+
+        if verbose:
+            time2 = time()
+            print(f"Cloud/shadow interp:{np.around(time2 - time1, 1)} seconds")
+            print(f"{100*np.sum(interp > 0.0, axis = (1, 2))/(interp.shape[1] * interp.shape[2])}%")
+            print("Cloud/shad", np.mean(cloudshad, axis = (1, 2)))
+    
     else:
         interp = np.zeros(
             (sentinel2.shape[0], sentinel2.shape[1], sentinel2.shape[2]), dtype = np.float32)
@@ -501,7 +527,7 @@ def process_tile(x: int, y: int, local_path: str, bbx: list, feats: bool, make_s
     s2 = np.median(sentinel2, axis = 0)
     
     # removing return of image_dates, interp, cloudshad as not used
-    return s2, tml_feats, s1, dem
+    return s2, feats_, s1, dem
 
 
 ## Step 3: Combine raw data into a sample for input into the model 
@@ -516,6 +542,11 @@ def make_sample(dem: np.array, s1: np.array, s2: np.array, tml_feats: np.array):
     # define number of features in the sample
     n_feats = 1 + s1.shape[-1] + s2.shape[-1] + tml_feats.shape[-1] 
 
+    # create the no data flag for TML (boolean mask)
+    # note that the feats shape is (x, x, 65)
+    no_data_flag = tml_feats[...,0] == 255.
+    no_tree_flag = tml_feats[...,0] == 0.
+
     # Create the empty array using shape of inputs
     sample = np.empty((dem.shape[0], dem.shape[1], n_feats))
     
@@ -528,7 +559,7 @@ def make_sample(dem: np.array, s1: np.array, s2: np.array, tml_feats: np.array):
     # save dims for future use
     arr_dims = (sample.shape[0], sample.shape[1])
 
-    return sample, arr_dims
+    return sample, no_data_flag, no_tree_flag, arr_dims
 
 def make_sample_nofeats(dem: np.array, s1: np.array, s2: np.array):
     
@@ -596,8 +627,20 @@ def reshape_and_scale_manual(v_train_data: str, unseen: np.array, verbose: bool 
             print('Warning: mins > maxs')
             pass
     
-    if verbose:
-        print(f"The data has been scaled. Min {start_min} -> {end_min}, Max {start_max} -> {end_max},")
+    # if verbose:
+    #     print(f"The data has been scaled. Min {start_min} -> {end_min}, Max {start_max} -> {end_max},")
+
+    # now reshape
+    unseen_reshaped = np.reshape(unseen, (np.prod(unseen.shape[:-1]), unseen.shape[-1]))
+
+    return unseen_reshaped
+
+
+def reshape_no_scaling(unseen: np.array, verbose: bool = False):
+
+    ''' 
+    Do not apply scaling and only reshape the unseen data.
+    '''
 
     # now reshape
     unseen_reshaped = np.reshape(unseen, (np.prod(unseen.shape[:-1]), unseen.shape[-1]))
@@ -607,7 +650,7 @@ def reshape_and_scale_manual(v_train_data: str, unseen: np.array, verbose: bool 
 
 # Step 5: import classification model, run predictions
 
-def predict_classification(arr: np.array, model: str, sample_dims: tuple):
+def predict_classification(arr: np.array, model: str, no_data_flag: np.array, no_tree_flag: np.array, sample_dims: tuple):
 
     '''
     Import pretrained model and run predictions on arr.
@@ -624,7 +667,11 @@ def predict_classification(arr: np.array, model: str, sample_dims: tuple):
         preds = preds * 100
 
     reshaped_preds = preds.reshape(sample_dims[0], sample_dims[1])
-    #print(reshaped_preds)
+
+    # apply no data and no tree flag to predictions
+    # to clean up noise
+    reshaped_preds[no_data_flag] = 255.
+    reshaped_preds[no_tree_flag] = 0.
 
     return reshaped_preds
 
@@ -671,7 +718,7 @@ def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, suffix 
     
     return None
 
-def remove_folder(tile_idx: tuple, local_dir, uploader):
+def remove_folder(tile_idx: tuple, local_dir: str):
     '''
     Deletes temporary raw data files in path_to_tile/raw/*
     after predictions are written to file
@@ -679,25 +726,24 @@ def remove_folder(tile_idx: tuple, local_dir, uploader):
     # set x/y to the tile IDs
     x = tile_idx[0]
     y = tile_idx[1]
-    
+  
     path_to_tile = f'{local_dir}/{str(x)}/{str(y)}/'
 
     # remove every folder/file in raw/
     for folder in glob(path_to_tile + "raw/*/"):
         for file in os.listdir(folder):
             _file = folder + file
-            internal_folder = folder[len(path_to_tile):]
-            key = f'2020/raw/{x}/{y}/' + internal_folder + file
-            uploader.upload(bucket='tof-output', key=key, file=_file)
             os.remove(_file)
+    
     return None
 
 
 # Execute steps
-
+@timer
 def execute(country: str, model: str, verbose: bool, feats: bool):
     '''
-    Executes all steps in the preprocessing and modeling pipeline
+    Executes all preprocessing and modeling steps in the pipeline
+    according to the supplied model and country.
     '''
     local_dir = 'tmp/' + country
 
@@ -706,35 +752,43 @@ def execute(country: str, model: str, verbose: bool, feats: bool):
     counter = 0
 
     # right now this will just process 20 tiles
-    for tile_idx in tiles_to_process[:20]:
+    for tile_idx in tiles_to_process[8:11]:
+        print(f'Processing tile: {tile_idx}')
         counter += 1
-        successful = download_raw_tile((tile_idx[0], tile_idx[1]), local_dir, aak, ask)
+        successful = download_raw_tile(tile_idx, local_dir, aak, ask)
 
         if successful:
-            bbx = make_bbox(country, (tile_idx[0], tile_idx[1]))
-            s2_proc, tml_feats, s1_proc, dem_proc = process_tile(tile_idx[0], tile_idx[1], local_dir, bbx, feats, verbose)
-            
+            validate.input_dtype_and_dimensions(tile_idx, local_dir)
+            validate.feats_range(tile_idx, local_dir)
+            bbx = make_bbox(country, tile_idx)
+            s2_proc, tml_feats, s1_proc, dem_proc = process_tile(tile_idx, local_dir, bbx, feats, verbose)
+            validate.output_dtype_and_dimensions(s1_proc, s2_proc, dem_proc, tml_feats)
+
             # feats option will be removed in the future
             if feats:
-                sample, sample_dims = make_sample(dem_proc, s1_proc, s2_proc, tml_feats)
-                unseen_ss = reshape_and_scale_manual('v11', sample, verbose)
+                sample, no_data_flag, no_tree_flag, sample_dims = make_sample(dem_proc, s1_proc, s2_proc, tml_feats)
+                unseen_ss = reshape_no_scaling(sample, verbose)
+                #unseen_ss = reshape_and_scale_manual('v11', sample, verbose)
     
             else:
                 sample, sample_dims = make_sample_nofeats(dem_proc, s1_proc, s2_proc)
-                unseen_ss = reshape_and_scale_manual('v11_nf', sample, verbose)
+                #unseen_ss = reshape_and_scale_manual('v10', sample, verbose)
             
-            preds = predict_classification(unseen_ss, model, sample_dims)
+            validate.model_inputs(unseen_ss)
+            preds = predict_classification(unseen_ss, model, no_data_flag, no_tree_flag, sample_dims)
+            #validate.classification_scores(preds)
             write_tif(preds, bbx, tile_idx, country, 'preds')
+            #remove_folder(tile_idx, local_dir)
         
         else:
             print(f'Raw data for {tile_idx} does not exist on s3.')
         
-        if counter %10 == 0:
+        if counter %5 == 0:
             print(f'{counter}/{tile_count} tiles processed...')
     
     # for now mosaic and upload to s3 bucket
-    mosaic.mosaic_tif(country, model)
-    mosaic.upload_mosaic(country, model, aak, ask)
+    mosaic.mosaic_tif(country, model, compile_from='csv')
+    #mosaic.upload_mosaic(country, model, aak, ask)
     
     return None
 
