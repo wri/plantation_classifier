@@ -95,7 +95,8 @@ def fit_eval_classifier(X_train, X_test, y_train, y_test, model_name, v_train_da
         model.fit(X_train, y_train)
     
     elif model_name == 'cat':
-        model = CatBoostClassifier(verbose=0, random_state=22)
+        # import param dist?
+        model = CatBoostClassifier(verbose=0, random_state=22, depth=10,l2_leaf_reg=11, iterations=1100, learning_rate=0.02, scale_pos_weight=0.381)
         model.fit(X_train, y_train)
     
     # save trained model

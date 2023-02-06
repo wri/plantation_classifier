@@ -195,15 +195,22 @@ def load_label(idx, classes, directory = '../data/train-labels/'):
 
 # Create X and y variables
 
-def make_sample(sample_shape, slope, s1, s2, feats):
+def make_sample(sample_shape, slope, s1, s2, feats, feature_select):
     
     ''' 
     Defines dimensions and then combines slope, s1, s2 and TML features from a plot
     into a sample with shape (14, 14, 78)
+    Feature select is a list of features that will be used, otherwise empty list
     '''
 
     # validate data
     train_output_range_dtype(slope, s1, s2, feats)
+
+    # filter to only selected features if given
+    # squeeze extra axis that is added (14,14,1,15) -> (14,14,15)
+    if len(feature_select) > 0:
+        feats = np.squeeze(feats[:, :, [feature_select]])
+        #print(f'Updated feats shape to {feats.shape} with features: {feature_select}')
 
     # define the last dimension of the array
     n_feats = 1 + s1.shape[-1] + s2.shape[-1] + feats.shape[-1]
@@ -341,7 +348,7 @@ def multiclass_ceo(v_train_data):
 
     return plot_ids
 
-def create_xy(v_train_data, classes, drop_prob, drop_feats, verbose=False):
+def create_xy(v_train_data, classes, drop_prob, drop_feats, feature_select, verbose=False):
     '''
     Gathers training data plots from collect earth surveys (v1, v2, v3, etc)
     and loads data to create a sample for each plot. Removes ids where there is no
@@ -378,9 +385,11 @@ def create_xy(v_train_data, classes, drop_prob, drop_feats, verbose=False):
         x_all = np.empty(shape=(n_samples, 14, 14, 77))
     elif drop_feats:
         x_all = np.empty(shape=(n_samples, 14, 14, 13))
+    elif len(feature_select) > 0:
+        x_all = np.empty(shape=(n_samples, 14, 14, 13 + len(feature_select)))
     else:
         x_all = np.empty(shape=(n_samples, 14, 14, 78))
-    
+
     for num, plot in enumerate(plot_ids):
 
         if drop_feats:
@@ -391,7 +400,7 @@ def create_xy(v_train_data, classes, drop_prob, drop_feats, verbose=False):
 
         else:
             # at index i, load and create the sample, then append to empty array
-            X = make_sample(sample_shape, load_slope(plot), load_s1(plot), load_s2(plot), load_feats(plot, drop_prob))
+            X = make_sample(sample_shape, load_slope(plot), load_s1(plot), load_s2(plot), load_feats(plot, drop_prob), feature_select)
             y = load_label(plot, classes)
             x_all[num] = X
             y_all[num] = y
@@ -400,10 +409,9 @@ def create_xy(v_train_data, classes, drop_prob, drop_feats, verbose=False):
         #     print(f'Sample: {num}')
         #     print(f'Features: {X.shape}, Labels: {y.shape}')
         
-    # check class balance and baseline accuracy
+    # check class balance 
     labels, counts = np.unique(y_all, return_counts=True)
     print(f'Class count {dict(zip(labels, counts))}')
-    #print(f'Baseline: {round(counts[0] / (counts[0] + counts[1]), 3)}')
 
     return x_all, y_all
 

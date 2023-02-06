@@ -293,7 +293,7 @@ def adjust_shape(arr: np.ndarray, width: int, height: int) -> np.ndarray:
 
     return arr.squeeze()
 
-def process_tile(tile_idx: tuple, local_path: str, bbx: list, feats: bool, verbose: bool = False, make_shadow: bool = True) -> np.ndarray:
+def process_tile(tile_idx: tuple, local_path: str, bbx: list, feats: bool, feature_select:list, verbose: bool = False, make_shadow: bool = True) -> np.ndarray:
     """
     Transforms raw data structure (in temp/raw/*) to processed data structure
         - align shapes of different data sources (clouds / shadows / s1 / s2 / dem)
@@ -352,7 +352,11 @@ def process_tile(tile_idx: tuple, local_path: str, bbx: list, feats: bool, verbo
         feats_[:, :, [low_feats]] = feats_rolled[:, :, [high_feats]]
         feats_[:, :, [high_feats]] = feats_rolled[:, :, [low_feats]]
 
-    # remove this once pipeline updated to feat only 
+        # if only using select feats, np.take will take elements from an array along an axis
+        if len(feature_select) > 0:
+            feats_ = np.squeeze(feats_[:, :, [feature_select]])
+
+    # remove this else statement once pipeline updated to feat only 
     else:
         feats_ = []
     
@@ -541,14 +545,18 @@ def make_sample(dem: np.array, s1: np.array, s2: np.array, tml_feats: np.array):
 
     # define number of features in the sample
     n_feats = 1 + s1.shape[-1] + s2.shape[-1] + tml_feats.shape[-1] 
-
+    
     # create the no data flag for TML (boolean mask)
+    # where TML probability is 255 or 0, pass along to preds
     # note that the feats shape is (x, x, 65)
-    no_data_flag = tml_feats[...,0] == 255.
-    no_tree_flag = tml_feats[...,0] == 0.
+    # no_data_flag = tml_feats[...,0] == 255.
+    #no_tree_flag = tml_feats[...,0] == 0.
+    no_tree_flag = 0
+    no_data_flag = 0
 
     # Create the empty array using shape of inputs
     sample = np.empty((dem.shape[0], dem.shape[1], n_feats))
+    print(f'sample shape: {sample.shape}')
     
     # populate empty array with each feature
     sample[..., 0] = dem
@@ -645,6 +653,9 @@ def reshape_no_scaling(unseen: np.array, verbose: bool = False):
     # now reshape
     unseen_reshaped = np.reshape(unseen, (np.prod(unseen.shape[:-1]), unseen.shape[-1]))
 
+    if verbose:
+        print(unseen_reshaped.shape)
+
     return unseen_reshaped
 
 
@@ -670,8 +681,8 @@ def predict_classification(arr: np.array, model: str, no_data_flag: np.array, no
 
     # apply no data and no tree flag to predictions
     # to clean up noise
-    reshaped_preds[no_data_flag] = 255.
-    reshaped_preds[no_tree_flag] = 0.
+    # reshaped_preds[no_data_flag] = 255.
+    # reshaped_preds[no_tree_flag] = 0.
 
     return reshaped_preds
 
@@ -740,18 +751,19 @@ def remove_folder(tile_idx: tuple, local_dir: str):
 
 # Execute steps
 @timer
-def execute(country: str, model: str, verbose: bool, feats: bool):
+def execute(country: str, model: str, verbose: bool, feats: bool, feature_select: list):
     '''
     Executes all preprocessing and modeling steps in the pipeline
     according to the supplied model and country.
     '''
     local_dir = 'tmp/' + country
+    print(feature_select)
 
     tiles_to_process = download_tile_ids(country, aak, ask)
     tile_count = len(tiles_to_process)
     counter = 0
 
-    # right now this will just process 20 tiles
+    # right now this will just process n tiles
     for tile_idx in tiles_to_process[8:11]:
         print(f'Processing tile: {tile_idx}')
         counter += 1
@@ -761,8 +773,8 @@ def execute(country: str, model: str, verbose: bool, feats: bool):
             validate.input_dtype_and_dimensions(tile_idx, local_dir)
             validate.feats_range(tile_idx, local_dir)
             bbx = make_bbox(country, tile_idx)
-            s2_proc, tml_feats, s1_proc, dem_proc = process_tile(tile_idx, local_dir, bbx, feats, verbose)
-            validate.output_dtype_and_dimensions(s1_proc, s2_proc, dem_proc, tml_feats)
+            s2_proc, tml_feats, s1_proc, dem_proc = process_tile(tile_idx, local_dir, bbx, feats, feature_select, verbose)
+            validate.output_dtype_and_dimensions(s1_proc, s2_proc, dem_proc, tml_feats, feature_select)
 
             # feats option will be removed in the future
             if feats:
@@ -803,8 +815,9 @@ if __name__ == '__main__':
     parser.add_argument('--model', dest='model', type=str)
     parser.add_argument('--verbose', dest='verbose', default=False, type=bool) 
     parser.add_argument('--feats', dest='feats', default=True, type=bool) 
+    parser.add_argument('--feature_select', dest='feature_select', nargs='*', type=int) 
 
 
     args = parser.parse_args()
     
-    execute(args.country, args.model, args.verbose, args.feats)
+    execute(args.country, args.model, args.verbose, args.feats, args.feature_select)

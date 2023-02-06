@@ -66,7 +66,7 @@ def feats_range(tile_idx, local_dir):
 # test pre-processing - these tests happen after pre processing
 
 
-def output_dtype_and_dimensions(s1, s2, dem, feats):
+def output_dtype_and_dimensions(s1, s2, dem, feats, feature_select):
 
     '''
     Ensures the datatype for all processed data (output of process_tile())
@@ -81,7 +81,10 @@ def output_dtype_and_dimensions(s1, s2, dem, feats):
     assert s1.shape[2] == 2
     assert s2.shape[2] == 10
     assert len(dem.shape) == 2
-    assert feats.shape[2] == 65
+    if len(feature_select) > 0:
+        assert feats.shape[2] == len(feature_select)
+    else:
+        assert feats.shape[2] == 65
 
     # middle two indices should be exactly the same for raw data (x, this_one, this_one, x)
     assert s1.shape[0:2] == s2.shape[0:2] == dem.shape == feats.shape[0:2], print(f'Clouds:, \n'
