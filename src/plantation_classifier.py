@@ -293,7 +293,66 @@ def adjust_shape(arr: np.ndarray, width: int, height: int) -> np.ndarray:
 
     return arr.squeeze()
 
-def process_tile(tile_idx: tuple, local_path: str, bbx: list, feats: bool, feature_select:list, verbose: bool = False, make_shadow: bool = True) -> np.ndarray:
+def process_tml_feats(tile_idx: tuple, local_path: str, feats: bool, feature_select:list) -> np.ndarray:
+    '''
+    Transforms the feats extracted from the TML model (in temp/raw/tile_feats..) to 
+    processed data structure
+        - scale tree prediction (feats[0]) between 0-1 to match the training
+          pipeline 
+        - roll the axis to adjust shape
+        - swap high and low level feats to match training pipeline
+        - filter to selected feats if feature_select param > 0
+        - creates no data and no tree flags for masking predictions
+    '''
+
+    x = str(tile_idx[0])
+    y = str(tile_idx[1])
+    x = x[:-2] if ".0" in x else x
+    y = y[:-2] if ".0" in y else y
+
+    folder = f"{local_path}/{str(x)}/{str(y)}/"
+    tile_str = f'{str(x)}X{str(y)}Y'
+
+    # load and prep features here
+    if feats:
+        feats_file = f'{folder}raw/feats/{tile_str}_feats.hkl'
+        feats_raw = hkl.load(feats_file).astype(np.float32)
+    
+        # adjust TML predictions feats[0] to match training data (0-1)
+        # adjust shape by rolling axis (65, 614, 618) ->  (618, 614, 65) 
+        feats_raw[0] = feats_raw[0] / 100 
+        feats_raw[1:] = feats_raw[1:] / 1000  # feats are multiplyed by 1000 before saving
+        feats_rolled = np.rollaxis(feats_raw, 0, 3)
+        feats_rolled = np.rollaxis(feats_rolled, 0, 2)
+
+        # now switch the feats
+        feats_ = feats_rolled.copy()
+
+        high_feats = [np.arange(1,33)]
+        low_feats = [np.arange(33,65)]
+
+        feats_[:, :, [low_feats]] = feats_rolled[:, :, [high_feats]]
+        feats_[:, :, [high_feats]] = feats_rolled[:, :, [low_feats]]
+
+        # create no data and no tree flag (boolean mask)
+        # where TML probability is 255 or 0, pass along to preds
+        # note that the feats shape is (x, x, 65)
+        no_data_flag = feats_[...,0] == 255.
+        no_tree_flag = feats_[...,0] == 0.
+
+        # if only using select feats, np.take will take elements from an array along an axis
+        if len(feature_select) > 0:
+            feats_ = np.squeeze(feats_[:, :, [feature_select]])
+
+    # remove this else statement once pipeline updated to feat only 
+    else:
+        feats_ = []
+
+    return feats_, no_data_flag, no_tree_flag
+
+
+
+def process_tile(tile_idx: tuple, local_path: str, bbx: list, verbose: bool = False, make_shadow: bool = True) -> np.ndarray:
     """
     Transforms raw data structure (in temp/raw/*) to processed data structure
         - align shapes of different data sources (clouds / shadows / s1 / s2 / dem)
@@ -330,37 +389,9 @@ def process_tile(tile_idx: tuple, local_path: str, bbx: list, feats: bool, featu
     s2_dates_file = f'{folder}raw/misc/s2_dates_{tile_str}.hkl'
     clean_steps_file = f'{folder}raw/clouds/clean_steps_{tile_str}.hkl'
     dem_file = f'{folder}raw/misc/dem_{tile_str}.hkl'
-
-    # load and prep features here
-    if feats:
-        feats_file = f'{folder}raw/feats/{tile_str}_feats.hkl'
-        feats_raw = hkl.load(feats_file).astype(np.float32)
-    
-        # adjust TML predictions feats[0] to match training data (0-1)
-        # adjust shape by rolling axis (65, 614, 618) ->  (618, 614, 65) 
-        feats_raw[0] = feats_raw[0] / 100 
-        feats_raw[1:] = feats_raw[1:] / 1000  # feats are multiplyed by 1000 before saving
-        feats_rolled = np.rollaxis(feats_raw, 0, 3)
-        feats_rolled = np.rollaxis(feats_rolled, 0, 2)
-
-        # now switch the feats
-        feats_ = feats_rolled.copy()
-
-        high_feats = [np.arange(1,33)]
-        low_feats = [np.arange(33,65)]
-
-        feats_[:, :, [low_feats]] = feats_rolled[:, :, [high_feats]]
-        feats_[:, :, [high_feats]] = feats_rolled[:, :, [low_feats]]
-
-        # if only using select feats, np.take will take elements from an array along an axis
-        if len(feature_select) > 0:
-            feats_ = np.squeeze(feats_[:, :, [feature_select]])
-
-    # remove this else statement once pipeline updated to feat only 
-    else:
-        feats_ = []
     
     clouds = hkl.load(clouds_file)
+
     if os.path.exists(cloud_mask_file):
         # These are the S2Cloudless / Sen2Cor masks
         clm = hkl.load(cloud_mask_file).repeat(2, axis = 1).repeat(2, axis = 2)
@@ -531,7 +562,7 @@ def process_tile(tile_idx: tuple, local_path: str, bbx: list, feats: bool, featu
     s2 = np.median(sentinel2, axis = 0)
     
     # removing return of image_dates, interp, cloudshad as not used
-    return s2, feats_, s1, dem
+    return s2, s1, dem
 
 
 ## Step 3: Combine raw data into a sample for input into the model 
@@ -545,18 +576,9 @@ def make_sample(dem: np.array, s1: np.array, s2: np.array, tml_feats: np.array):
 
     # define number of features in the sample
     n_feats = 1 + s1.shape[-1] + s2.shape[-1] + tml_feats.shape[-1] 
-    
-    # create the no data flag for TML (boolean mask)
-    # where TML probability is 255 or 0, pass along to preds
-    # note that the feats shape is (x, x, 65)
-    # no_data_flag = tml_feats[...,0] == 255.
-    #no_tree_flag = tml_feats[...,0] == 0.
-    no_tree_flag = 0
-    no_data_flag = 0
 
     # Create the empty array using shape of inputs
     sample = np.empty((dem.shape[0], dem.shape[1], n_feats))
-    print(f'sample shape: {sample.shape}')
     
     # populate empty array with each feature
     sample[..., 0] = dem
@@ -567,7 +589,7 @@ def make_sample(dem: np.array, s1: np.array, s2: np.array, tml_feats: np.array):
     # save dims for future use
     arr_dims = (sample.shape[0], sample.shape[1])
 
-    return sample, no_data_flag, no_tree_flag, arr_dims
+    return sample, arr_dims
 
 def make_sample_nofeats(dem: np.array, s1: np.array, s2: np.array):
     
@@ -757,7 +779,6 @@ def execute(country: str, model: str, verbose: bool, feats: bool, feature_select
     according to the supplied model and country.
     '''
     local_dir = 'tmp/' + country
-    print(feature_select)
 
     tiles_to_process = download_tile_ids(country, aak, ask)
     tile_count = len(tiles_to_process)
@@ -773,12 +794,14 @@ def execute(country: str, model: str, verbose: bool, feats: bool, feature_select
             validate.input_dtype_and_dimensions(tile_idx, local_dir)
             validate.feats_range(tile_idx, local_dir)
             bbx = make_bbox(country, tile_idx)
-            s2_proc, tml_feats, s1_proc, dem_proc = process_tile(tile_idx, local_dir, bbx, feats, feature_select, verbose)
-            validate.output_dtype_and_dimensions(s1_proc, s2_proc, dem_proc, tml_feats, feature_select)
+            s2_proc, s1_proc, dem_proc = process_tile(tile_idx, local_dir, bbx, verbose)
+            validate.output_dtype_and_dimensions(s1_proc, s2_proc, dem_proc)
 
             # feats option will be removed in the future
             if feats:
-                sample, no_data_flag, no_tree_flag, sample_dims = make_sample(dem_proc, s1_proc, s2_proc, tml_feats)
+                tml_feats, no_data_flag, no_tree_flag = process_tml_feats(tile_idx, local_dir, feats, feature_select)
+                validate.tmlfeats_dtype_and_dimensions(tml_feats, feature_select)
+                sample, sample_dims = make_sample(dem_proc, s1_proc, s2_proc, tml_feats)
                 unseen_ss = reshape_no_scaling(sample, verbose)
                 #unseen_ss = reshape_and_scale_manual('v11', sample, verbose)
     
