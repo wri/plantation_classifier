@@ -66,7 +66,7 @@ def feats_range(tile_idx, local_dir):
 # test pre-processing - these tests happen after pre processing
 
 
-def output_dtype_and_dimensions(s1, s2, dem, feats, feature_select):
+def output_dtype_and_dimensions(s1, s2, dem):
 
     '''
     Ensures the datatype for all processed data (output of process_tile())
@@ -75,23 +75,31 @@ def output_dtype_and_dimensions(s1, s2, dem, feats, feature_select):
     # as long as the workflow includes feats, otherwise feats will be a str
     assert s1.dtype == np.float32
     assert s2.dtype == np.float32
-    assert feats.dtype == np.float32
     assert dem.dtype == np.float32
 
     assert s1.shape[2] == 2
     assert s2.shape[2] == 10
     assert len(dem.shape) == 2
+
+    # middle two indices should be exactly the same for data (x, this_one, this_one, x)
+    assert s1.shape[0:2] == s2.shape[0:2] == dem.shape, print(f'Clouds:, \n'
+                                                            f'S1: {s1.shape} \n'
+                                                            f'S2: {s2.shape} \n'
+                                                            f'DEM: {dem.shape}')
+
+def tmlfeats_dtype_and_dimensions(feats, feature_select):
+    '''
+    Ensures the datatype for processed feats is float32. Ensures the 
+    dimensions for tml_feats are xx unless feature selection is used
+    '''
+
+    assert feats.dtype == np.float32
+    
     if len(feature_select) > 0:
         assert feats.shape[2] == len(feature_select)
     else:
         assert feats.shape[2] == 65
 
-    # middle two indices should be exactly the same for raw data (x, this_one, this_one, x)
-    assert s1.shape[0:2] == s2.shape[0:2] == dem.shape == feats.shape[0:2], print(f'Clouds:, \n'
-                                                                                f'S1: {s1.shape} \n'
-                                                                                f'S2: {s2.shape} \n'
-                                                                                f'Feats: {feats.shape} \n'
-                                                                                f'DEM: {dem.shape}')
 
 
 def model_inputs(arr):
