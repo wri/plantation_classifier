@@ -785,7 +785,7 @@ def execute(country: str, model: str, verbose: bool, feats: bool, feature_select
     counter = 0
 
     # right now this will just process n tiles
-    for tile_idx in tiles_to_process[8:11]:
+    for tile_idx in tiles_to_process[-3:-1]:
         print(f'Processing tile: {tile_idx}')
         counter += 1
         successful = download_raw_tile(tile_idx, local_dir, aak, ask)
