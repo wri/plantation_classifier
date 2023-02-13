@@ -172,7 +172,6 @@ def visualize_plotpreds(model_name, v_train_data, X_test):
 
 
 ## in progress
-
 def make_gpro_friendly(raster_filepath):
     '''
     transforms a raster into format that can be imported into

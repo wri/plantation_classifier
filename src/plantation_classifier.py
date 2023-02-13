@@ -703,8 +703,8 @@ def predict_classification(arr: np.array, model: str, no_data_flag: np.array, no
 
     # apply no data and no tree flag to predictions
     # to clean up noise
-    # reshaped_preds[no_data_flag] = 255.
-    # reshaped_preds[no_tree_flag] = 0.
+    reshaped_preds[no_data_flag] = 255.
+    reshaped_preds[no_tree_flag] = 0.
 
     return reshaped_preds
 

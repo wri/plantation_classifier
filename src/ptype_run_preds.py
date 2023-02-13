@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 
-import yaml
-import confuse
 import hickle as hkl
 import pickle
 import pandas as pd
@@ -10,10 +8,9 @@ import os
 from natsort import natsorted
 import glob
 import matplotlib.pyplot as plt
-import seaborn as sns
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.model_selection import cross_val_score
-from sklearn.metrics import roc_auc_score, f1_score, precision_score, recall_score, confusion_matrix, ConfusionMatrixDisplay
+from sklearn.metrics import roc_auc_score, f1_score, precision_score, recall_score
 from lightgbm import LGBMClassifier
 from xgboost import XGBClassifier
 from sklearn.svm import SVC
@@ -95,7 +92,7 @@ def fit_eval_classifier(X_train, X_test, y_train, y_test, model_name, v_train_da
         model.fit(X_train, y_train)
     
     elif model_name == 'cat':
-        # import param dist?
+        # import param dist here
         model = CatBoostClassifier(verbose=0, random_state=22, depth=10,l2_leaf_reg=11, iterations=1100, learning_rate=0.02, scale_pos_weight=0.381)
         model.fit(X_train, y_train)
     

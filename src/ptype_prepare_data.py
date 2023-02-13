@@ -1,6 +1,5 @@
 #! /usr/bin/env python3
 
-import yaml
 import hickle as hkl
 import pickle
 import pandas as pd
@@ -10,8 +9,6 @@ import glob
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.model_selection import train_test_split
-import random
-import sys
 
 
 ### Plot ID Labeling ###
@@ -19,25 +16,6 @@ import sys
 # the last three digits refer to the plot number and the first two digits refer to the survey
 # for ex: 25th plot in ceo-plantations-train-v04.csv will be 04025.npy or 04025.hkl
 
-# these checks are performed on the training data
-# TODO move this to validate_io file once determined how to import
-def train_output_range_dtype(dem, s1, s2, feats):
-    '''
-    Sentinel-1, float32, range from 0-1 (divided by 65535), unscaled decibels >-22
-    Sentinel-2, float32, range from 0-1 (divided by 65535), unscaled
-    Features, float32, range from ~-3 to ~ + 3 (divided by 1000)
-    TML prediction, float32, range from 0-1 (divided by 100)
-    '''
-
-    assert s1.dtype == np.float32
-    assert s2.dtype == np.float32
-    assert feats.dtype == np.float32
-    assert dem.dtype == np.float32
-
-    assert np.logical_and(s1.min() >= 0, s1.max() <= 1)
-    assert np.logical_and(s2.min() >= 0, s2.max() <= 1)
-    assert np.logical_and(feats[..., 1:].min() >= -3, feats[..., 1:].max() <= 3)
-    assert np.logical_and(feats[..., 0].min() >= 0, feats[..., 0].max() <= 1)
     
 def convert_to_db(x: np.ndarray, min_db: int) -> np.ndarray:
     """ 
@@ -157,9 +135,6 @@ def load_feats(idx, drop_prob, directory = '../data/train-features/'):
 
     if drop_prob == True:
         feats = feats[..., :64]
-
-    # feats are multiplyed by 1000 before saving
-    feats[...,1:] = feats[...,1:] / 1000  
 
     feats = feats.astype(np.float32)
 

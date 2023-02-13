@@ -3,6 +3,27 @@
 import numpy as np
 import hickle as hkl
 
+### TRAINING ###
+def train_output_range_dtype(dem, s1, s2, feats):
+    '''
+    Sentinel-1, float32, range from 0-1 (divided by 65535), unscaled decibels >-22
+    Sentinel-2, float32, range from 0-1 (divided by 65535), unscaled
+    Features, float32, range from ~-3 to ~ + 3 
+    TML prediction, float32, range from 0-1 (divided by 100)
+    '''
+
+    assert s1.dtype == np.float32
+    assert s2.dtype == np.float32
+    assert feats.dtype == np.float32
+    assert dem.dtype == np.float32
+
+    assert np.logical_and(s1.min() >= 0, s1.max() <= 1)
+    assert np.logical_and(s2.min() >= 0, s2.max() <= 1)
+    assert np.logical_and(feats[..., 1:].min() >= -3, feats[..., 1:].max() <= 3)
+    assert np.logical_and(feats[..., 0].min() >= 0, feats[..., 0].max() <= 1)
+
+
+### DEPLOYMENT ###
 # these tests happen after data is downloaded from s3
 
 def input_dtype_and_dimensions(tile_idx, local_dir):
