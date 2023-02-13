@@ -11,7 +11,7 @@ fil-result/*
 *.ipynb
 *.tif
 
-!models/cat_model_v11.pkl
+!models/cat_v15_2.pkl
+!models/cat_v15_fs.pkl
+!models/cat_v15_tuned.pkl
 !data/urbanmask.tif
-!data/mins_v11.npy
-!data/maxs_v11.npy
