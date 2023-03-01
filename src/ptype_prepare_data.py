@@ -9,6 +9,7 @@ import glob
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.model_selection import train_test_split
+import validate_io as validate
 
 
 ### Plot ID Labeling ###
@@ -21,19 +22,33 @@ def convert_to_db(x: np.ndarray, min_db: int) -> np.ndarray:
     """ 
     Converts Sentinel 1 unitless backscatter coefficient
     to decible with a min_db lower threshold
+
+    Background: S1 is required to be processed to equivalent backscatter coefficient
+    images in decibels (dB) scale. This backscatter coefficient represents the target 
+    backscattering area (radar cross-section) per unit ground area. 
+    It is required to be converted into dB as it can vary by several orders of magnitude. 
+    It measures whether the surface backscatters from the incident microwave radiation 
+    are preferentially away from the SAR sensor dB < 0) or towards the SAR sensor dB > 0).
     
     Parameters:
         x (np.ndarray): unitless backscatter (T, X, Y, B) array
         min_db (int): integer from -50 to 0
+            (-22 db is the lower limit of sensitivity for s1)
 
     Returns:
         x (np.ndarray): db backscatter (T, X, Y, B) array
-    """
     
+    (T, X, Y, B): time, x dimension, y dimension, band
+    """
+    # converts the array to decibel
     x = 10 * np.log10(x + 1/65535)
     x[x < -min_db] = -min_db
     x = (x + min_db) / min_db
-    return np.clip(x, 0, 1)
+
+    # return array clipped to values between 0-1
+    x = np.clip(x, 0, 1)
+    
+    return x
 
 def load_slope(idx, directory = '../data/train-slope/'):
     """
@@ -55,54 +70,65 @@ def load_slope(idx, directory = '../data/train-slope/'):
     
     #print(f'{idx} slope: {original_shape} -> {slope.shape}, {slope.dtype}')
     return slope
-    
+
+
 def load_s1(idx, directory = '../data/train-s1/'):
     """
     S1 is stored as a (12, 32, 32, 2) float64 array with border information.
     Needs to be converted from monthly mosaics to an annual median, 
-    and to 14 x 14 x 2 to match labels. Dtype needs to be converted to float32 (divide by 65535).
+    and remove border information to match labels. 
+    Dtype needs to be converted to float32.
     """
 
     s1 = hkl.load(directory + str(idx) + '.hkl')
     original_shape = s1.shape
 
-    # since s1 is a float64, no need to check, just convert
-    s1 = s1.astype(np.float32) / 65535
+    # since s1 is a float64, can't use to_float32() 
+    # just convert (removed /65535)
+    s1 = np.float32(s1) 
+    #print(f'pre db: {s1.max(), s1.min()}')
+    
+    # convert to decible
+    s1[..., -1] = convert_to_db(s1[..., -1], 22)
+    s1[..., -2] = convert_to_db(s1[..., -2], 22)
+    #print(f'post db: {s1.min(), s1.max()}')
+    post_db_shape = s1.shape
 
     # get the median across flattened array
     if len(s1.shape) == 4:
         s1 = np.median(s1, axis = 0)
+        med_shape = s1.shape
 
-    # slice out border information
+    # slice out border information (32, 32, 2) -> (14, 14, 2)
     border_x = (s1.shape[0] - 14) // 2
     border_y = (s1.shape[1] - 14) // 2
     s1 = s1[border_x:-border_x, border_y:-border_y]
-
-    # convert to decible
-    s1[..., -1] = convert_to_db(s1[..., -1], 22)
-    s1[..., -2] = convert_to_db(s1[..., -2], 22)
+    final = s1.shape
     
-    #print(f'{idx} s1: {original_shape} -> {s1.shape}, {s1.dtype}')
+    #print(f'{idx} s1: {original_shape} -> {post_db_shape} -> {med_shape} -> {final}')
     return s1
 
 
 def load_s2(idx, directory = '../data/train-s2/'):
     
     """
-    S2 is stored as a (12, 28, 28, 11) uint16 array. Remove the last axis index - the 
-    date of the imagery. Convert monthly images to an 
-    annual median. Remove the border to correspond to the labels.
+    S2 is stored as a (12, 28, 28, 11) uint16 array. 
+    Remove the last axis index - the date of the imagery. 
+    Convert monthly images to an annual median. 
+    Remove the border to correspond to the labels.
     Convert to float32.
     """
     
     s2 = hkl.load(directory + str(idx) + '.hkl')
     original_shape = s2.shape
-    
+
     # remove date of imagery (last axis)
     if s2.shape[-1] == 11:
         s2 = np.delete(s2, -1, -1)
 
     # checks for floating datatype, if not converts to float32
+    # TODO check if this is the same func as in deply pipeline
+    # if so consider moving to utils
     if not isinstance(s2.flat[0], np.floating):
         assert np.max(s2) > 1
         s2 = s2.astype(np.float32) / 65535
@@ -126,6 +152,11 @@ def load_feats(idx, drop_prob, directory = '../data/train-features/'):
     Features are stored as a 14 x 14 x 65 float64 array. The last axis contains 
     the feature dimensions. Dtype needs to be converted to float32. The TML
     probability/prediction can optionally be dropped.
+
+    ## Update per 2/13/23
+    Features range from -infinity to +infinity
+    and must be clipped to -3.2768 and +3.2767 to be consistent 
+    with the deployed features.
     
     Index 0 ([...,0]) is the tree cover prediction from the full TML model
     Index 1 - 33 are high level features
@@ -134,7 +165,12 @@ def load_feats(idx, drop_prob, directory = '../data/train-features/'):
     feats = hkl.load(directory + str(idx) + '.hkl')
 
     if drop_prob == True:
-        feats = feats[..., :64]
+        feats = feats[..., 1:]
+        feats = np.clip(feats, a_min=-3.2768, a_max=3.2767)
+
+    # clip all features after indx 0 to specific vals
+    else:
+        feats[..., 1:] = np.clip(feats[..., 1:], a_min=-3.2768, a_max=3.2767)
 
     feats = feats.astype(np.float32)
 
@@ -177,9 +213,6 @@ def make_sample(sample_shape, slope, s1, s2, feats, feature_select):
     into a sample with shape (14, 14, 78)
     Feature select is a list of features that will be used, otherwise empty list
     '''
-
-    # validate data
-    train_output_range_dtype(slope, s1, s2, feats)
 
     # filter to only selected features if given
     # squeeze extra axis that is added (14,14,1,15) -> (14,14,15)
@@ -368,14 +401,22 @@ def create_xy(v_train_data, classes, drop_prob, drop_feats, feature_select, verb
     for num, plot in enumerate(plot_ids):
 
         if drop_feats:
-            X = make_sample_nofeats(sample_shape, load_slope(plot), load_s1(plot), load_s2(plot))
+            slope = load_slope(plot)
+            s1 = load_s1(plot)
+            s2 = load_s2(plot)
+            X = make_sample_nofeats(sample_shape, slope, s1, s2)
             y = load_label(plot, classes)
             x_all[num] = X
             y_all[num] = y
 
         else:
             # at index i, load and create the sample, then append to empty array
-            X = make_sample(sample_shape, load_slope(plot), load_s1(plot), load_s2(plot), load_feats(plot, drop_prob), feature_select)
+            slope = load_slope(plot)
+            s1 = load_s1(plot)
+            s2 = load_s2(plot)
+            tml_feats = load_feats(plot, drop_prob)
+            validate.train_output_range_dtype(slope, s1, s2, tml_feats, feature_select)
+            X = make_sample(sample_shape, slope, s1, s2, tml_feats, feature_select)
             y = load_label(plot, classes)
             x_all[num] = X
             y_all[num] = y
