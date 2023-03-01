@@ -295,8 +295,8 @@ def adjust_shape(arr: np.ndarray, width: int, height: int) -> np.ndarray:
 
 def process_tml_feats(tile_idx: tuple, local_path: str, feats: bool, feature_select:list) -> np.ndarray:
     '''
-    Transforms the feats extracted from the TML model (in temp/raw/tile_feats..) to 
-    processed data structure
+    Transforms the feats with shape (65, x, x) extracted from the TML model 
+    (in temp/raw/tile_feats..) to processed data structure
         - scale tree prediction (feats[0]) between 0-1 to match the training
           pipeline 
         - roll the axis to adjust shape
@@ -320,8 +320,9 @@ def process_tml_feats(tile_idx: tuple, local_path: str, feats: bool, feature_sel
     
         # adjust TML predictions feats[0] to match training data (0-1)
         # adjust shape by rolling axis (65, 614, 618) ->  (618, 614, 65) 
-        feats_raw[0] = feats_raw[0] / 100 
-        feats_raw[1:] = feats_raw[1:] / 1000  # feats are multiplyed by 1000 before saving
+        # feats used for deply are multiplyed by 1000 before saving
+        feats_raw[0, ...] = feats_raw[0, ...] / 100 
+        feats_raw[1:, ...] = feats_raw[1:, ...] / 1000  
         feats_rolled = np.rollaxis(feats_raw, 0, 3)
         feats_rolled = np.rollaxis(feats_rolled, 0, 2)
 
@@ -340,10 +341,11 @@ def process_tml_feats(tile_idx: tuple, local_path: str, feats: bool, feature_sel
         no_data_flag = feats_[...,0] == 255.
         no_tree_flag = feats_[...,0] == 0.
 
-        # if only using select feats, np.take will take elements from an array along an axis
+        # if only using select feats, filter to those
         if len(feature_select) > 0:
             feats_ = np.squeeze(feats_[:, :, [feature_select]])
 
+    # in case we are doing a no feats analysis
     # remove this else statement once pipeline updated to feat only 
     else:
         feats_ = []
@@ -390,20 +392,21 @@ def process_tile(tile_idx: tuple, local_path: str, bbx: list, verbose: bool = Fa
     clean_steps_file = f'{folder}raw/clouds/clean_steps_{tile_str}.hkl'
     dem_file = f'{folder}raw/misc/dem_{tile_str}.hkl'
     
+    # load clouds
     clouds = hkl.load(clouds_file)
-
     if os.path.exists(cloud_mask_file):
         # These are the S2Cloudless / Sen2Cor masks
         clm = hkl.load(cloud_mask_file).repeat(2, axis = 1).repeat(2, axis = 2)
     else:
         clm = None
 
+    # load s1
     s1 = hkl.load(s1_file)
     s1 = np.float32(s1) / 65535
     s1[..., -1] = convert_to_db(s1[..., -1], 22)
     s1[..., -2] = convert_to_db(s1[..., -2], 22)
-    s1 = s1.astype(np.float32)
     
+    # load s2
     s2_10 = to_float32(hkl.load(s2_10_file))
     s2_20 = to_float32(hkl.load(s2_20_file))
     
@@ -412,9 +415,9 @@ def process_tile(tile_idx: tuple, local_path: str, bbx: list, verbose: bool = Fa
         s2_20 = s2_20[..., :6]
         #print(f's2_20 data mask removed.')
 
+    # load dem
     dem = hkl.load(dem_file)
-    dem = median_filter(dem, size = 5)
-    image_dates = hkl.load(s2_dates_file)
+    dem = median_filter(dem, size = 5)    
     
     # Ensure arrays are the same dims
     width = s2_20.shape[1] * 2
@@ -422,6 +425,7 @@ def process_tile(tile_idx: tuple, local_path: str, bbx: list, verbose: bool = Fa
     s1 = adjust_shape(s1, width, height)
     s2_10 = adjust_shape(s2_10, width, height)
     dem = adjust_shape(dem, width, height)
+    print(dem.shape, dem.dtype)
 
     # Deal with cases w/ only 1 image
     if len(s2_10.shape) == 3:
@@ -439,7 +443,7 @@ def process_tile(tile_idx: tuple, local_path: str, bbx: list, verbose: bool = Fa
     sentinel2 = np.zeros((s2_10.shape[0], width, height, 10), np.float32)
     sentinel2[..., :4] = s2_10
 
-    # a foor loop is faster than trying to vectorize it here! 
+    # a for loop is faster than trying to vectorize it here! 
     for band in range(4):
         for step in range(sentinel2.shape[0]):
             sentinel2[step, ..., band + 4] = resize(
@@ -480,6 +484,7 @@ def process_tile(tile_idx: tuple, local_path: str, bbx: list, verbose: bool = Fa
 
     # Identifies missing imagery (either in sentinel acquisition, or induced in preprocessing)
     # If more than 50% of data for a time step is missing, then remove them....
+    image_dates = hkl.load(s2_dates_file)
     missing_px = interpolation.id_missing_px(sentinel2, 2)
     if len(missing_px) > 0:
         #print(f"Removing {missing_px} dates due to {missing_px} missing data")
@@ -554,13 +559,15 @@ def process_tile(tile_idx: tuple, local_path: str, bbx: list, verbose: bool = Fa
         cloudshad = np.zeros(
             (sentinel2.shape[0], sentinel2.shape[1], sentinel2.shape[2]), dtype = np.float32)
 
+    # John to confirm 
     dem = dem / 90
     sentinel2 = np.clip(sentinel2, 0, 1)
 
     # switch from monthly to annual median
     s1 = np.median(s1, axis = 0)
     s2 = np.median(sentinel2, axis = 0)
-    
+    print(s2.shape)
+    print(s2.min(), s2.max())
     # removing return of image_dates, interp, cloudshad as not used
     return s2, s1, dem
 
@@ -683,7 +690,7 @@ def reshape_no_scaling(unseen: np.array, verbose: bool = False):
 
 # Step 5: import classification model, run predictions
 
-def predict_classification(arr: np.array, model: str, no_data_flag: np.array, no_tree_flag: np.array, sample_dims: tuple):
+def predict_classification(arr: np.array, model: str, feature_select: list, no_data_flag: np.array, no_tree_flag: np.array, sample_dims: tuple):
 
     '''
     Import pretrained model and run predictions on arr.
@@ -701,10 +708,11 @@ def predict_classification(arr: np.array, model: str, no_data_flag: np.array, no
 
     reshaped_preds = preds.reshape(sample_dims[0], sample_dims[1])
 
-    # apply no data and no tree flag to predictions
-    # to clean up noise
-    reshaped_preds[no_data_flag] = 255.
-    reshaped_preds[no_tree_flag] = 0.
+    # only apply no data and no free flag if TML preds are 
+    # included in selected features
+    if 0 in feature_select:
+        reshaped_preds[no_data_flag] = 255.
+        reshaped_preds[no_tree_flag] = 0.
 
     return reshaped_preds
 
@@ -781,11 +789,11 @@ def execute(country: str, model: str, verbose: bool, feats: bool, feature_select
     local_dir = 'tmp/' + country
 
     tiles_to_process = download_tile_ids(country, aak, ask)
-    tile_count = len(tiles_to_process)
+    tile_count = len(tiles_to_process[-3:-2])
     counter = 0
 
     # right now this will just process n tiles
-    for tile_idx in tiles_to_process[-3:-1]:
+    for tile_idx in tiles_to_process[-3:-2]:
         print(f'Processing tile: {tile_idx}')
         counter += 1
         successful = download_raw_tile(tile_idx, local_dir, aak, ask)
@@ -810,7 +818,7 @@ def execute(country: str, model: str, verbose: bool, feats: bool, feature_select
                 #unseen_ss = reshape_and_scale_manual('v10', sample, verbose)
             
             validate.model_inputs(unseen_ss)
-            preds = predict_classification(unseen_ss, model, no_data_flag, no_tree_flag, sample_dims)
+            preds = predict_classification(unseen_ss, model, feature_select, no_data_flag, no_tree_flag, sample_dims)
             #validate.classification_scores(preds)
             write_tif(preds, bbx, tile_idx, country, 'preds')
             #remove_folder(tile_idx, local_dir)
