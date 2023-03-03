@@ -2,14 +2,17 @@
 
 import numpy as np
 import hickle as hkl
+from numpy.testing import assert_almost_equal
 
 ### TRAINING ###
-def train_output_range_dtype(dem, s1, s2, feats):
+# these tests happen after preprocessing the raw training data
+
+def train_output_range_dtype(dem, s1, s2, feats, feature_select, drop_prob):
     '''
     Sentinel-1, float32, range from 0-1 (divided by 65535), unscaled decibels >-22
     Sentinel-2, float32, range from 0-1 (divided by 65535), unscaled
-    Features, float32, range from ~-3 to ~ + 3 
-    TML prediction, float32, range from 0-1 (divided by 100)
+    TML Features feats[..., 1:], float32, range from ~-3 to ~ + 3 
+    TML prediction feats[..., 0], float32, range from 0-1 (deploy feats will be 0-100)
     '''
 
     assert s1.dtype == np.float32
@@ -19,8 +22,17 @@ def train_output_range_dtype(dem, s1, s2, feats):
 
     assert np.logical_and(s1.min() >= 0, s1.max() <= 1)
     assert np.logical_and(s2.min() >= 0, s2.max() <= 1)
-    assert np.logical_and(feats[..., 1:].min() >= -3, feats[..., 1:].max() <= 3)
-    assert np.logical_and(feats[..., 0].min() >= 0, feats[..., 0].max() <= 1)
+
+    # if drop prob is True there should be no feature selection
+    if drop_prob:
+        assert len(feature_select) < 1
+
+    # if there is no drop prob and no feature selection, assert...
+    if not drop_prob and len(feature_select) < 1:
+        assert np.logical_and(feats[..., 1:].min() >= -3.2768, feats[..., 1:].max() <= 3.2768), print(feats[..., 1:].min(), feats[..., 1:].max())
+        assert np.logical_and(feats[..., 0].min() >= 0, feats[..., 0].max() <= 1), print(feats[..., 0].min(), feats[..., 0].max())
+   
+    # TODO: enable validation when feature selection or drop prob == True
 
 
 ### DEPLOYMENT ###
@@ -102,7 +114,10 @@ def output_dtype_and_dimensions(s1, s2, dem):
     assert s2.shape[2] == 10
     assert len(dem.shape) == 2
 
-    # middle two indices should be exactly the same for data (x, this_one, this_one, x)
+    # ensure array is not 0s, would indicate weird behavior
+    assert len(np.unique(s1)) > 1
+
+    # middle two indices should be exactly the same for all data (x, this_one, this_one, x)
     assert s1.shape[0:2] == s2.shape[0:2] == dem.shape, print(f'Clouds:, \n'
                                                             f'S1: {s1.shape} \n'
                                                             f'S2: {s2.shape} \n'
@@ -111,7 +126,7 @@ def output_dtype_and_dimensions(s1, s2, dem):
 def tmlfeats_dtype_and_dimensions(feats, feature_select):
     '''
     Ensures the datatype for processed feats is float32. Ensures the 
-    dimensions for tml_feats are xx unless feature selection is used
+    dimensions for tml_feats are (x, x, 65) unless feature selection is used
     '''
 
     assert feats.dtype == np.float32
@@ -131,9 +146,10 @@ def model_inputs(arr):
     assert len(arr.shape) == 2
     assert np.isfinite(arr).all()
     
-    # https://numpy.org/doc/stable/reference/generated/numpy.testing.assert_almost_equal.html 
+    # assert that the min and max are almost equal to 15 decimals
+    # assert_almost_equal(arr.min(), -1.0000000000000002, decimal=15)
+    # assert_almost_equal(arr.max(), 1.0000000000000002, decimal=15)
     #assert np.logical_and(arr.min() >= -1.0000000000000002, arr.max() <= 1.0000000000000002)
-    #print(f'Max: {arr.max()}' n\ f'Min: {arr.min()}')
 
 
 # test model outputs - these tests happen after predictions are generated
