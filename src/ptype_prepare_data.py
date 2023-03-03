@@ -147,7 +147,7 @@ def load_s2(idx, directory = '../data/train-s2/'):
     return s2
 
 
-def load_feats(idx, drop_prob, directory = '../data/train-features/'):
+def load_feats(idx, directory = '../data/train-features/'):
     '''
     Features are stored as a 14 x 14 x 65 float64 array. The last axis contains 
     the feature dimensions. Dtype needs to be converted to float32. The TML
@@ -164,13 +164,8 @@ def load_feats(idx, drop_prob, directory = '../data/train-features/'):
     '''
     feats = hkl.load(directory + str(idx) + '.hkl')
 
-    if drop_prob == True:
-        feats = feats[..., 1:]
-        feats = np.clip(feats, a_min=-3.2768, a_max=3.2767)
-
     # clip all features after indx 0 to specific vals
-    else:
-        feats[..., 1:] = np.clip(feats[..., 1:], a_min=-3.2768, a_max=3.2767)
+    feats[..., 1:] = np.clip(feats[..., 1:], a_min=-3.2768, a_max=3.2767)
 
     feats = feats.astype(np.float32)
 
@@ -206,13 +201,16 @@ def load_label(idx, classes, directory = '../data/train-labels/'):
 
 # Create X and y variables
 
-def make_sample(sample_shape, slope, s1, s2, feats, feature_select):
+def make_sample(sample_shape, slope, s1, s2, feats, feature_select, drop_prob):
     
     ''' 
     Defines dimensions and then combines slope, s1, s2 and TML features from a plot
     into a sample with shape (14, 14, 78)
     Feature select is a list of features that will be used, otherwise empty list
     '''
+    # drop tree probability if drop_prob == True
+    if drop_prob:
+        feats = feats[..., 1:]
 
     # filter to only selected features if given
     # squeeze extra axis that is added (14,14,1,15) -> (14,14,15)
@@ -414,9 +412,9 @@ def create_xy(v_train_data, classes, drop_prob, drop_feats, feature_select, verb
             slope = load_slope(plot)
             s1 = load_s1(plot)
             s2 = load_s2(plot)
-            tml_feats = load_feats(plot, drop_prob)
-            validate.train_output_range_dtype(slope, s1, s2, tml_feats, feature_select)
-            X = make_sample(sample_shape, slope, s1, s2, tml_feats, feature_select)
+            tml_feats = load_feats(plot)
+            validate.train_output_range_dtype(slope, s1, s2, tml_feats, feature_select, drop_prob)
+            X = make_sample(sample_shape, slope, s1, s2, tml_feats, feature_select, drop_prob)
             y = load_label(plot, classes)
             x_all[num] = X
             y_all[num] = y
