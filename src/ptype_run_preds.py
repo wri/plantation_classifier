@@ -21,6 +21,7 @@ from sklearn.utils.class_weight import compute_class_weight
 import sys
 from datetime import datetime
 import rasterio as rs
+import validate_io as validate
 
 
 def fit_eval_regressor(X_train, X_test, y_train, y_test, model_name, v_train_data):
@@ -30,6 +31,9 @@ def fit_eval_regressor(X_train, X_test, y_train, y_test, model_name, v_train_dat
     '''
     # TODO: For multiregression models, loss_function should be 'MultiRMSE'
 
+    # Get the count of features used
+    tml_feat_count = X_train.shape[1] - 13
+    
     if model_name == 'rfr':
         model = RandomForestRegressor(random_state=22)  
         model.fit(X_train, y_train)
@@ -47,6 +51,7 @@ def fit_eval_regressor(X_train, X_test, y_train, y_test, model_name, v_train_dat
      # add new scores
     scores = {'model': f'{model_name}_{v_train_data}', 
             'class': 'n/a',
+            'tml_feats':tml_feat_count,
             'cv': cv, 
             'train_score': train_score, 
             'test_score': test_score, 
@@ -73,7 +78,12 @@ def fit_eval_classifier(X_train, X_test, y_train, y_test, model_name, v_train_da
     saving the model to a pkl file and saving scores in a 
     csv. 
     '''
-    
+    # using this to check data scaling
+    validate.model_inputs(X_train)
+
+    # Get the count of features used
+    tml_feat_count = X_train.shape[1] - 13
+
     # fit the selected classifier
     if model_name == 'rfc':
         model = RandomForestClassifier(random_state=22)  
@@ -93,7 +103,9 @@ def fit_eval_classifier(X_train, X_test, y_train, y_test, model_name, v_train_da
     
     elif model_name == 'cat':
         # import param dist here
-        model = CatBoostClassifier(verbose=0, random_state=22, depth=10,l2_leaf_reg=11, iterations=1100, learning_rate=0.02, scale_pos_weight=0.381)
+        # scale_pos_weight=0.381
+        # depth=10, l2_leaf_reg=11, iterations=1100, learning_rate=0.02
+        model = CatBoostClassifier(verbose=0, random_state=22)
         model.fit(X_train, y_train)
     
     # save trained model
@@ -118,6 +130,7 @@ def fit_eval_classifier(X_train, X_test, y_train, y_test, model_name, v_train_da
     # add new scores to df
     scores = {'model': f'{model_name}_{v_train_data}', 
             'class': 'binary',
+            'tml_feats':tml_feat_count,
             'cv': cv, 
             'train_score': train_score, 
             'test_score': test_score, 
@@ -130,7 +143,7 @@ def fit_eval_classifier(X_train, X_test, y_train, y_test, model_name, v_train_da
     eval_df = pd.DataFrame([scores]).round(4)
     
     # write scores to new line of csv
-    with open('../models/mvp_scores.csv', 'a') as f:
+    with open('../models/mvp_scores.csv', 'a', newline='') as f:
         f.write('\n')
     eval_df.to_csv('../models/mvp_scores.csv', mode='a', index=False, header=False)
     
