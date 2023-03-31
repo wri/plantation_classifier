@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.model_selection import train_test_split
 import validate_io as validate
-
+import texture_veg_indices as txt
 
 ### Plot ID Labeling ###
 # Plot IDs are numbered according to ceo survey
@@ -147,7 +147,7 @@ def load_s2(idx, directory = '../data/train-s2/'):
     return s2
 
 
-def load_feats(idx, directory = '../data/train-features/'):
+def load_tml_feats(idx, directory = '../data/train-features/'):
     '''
     Features are stored as a 14 x 14 x 65 float64 array. The last axis contains 
     the feature dimensions. Dtype needs to be converted to float32. The TML
@@ -165,7 +165,7 @@ def load_feats(idx, directory = '../data/train-features/'):
     feats = hkl.load(directory + str(idx) + '.hkl')
 
     # clip all features after indx 0 to specific vals
-    feats[..., 1:] = np.clip(feats[..., 1:], a_min=-3.2768, a_max=3.2767)
+    feats[..., 1:] = np.clip(feats[..., 1:], a_min=-32.768, a_max=32.767)
 
     feats = feats.astype(np.float32)
 
@@ -199,13 +199,49 @@ def load_label(idx, classes, directory = '../data/train-labels/'):
     #print(f'{idx} labels: {original_shape} --> {labels.shape}, {labels.dtype}')
     return labels
 
+def load_texture_feats(idx, directory = '../data/train-s2/'):
+    
+    '''
+    Loads and performs some preprocessing steps to s2 data
+    in order to extract texture features for RGB and NIR 
+    bands. Outputs the texture analysis as a (14, 14, 16) 
+    array.
+    '''
+    
+    s2 = hkl.load(directory + str(idx) + '.hkl')
+    
+    # remove date of imagery (last axis)
+    if s2.shape[-1] == 11:
+        s2 = np.delete(s2, -1, -1)
+ 
+    # convert monthly images to annual median
+    if len(s2.shape) == 4:
+        s2 = np.median(s2, axis = 0)
+    
+    # convert to uint8 for GLCM
+    s2 = s2.astype(np.uint8)
+    
+    blue = s2[..., 0]
+    green = s2[..., 1]
+    red = s2[..., 2]
+    nir = s2[..., 3]
+    output = np.zeros((14, 14, 16))
+    
+    output[..., 0:4] = txt.extract_texture(blue)
+    output[..., 4:8] = txt.extract_texture(green)
+    output[..., 8:12] = txt.extract_texture(red)
+    output[..., 12:16] = txt.extract_texture(nir)
+    
+    return output
+
+
 # Create X and y variables
 
-def make_sample(sample_shape, slope, s1, s2, feats, feature_select, drop_prob):
+def make_sample(sample_shape, slope, s1, s2, tml_feats, txt_feats, feature_select, drop_prob):
     
     ''' 
-    Defines dimensions and then combines slope, s1, s2 and TML features from a plot
-    into a sample with shape (14, 14, 78)
+    Defines dimensions and then combines slope, s1, s2, TML features and 
+    texture features from a plot into a sample with shape (14, 14, 94)
     Feature select is a list of features that will be used, otherwise empty list
     '''
     # drop tree probability if drop_prob == True
@@ -215,11 +251,12 @@ def make_sample(sample_shape, slope, s1, s2, feats, feature_select, drop_prob):
     # filter to only selected features if given
     # squeeze extra axis that is added (14,14,1,15) -> (14,14,15)
     if len(feature_select) > 0:
+        print('WARNING: update feature selection code')
         feats = np.squeeze(feats[:, :, [feature_select]])
         #print(f'Updated feats shape to {feats.shape} with features: {feature_select}')
 
     # define the last dimension of the array
-    n_feats = 1 + s1.shape[-1] + s2.shape[-1] + feats.shape[-1]
+    n_feats = 1 + s1.shape[-1] + s2.shape[-1] + tml_feats.shape[-1] + txt_feats.shape[-1]
 
     sample = np.empty((sample_shape[1], sample_shape[-1], n_feats))
 
@@ -227,7 +264,8 @@ def make_sample(sample_shape, slope, s1, s2, feats, feature_select, drop_prob):
     sample[..., 0] = slope
     sample[..., 1:3] = s1
     sample[..., 3:13] = s2
-    sample[..., 13:] = feats
+    sample[..., 13:78] = tml_feats
+    sample[..., 78:] = txt_feats
 
     return sample
 
@@ -268,7 +306,8 @@ def binary_ceo(v_train_data):
         df = pd.read_csv(f'../data/ceo-plantations-train-{i}.csv')
         
         # for multiclass surveys, change labels
-        if i == 'v14' or i == 'v15':
+        multiclass = ['v08', 'v14', 'v15']
+        if i in multiclass:
         
             # map label categories to ints
             # this step might not be needed but leaving for now.
@@ -285,7 +324,7 @@ def binary_ceo(v_train_data):
 
             # drop unknown samples
             df_new = df.drop(df[df.PLANTATION_MULTI == 255].index)
-            print(f'{(len(df) - len(df_new)) / 196} plots labeled unknown were dropped.')
+            print(f'{(len(df) - len(df_new)) / 196} plots labeled unknown were dropped from {i}.')
             
             plot_ids = plot_ids + df_new.PLOT_FNAME.drop_duplicates().tolist()
 
@@ -325,16 +364,17 @@ def multiclass_ceo(v_train_data):
 
         # map label categories to ints
         # this step might not be needed but leaving for now.
-        df['PLANTATION_MULTI'] = df['SYSTEM'].map({'Monoculture': 1,
-                                                    'Agroforestry': 2,
-                                                    'Not plantation': 0,
-                                                    'Unknown': 255})
+        df['PLANTATION_MULTI'] = df['PLANTATION'].map({'Monoculture': 1,
+                                                     'Agroforestry': 2,
+                                                     'Not plantation': 0,
+                                                     'Unknown': 255})
 
         # confirm that unknown labels are always a full 14x14 (196 points) of unknowns
         # if assertion fails, will print count of points
         unknowns = df[df.PLANTATION_MULTI == 255]
         for plot in set(list(unknowns.PLOT_ID)):
-            assert len(unknowns[unknowns.PLOT_ID == plot]) == 196, f'{plot} has {len(unknowns[unknowns.PLOT_ID == plot])}/196 points labeled unknown.'
+            assert len(unknowns[unknowns.PLOT_ID == plot]) == 196,\
+            f'{plot} has {len(unknowns[unknowns.PLOT_ID == plot])}/196 points labeled unknown.'
 
         # drop unknown samples
         df_new = df.drop(df[df.PLANTATION_MULTI == 255].index)
@@ -351,6 +391,9 @@ def multiclass_ceo(v_train_data):
             if not os.path.exists(f'../data/train-s2/{plot}.hkl'.strip()):
                 print(f'Plot id {plot} has no cloud free imagery and will be removed.')
                 plot_ids.remove(plot)
+        
+        # not sure why this persists
+        if '08182' in plot_ids: plot_ids.remove('08182')
 
     return plot_ids
 
@@ -385,17 +428,19 @@ def create_xy(v_train_data, classes, drop_prob, drop_feats, feature_select, verb
     # create empty x and y array based on number of plots (dropping TML probability changes dimensions from 78 -> 77)
     sample_shape = (14, 14)
     n_samples = len(plot_ids)
-    y_all = np.empty(shape=(n_samples, 14, 14))
+    y_all = np.zeros(shape=(n_samples, 14, 14))
 
     if drop_prob:
-        x_all = np.empty(shape=(n_samples, 14, 14, 77))
+        x_all = np.zeros(shape=(n_samples, 14, 14, 77))
     elif drop_feats:
-        x_all = np.empty(shape=(n_samples, 14, 14, 13))
+        x_all = np.zeros(shape=(n_samples, 14, 14, 13))
     elif len(feature_select) > 0:
-        x_all = np.empty(shape=(n_samples, 14, 14, 13 + len(feature_select)))
+        x_all = np.zeros(shape=(n_samples, 14, 14, 13 + len(feature_select)))
     else:
-        x_all = np.empty(shape=(n_samples, 14, 14, 78))
+        x_all = np.zeros(shape=(n_samples, 14, 14, 94))
 
+    print(x_all.shape)
+    
     for num, plot in enumerate(plot_ids):
 
         if drop_feats:
@@ -408,14 +453,15 @@ def create_xy(v_train_data, classes, drop_prob, drop_feats, feature_select, verb
             y_all[num] = y
 
         else:
-            # at index i, load and create the sample, then append to empty array
             slope = load_slope(plot)
             s1 = load_s1(plot)
             s2 = load_s2(plot)
-            tml_feats = load_feats(plot)
+            tml_feats = load_tml_feats(plot)
+            txt_feats = load_texture_feats(plot)
             validate.train_output_range_dtype(slope, s1, s2, tml_feats, feature_select, drop_prob)
-            X = make_sample(sample_shape, slope, s1, s2, tml_feats, feature_select, drop_prob)
+            X = make_sample(sample_shape, slope, s1, s2, tml_feats, txt_feats, feature_select, drop_prob)
             y = load_label(plot, classes)
+            print(X.shape, y.shape)
             x_all[num] = X
             y_all[num] = y
 
@@ -428,6 +474,7 @@ def create_xy(v_train_data, classes, drop_prob, drop_feats, feature_select, verb
     print(f'Class count {dict(zip(labels, counts))}')
 
     return x_all, y_all
+
 
 def reshape_and_scale_manual(X, y, v_train_data, verbose=False):
 
