@@ -18,14 +18,18 @@ from glob import glob
 import functools
 from time import time, strftime
 from datetime import datetime
+from scipy import ndimage
+from skimage.util import img_as_ubyte
+import gc
 
+## import other scripts
 import sys
 sys.path.append('src/')
 import interpolation
 import cloud_removal
 import mosaic
 import validate_io as validate
-
+# import texture_veg_indices as txt
 
 with open("config.yaml", 'r') as stream:
     document = (yaml.safe_load(stream))
@@ -167,7 +171,7 @@ def make_bbox(country: str, tile_idx: tuple, expansion: int = 10) -> list:
        Returns:
             bbx (list): expanded [min_x, min_y, max_x, max_y]
     """
-    data = pd.read_csv(f"data/{country}.csv")
+    bbx_df = pd.read_csv(f"data/{country}.csv")
 
     # this will remove quotes around x and y tile indexes (not needed for all countries)
     # data['X_tile'] = data['X_tile'].str.extract('(\d+)', expand=False)
@@ -178,9 +182,6 @@ def make_bbox(country: str, tile_idx: tuple, expansion: int = 10) -> list:
     # set x/y to the tile IDs
     x = tile_idx[0]
     y = tile_idx[1]
-
-    # make a copy of the database 
-    bbx_df = data.copy()
     
     # extract the XY of interest as a dataframe
     bbx_df = bbx_df[bbx_df['X_tile'] == int(x)]
@@ -305,10 +306,8 @@ def process_tml_feats(tile_idx: tuple, local_path: str, feats: bool, feature_sel
         - creates no data and no tree flags for masking predictions
     '''
 
-    x = str(tile_idx[0])
-    y = str(tile_idx[1])
-    x = x[:-2] if ".0" in x else x
-    y = y[:-2] if ".0" in y else y
+    x = tile_idx[0]
+    y = tile_idx[1]
 
     folder = f"{local_path}/{str(x)}/{str(y)}/"
     tile_str = f'{str(x)}X{str(y)}Y'
@@ -325,7 +324,7 @@ def process_tml_feats(tile_idx: tuple, local_path: str, feats: bool, feature_sel
         feats_raw[1:, ...] = feats_raw[1:, ...] / 1000  
         feats_rolled = np.rollaxis(feats_raw, 0, 3)
         feats_rolled = np.rollaxis(feats_rolled, 0, 2)
-
+        
         # now switch the feats
         feats_ = feats_rolled.copy()
 
@@ -350,9 +349,10 @@ def process_tml_feats(tile_idx: tuple, local_path: str, feats: bool, feature_sel
     else:
         feats_ = []
 
+    del feats_raw, feats_rolled, high_feats, low_feats
+    gc.collect()
+
     return feats_, no_data_flag, no_tree_flag
-
-
 
 def process_tile(tile_idx: tuple, local_path: str, bbx: list, verbose: bool = False, make_shadow: bool = True) -> np.ndarray:
     """
@@ -373,23 +373,18 @@ def process_tile(tile_idx: tuple, local_path: str, bbx: list, verbose: bool = Fa
          s2 (np.ndarray)
     """
     
-    x = str(tile_idx[0])
-    y = str(tile_idx[1])
-    x = x[:-2] if ".0" in x else x
-    y = y[:-2] if ".0" in y else y
+    x = tile_idx[0]
+    y = tile_idx[1]
             
     folder = f"{local_path}/{str(x)}/{str(y)}/"
     tile_str = f'{str(x)}X{str(y)}Y'
 
     clouds_file = f'{folder}raw/clouds/clouds_{tile_str}.hkl'
     cloud_mask_file = f'{folder}raw/clouds/cloudmask_{tile_str}.hkl'
-    shadows_file = f'{folder}raw/clouds/shadows_{tile_str}.hkl'
     s1_file = f'{folder}raw/s1/{tile_str}.hkl'
-    s1_dates_file = f'{folder}raw/misc/s1_dates_{tile_str}.hkl'
     s2_10_file = f'{folder}raw/s2_10/{tile_str}.hkl'
     s2_20_file = f'{folder}raw/s2_20/{tile_str}.hkl'
     s2_dates_file = f'{folder}raw/misc/s2_dates_{tile_str}.hkl'
-    clean_steps_file = f'{folder}raw/clouds/clean_steps_{tile_str}.hkl'
     dem_file = f'{folder}raw/misc/dem_{tile_str}.hkl'
     
     # load clouds
@@ -419,13 +414,12 @@ def process_tile(tile_idx: tuple, local_path: str, bbx: list, verbose: bool = Fa
     dem = hkl.load(dem_file)
     dem = median_filter(dem, size = 5)    
     
-    # Ensure arrays are the same dims
+    # Ensure arrays are the same dims (asserts s2_10 is 2x s2_20)
     width = s2_20.shape[1] * 2
     height = s2_20.shape[2] * 2
     s1 = adjust_shape(s1, width, height)
     s2_10 = adjust_shape(s2_10, width, height)
     dem = adjust_shape(dem, width, height)
-    print(dem.shape, dem.dtype)
 
     # Deal with cases w/ only 1 image
     if len(s2_10.shape) == 3:
@@ -439,15 +433,16 @@ def process_tile(tile_idx: tuple, local_path: str, bbx: list, verbose: bool = Fa
                 f'S2: {s2_10.shape}, {s2_20.shape} \n'
                 f'DEM: {dem.shape}')
 
-    # bilinearly upsample 20m bands to 10m for superresolution
+    # combine s2_10 and s2_10 bands into one array
+    # bilinearly upsample 20m bands to 10m for superresolution - superresolution is not actually happening
+    # BUT shouldn't actually change map quality much
     sentinel2 = np.zeros((s2_10.shape[0], width, height, 10), np.float32)
     sentinel2[..., :4] = s2_10
 
     # a for loop is faster than trying to vectorize it here! 
     for band in range(4):
         for step in range(sentinel2.shape[0]):
-            sentinel2[step, ..., band + 4] = resize(
-                s2_20[step,..., band], (width, height), 1)
+            sentinel2[step, ..., band + 4] = resize(s2_20[step,..., band], (width, height), 1)
 
     for band in range(4, 6):
         # indices 4, 5 are 40m and may be a different shape
@@ -566,10 +561,40 @@ def process_tile(tile_idx: tuple, local_path: str, bbx: list, verbose: bool = Fa
     # switch from monthly to annual median
     s1 = np.median(s1, axis = 0)
     s2 = np.median(sentinel2, axis = 0)
-    print(s2.shape)
-    print(s2.min(), s2.max())
+
+    del s2_10, s2_20, sentinel2, image_dates, clouds
+    gc.collect()
+
     # removing return of image_dates, interp, cloudshad as not used
     return s2, s1, dem
+
+
+def process_txt_feats(s2):
+    
+    '''
+    Takes in a (x, x, 10) s2 array and performs texture analysis
+    on all four bands. Returns an comb output containing the 4
+    texture analyses for the four bands.
+    '''
+    s2 = img_as_ubyte(s2)
+    assert s2.dtype == np.uint8, print(s2.dtype)
+    
+    blue = s2[..., 0]
+    green = s2[..., 1]
+    red = s2[..., 2]
+    nir = s2[..., 3]
+    output = np.zeros((14, 14, 16))
+    
+    print('Calculating GLCM textures for blue band...')
+    output[..., 0:4] = txt.extract_texture(blue)
+    print('Calculating GLCM textures for green band...')
+    output[..., 4:8] = txt.extract_texture(green)
+    print('Calculating GLCM textures for red band...')
+    output[..., 8:12] = txt.extract_texture(red)
+    print('Calculating GLCM textures for nir band...')
+    output[..., 12:16] = txt.extract_texture(nir)
+
+    return output.astype(np.float32)
 
 
 ## Step 3: Combine raw data into a sample for input into the model 
@@ -578,20 +603,21 @@ def make_sample(dem: np.array, s1: np.array, s2: np.array, tml_feats: np.array):
     
     ''' 
     Takes processed data, defines dimensions for the sample, then 
-    combines dem, s1, s2 and features into a single array with shape (x, x, 78)
+    combines dem, s1, s2 and features into a single array with shape (x, x, len(features))
     '''
 
     # define number of features in the sample
-    n_feats = 1 + s1.shape[-1] + s2.shape[-1] + tml_feats.shape[-1] 
+    n_feats = 1 + s1.shape[-1] + s2.shape[-1] + tml_feats.shape[-1] #+ txt_feats.shape[-1]
 
     # Create the empty array using shape of inputs
-    sample = np.empty((dem.shape[0], dem.shape[1], n_feats))
+    sample = np.zeros((dem.shape[0], dem.shape[1], n_feats), dtype=np.float32)
     
     # populate empty array with each feature
     sample[..., 0] = dem
     sample[..., 1:3] = s1
     sample[..., 3:13] = s2
     sample[..., 13:] = tml_feats
+    # sample[..., 78:] = txt_feats
 
     # save dims for future use
     arr_dims = (sample.shape[0], sample.shape[1])
@@ -673,49 +699,70 @@ def reshape_and_scale_manual(v_train_data: str, unseen: np.array, verbose: bool 
     return unseen_reshaped
 
 
-def reshape_no_scaling(unseen: np.array, verbose: bool = False):
+def reshape_no_scaling(arr: np.array, verbose: bool = False):
 
     ''' 
     Do not apply scaling and only reshape the unseen data.
     '''
 
-    # now reshape
-    unseen_reshaped = np.reshape(unseen, (np.prod(unseen.shape[:-1]), unseen.shape[-1]))
+    arr_reshaped = np.reshape(arr, (np.prod(arr.shape[:-1]), arr.shape[-1]))
 
     if verbose:
-        print(unseen_reshaped.shape)
+        print(arr_reshaped.shape)
 
-    return unseen_reshaped
+    return arr_reshaped
 
 
 # Step 5: import classification model, run predictions
 
-def predict_classification(arr: np.array, model: str, feature_select: list, no_data_flag: np.array, no_tree_flag: np.array, sample_dims: tuple):
+def predict_classification(arr: np.array, pretrained_model: str, sample_dims: tuple):
 
     '''
     Import pretrained model and run predictions on arr.
     If using a regression model, multiply results by 100
     to get probability 0-100. Reshape array to permit writing to tif.
     '''
-
-    with open(f'models/{model}.pkl', 'rb') as file:  
-        model_pretrained = pickle.load(file)
     
-    preds = model_pretrained.predict(arr)
+    preds = pretrained_model.predict(arr)
     
-    if 'rfr' in model:
-        preds = preds * 100
+    # TODO: update peipeline for regression
+    # if 'rfr' in model:
+    #     preds = preds * 100
 
-    reshaped_preds = preds.reshape(sample_dims[0], sample_dims[1])
+    return preds.reshape(sample_dims[0], sample_dims[1])
 
-    # only apply no data and no free flag if TML preds are 
-    # included in selected features
+
+def post_process_tile(arr: np.array, feature_select: list, no_data_flag: np.array, no_tree_flag: np.array, thresh=10):
+
+    '''
+    Applies the no data and no tree flag *if* TTC predictions are used
+    in feature selection. 
+    Performs a connected component analysis to remove positive predictions 
+    where the connected pixel count is < thresh. Establishing a minimum 
+    plantation size (0.1 ha?)will remove the "noisy" pixels
+    '''
+
+    # TODO: confirm how this would work if all feats are used?
     if 0 in feature_select:
-        reshaped_preds[no_data_flag] = 255.
-        reshaped_preds[no_tree_flag] = 0.
+        arr[no_data_flag] = 255.
+        arr[no_tree_flag] = 0.
 
-    return reshaped_preds
+    # returns a labeled array, where each unique feature has a unique label
+    # returns how many objects were found
+    Zlabeled, Nlabels = ndimage.label(arr)
+    
+    # get pixel count for each label
+    label_size = [(Zlabeled == label).sum() for label in range(Nlabels + 1)]
+    
+    # if the count of pixels doesn't meet the threshold, make label 0
+    for label,size in enumerate(label_size):
+        if size < thresh:
+            arr[Zlabeled == label] = 0
+    
+    del Zlabeled, Nlabels, label_size
+    gc.collect()
 
+    return arr
 
 # Step 6: Write predictions for that tile to a tif -- eventually this will be a separate script?
 
@@ -757,6 +804,10 @@ def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, suffix 
     new_dataset.write(arr, 1)
     new_dataset.close()
     
+    del arr
+    del new_dataset
+    gc.collect()
+
     return None
 
 def remove_folder(tile_idx: tuple, local_dir: str):
@@ -783,17 +834,24 @@ def remove_folder(tile_idx: tuple, local_dir: str):
 @timer
 def execute(country: str, model: str, verbose: bool, feats: bool, feature_select: list):
     '''
-    Executes all preprocessing and modeling steps in the pipeline
+    Executes all preprocessing, modeling and postprocessing steps in the pipeline
     according to the supplied model and country.
     '''
     local_dir = 'tmp/' + country
 
-    tiles_to_process = download_tile_ids(country, aak, ask)
-    tile_count = len(tiles_to_process[-3:-2])
+    tiles_to_process = download_tile_ids(country, aak, ask)[:330]
+    tile_count = len(tiles_to_process)
     counter = 0
 
-    # right now this will just process n tiles
-    for tile_idx in tiles_to_process[-3:-2]:
+    # load specified model
+    with open(f'models/{model}.pkl', 'rb') as file:  
+        pretrained_model = pickle.load(file)
+
+    print('............................................')
+    print(f'Processing {tile_count} tiles for {country}.')
+    print('............................................')
+
+    for tile_idx in tiles_to_process:
         print(f'Processing tile: {tile_idx}')
         counter += 1
         successful = download_raw_tile(tile_idx, local_dir, aak, ask)
@@ -808,20 +866,28 @@ def execute(country: str, model: str, verbose: bool, feats: bool, feature_select
             # feats option will be removed in the future
             if feats:
                 tml_feats, no_data_flag, no_tree_flag = process_tml_feats(tile_idx, local_dir, feats, feature_select)
-                validate.tmlfeats_dtype_and_dimensions(tml_feats, feature_select)
+                validate.tmlfeats_dtype_and_dimensions(dem_proc, tml_feats, feature_select)
+                #txt_feats = process_txt_feats(s2_proc)
                 sample, sample_dims = make_sample(dem_proc, s1_proc, s2_proc, tml_feats)
-                unseen_ss = reshape_no_scaling(sample, verbose)
-                #unseen_ss = reshape_and_scale_manual('v11', sample, verbose)
+                sample_ss = reshape_no_scaling(sample, verbose)
+                #sample_ss = reshape_and_scale_manual('v17', sample, verbose)
     
             else:
                 sample, sample_dims = make_sample_nofeats(dem_proc, s1_proc, s2_proc)
-                #unseen_ss = reshape_and_scale_manual('v10', sample, verbose)
+                sample_ss = reshape_no_scaling(sample, verbose)
+                #sample_ss = reshape_and_scale_manual('v10', sample, verbose)
             
-            validate.model_inputs(unseen_ss)
-            preds = predict_classification(unseen_ss, model, feature_select, no_data_flag, no_tree_flag, sample_dims)
+            validate.model_inputs(sample_ss)
+            preds = predict_classification(sample_ss, pretrained_model, sample_dims)
+            preds_final = post_process_tile(preds, feature_select, no_data_flag, no_tree_flag)
+
             #validate.classification_scores(preds)
-            write_tif(preds, bbx, tile_idx, country, 'preds')
-            #remove_folder(tile_idx, local_dir)
+            write_tif(preds_final, bbx, tile_idx, country, 'preds')
+            remove_folder(tile_idx, local_dir)
+
+            # clean up memory
+            del bbx, s2_proc, s1_proc, dem_proc, tml_feats, no_data_flag, no_tree_flag, sample, sample_ss, preds, preds_final
+            gc.collect()
         
         else:
             print(f'Raw data for {tile_idx} does not exist on s3.')
@@ -831,8 +897,10 @@ def execute(country: str, model: str, verbose: bool, feats: bool, feature_select
     
     # for now mosaic and upload to s3 bucket
     mosaic.mosaic_tif(country, model, compile_from='csv')
-    #mosaic.upload_mosaic(country, model, aak, ask)
+    mosaic.upload_mosaic(country, model, aak, ask)
     
+   
+
     return None
 
 
@@ -840,7 +908,7 @@ if __name__ == '__main__':
    
     import argparse
     parser = argparse.ArgumentParser()
-    print("Argument List:", str(sys.argv))
+    #print("Argument List:", str(sys.argv))
 
     parser.add_argument('--country', dest='country', type=str)
     parser.add_argument('--model', dest='model', type=str)
