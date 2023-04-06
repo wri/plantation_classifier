@@ -55,7 +55,7 @@ def cm_roc_pr(model, y_test, pred, probs_pos):
     return None
 
 
-def roc_curve_comp(X_test, y_test, model_names, v_train_data):
+def roc_curve_comp(X_test, y_test, model_names):
 
     '''
     Plots the ROC Curve for all listed models,
@@ -66,7 +66,7 @@ def roc_curve_comp(X_test, y_test, model_names, v_train_data):
     # ROC curve
     for m in model_names:
         
-        with open(f'../models/{m}_model_{v_train_data}.pkl', 'rb') as file:  
+        with open(f'../models/{m}.pkl', 'rb') as file:  
              model = pickle.load(file)
 
         plt.subplot(1,2,1)
@@ -89,7 +89,7 @@ def roc_curve_comp(X_test, y_test, model_names, v_train_data):
     # AUC curve
     for m in model_names:
         
-        with open(f'../models/{m}_model_{v_train_data}.pkl', 'rb') as file:  
+        with open(f'../models/{m}.pkl', 'rb') as file:  
              model = pickle.load(file)
 
         plt.subplot(1,2,2)
@@ -113,7 +113,7 @@ def roc_curve_comp(X_test, y_test, model_names, v_train_data):
     return None
 
 
-def learning_curve_comp(model_names, v_train_data, X_train, y_train):
+def learning_curve_comp(model_names, X_train, y_train):
 
     '''
     Plots a learning curve for all listed models.
@@ -127,9 +127,9 @@ def learning_curve_comp(model_names, v_train_data, X_train, y_train):
               'gold', 
               'limegreen'] 
 
-    for i, x in zip(model_names, colors):
+    for i, x in zip(model_names, colors[:len(model_names)+1]):
 
-        filename = f'../models/round_1/{i}_model_{v_train_data}.pkl'
+        filename = f'../models/{i}.pkl'
 
         with open(filename, 'rb') as file:
             model = pickle.load(file)
@@ -138,21 +138,22 @@ def learning_curve_comp(model_names, v_train_data, X_train, y_train):
                                                                               X_train, 
                                                                               y_train, 
                                                                               cv=5, 
-                                                                              return_times=True)
+                                                                              return_times=True,
+                                                                              verbose=0) 
 
         train_scores_mean = np.mean(train_scores, axis=1)
         test_scores_mean = np.mean(test_scores, axis=1)
 
         plt.grid()
-        plt.plot(train_sizes, train_scores_mean, "x-", color=x, label=f"{i} Train")
-        plt.plot(train_sizes, test_scores_mean, ".-", color=x, label=f"{i} Test")
+        plt.plot(train_sizes, train_scores_mean, "x-", color=x, label=f"{i[0:4]} Train")
+        plt.plot(train_sizes, test_scores_mean, ".-", color=x, label=f"{i[0:4]} Test")
     
-    plt.xlim([1000, 32000])
+    plt.xlim([1000, 80000])
     plt.ylim([0.0, 1.2])
-    plt.title('Comparison of Learning Curves')
+    plt.title(f'Learning Curve Comparison for {len(model_names)} Models')
     plt.xlabel('Training Samples')
     plt.ylabel('Score')
-    plt.legend(loc='lower right');        
+    plt.legend(title='Models', loc='lower right');        
         
     return None
 
