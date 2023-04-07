@@ -11,13 +11,17 @@ import seaborn as sns
 from sklearn.model_selection import train_test_split
 import validate_io as validate
 import texture_veg_indices as txt
+from tqdm import tqdm
+import gc
+from eliot import log_call, to_file
+to_file(open("../data/eliot.log", "w"))
 
 ### Plot ID Labeling ###
 # Plot IDs are numbered according to ceo survey
 # the last three digits refer to the plot number and the first two digits refer to the survey
 # for ex: 25th plot in ceo-plantations-train-v04.csv will be 04025.npy or 04025.hkl
 
-    
+@log_call
 def convert_to_db(x: np.ndarray, min_db: int) -> np.ndarray:
     """ 
     Converts Sentinel 1 unitless backscatter coefficient
@@ -50,6 +54,7 @@ def convert_to_db(x: np.ndarray, min_db: int) -> np.ndarray:
     
     return x
 
+@log_call
 def load_slope(idx, directory = '../data/train-slope/'):
     """
     Slope is stored as a 32 x 32 float32 array with border information.
@@ -58,7 +63,6 @@ def load_slope(idx, directory = '../data/train-slope/'):
     """
     # Remove axes of length one with .squeeze (32 x 32 x 1)
     x = np.load(directory + str(idx) + '.npy').squeeze()
-    original_shape = x.shape
 
     # slice out border information
     border_x = (x.shape[0] - 14) // 2
@@ -68,10 +72,9 @@ def load_slope(idx, directory = '../data/train-slope/'):
     # explicitly convert array to a row vector, adding axis (1 x 14 x 14)
     slope = slope[np.newaxis]
     
-    #print(f'{idx} slope: {original_shape} -> {slope.shape}, {slope.dtype}')
     return slope
 
-
+@log_call
 def load_s1(idx, directory = '../data/train-s1/'):
     """
     S1 is stored as a (12, 32, 32, 2) float64 array with border information.
@@ -80,35 +83,29 @@ def load_s1(idx, directory = '../data/train-s1/'):
     Dtype needs to be converted to float32.
     """
 
-    s1 = hkl.load(directory + str(idx) + '.hkl')
-    original_shape = s1.shape
-
     # since s1 is a float64, can't use to_float32() 
-    # just convert (removed /65535)
-    s1 = np.float32(s1) 
-    #print(f'pre db: {s1.max(), s1.min()}')
+    
+    s1 = hkl.load(directory + str(idx) + '.hkl')
     
     # convert to decible
     s1[..., -1] = convert_to_db(s1[..., -1], 22)
     s1[..., -2] = convert_to_db(s1[..., -2], 22)
-    #print(f'post db: {s1.min(), s1.max()}')
-    post_db_shape = s1.shape
 
     # get the median across flattened array
     if len(s1.shape) == 4:
         s1 = np.median(s1, axis = 0)
-        med_shape = s1.shape
+
+    # just convert (removed /65535) keep here
+    s1 = np.float32(s1)
 
     # slice out border information (32, 32, 2) -> (14, 14, 2)
     border_x = (s1.shape[0] - 14) // 2
     border_y = (s1.shape[1] - 14) // 2
     s1 = s1[border_x:-border_x, border_y:-border_y]
-    final = s1.shape
-    
-    #print(f'{idx} s1: {original_shape} -> {post_db_shape} -> {med_shape} -> {final}')
+
     return s1
 
-
+@log_call
 def load_s2(idx, directory = '../data/train-s2/'):
     
     """
@@ -120,7 +117,6 @@ def load_s2(idx, directory = '../data/train-s2/'):
     """
     
     s2 = hkl.load(directory + str(idx) + '.hkl')
-    original_shape = s2.shape
 
     # remove date of imagery (last axis)
     if s2.shape[-1] == 11:
@@ -143,10 +139,9 @@ def load_s2(idx, directory = '../data/train-s2/'):
     border_y = (s2.shape[1] - 14) // 2
     s2 = s2[border_x:-border_x, border_y:-border_y].astype(np.float32)
 
-    #print(f'{idx} s2: {original_shape} -> {s2.shape}, {s2.dtype}')
     return s2
 
-
+@log_call
 def load_tml_feats(idx, directory = '../data/train-features/'):
     '''
     Features are stored as a 14 x 14 x 65 float64 array. The last axis contains 
@@ -169,10 +164,9 @@ def load_tml_feats(idx, directory = '../data/train-features/'):
 
     feats = feats.astype(np.float32)
 
-    #print(f'{idx} feats: {feats.shape}, {feats.dtype}')
     return feats
 
-
+@log_call
 def load_label(idx, classes, directory = '../data/train-labels/'):
     '''
     The labels are stored as a binary 14 x 14 float64 array.
@@ -180,7 +174,6 @@ def load_label(idx, classes, directory = '../data/train-labels/'):
     Dtype needs to be converted to float32.
     '''
     labels_raw = np.load(directory + str(idx) + '.npy')
-    original_shape = labels_raw.shape
 
     if len(labels_raw.shape) == 1:
         labels_raw = labels_raw.reshape(14, 14)
@@ -195,48 +188,53 @@ def load_label(idx, classes, directory = '../data/train-labels/'):
     else:
         labels = labels_raw.astype(np.float32)
     
-    #print(idx, np.unique(labels))
-    #print(f'{idx} labels: {original_shape} --> {labels.shape}, {labels.dtype}')
     return labels
 
+@log_call
 def load_texture_feats(idx, directory = '../data/train-s2/'):
     
     '''
     Loads and performs some preprocessing steps to s2 data
     in order to extract texture features for RGB and NIR 
     bands. Outputs the texture analysis as a (14, 14, 16) 
-    array.
+    array as a float32 array.
     '''
+    if os.path.exists(f'../data/train-texture/{idx}.npy'):
+        output = np.load(f'../data/train-texture/{idx}.npy')
     
-    s2 = hkl.load(directory + str(idx) + '.hkl')
+    else: 
+        # convert to uint8 for GLCM
+        s2 = hkl.load(directory + str(idx) + '.hkl')
+        
+        # remove date of imagery (last axis)
+        if s2.shape[-1] == 11:
+            s2 = np.delete(s2, -1, -1)
     
-    # remove date of imagery (last axis)
-    if s2.shape[-1] == 11:
-        s2 = np.delete(s2, -1, -1)
- 
-    # convert monthly images to annual median
-    if len(s2.shape) == 4:
-        s2 = np.median(s2, axis = 0)
+        # convert monthly images to annual median
+        if len(s2.shape) == 4:
+            s2 = np.median(s2, axis = 0)
+
+        # this has to be done after median
+        s2 = s2.astype(np.uint8)
+        
+        blue = s2[..., 0]
+        green = s2[..., 1]
+        red = s2[..., 2]
+        nir = s2[..., 3]
+        output = np.zeros((14, 14, 16))
+        
+        output[..., 0:4] = txt.extract_texture(blue)
+        output[..., 4:8] = txt.extract_texture(green)
+        output[..., 8:12] = txt.extract_texture(red)
+        output[..., 12:16] = txt.extract_texture(nir)
+
+        # save the output
+        np.save(f'../data/train-texture/{idx}.npy', output)
     
-    # convert to uint8 for GLCM
-    s2 = s2.astype(np.uint8)
-    
-    blue = s2[..., 0]
-    green = s2[..., 1]
-    red = s2[..., 2]
-    nir = s2[..., 3]
-    output = np.zeros((14, 14, 16))
-    
-    output[..., 0:4] = txt.extract_texture(blue)
-    output[..., 4:8] = txt.extract_texture(green)
-    output[..., 8:12] = txt.extract_texture(red)
-    output[..., 12:16] = txt.extract_texture(nir)
-    
-    return output
+    return output.astype(np.float32)
 
 
-# Create X and y variables
-
+@log_call
 def make_sample(sample_shape, slope, s1, s2, tml_feats, txt_feats, feature_select, drop_prob):
     
     ''' 
@@ -253,7 +251,6 @@ def make_sample(sample_shape, slope, s1, s2, tml_feats, txt_feats, feature_selec
     if len(feature_select) > 0:
         print('WARNING: update feature selection code')
         feats = np.squeeze(feats[:, :, [feature_select]])
-        #print(f'Updated feats shape to {feats.shape} with features: {feature_select}')
 
     # define the last dimension of the array
     n_feats = 1 + s1.shape[-1] + s2.shape[-1] + tml_feats.shape[-1] + txt_feats.shape[-1]
@@ -290,7 +287,7 @@ def make_sample_nofeats(sample_shape, slope, s1, s2):
     
     return sample
 
-# see if i can combine two ceo surveys
+@log_call
 def binary_ceo(v_train_data):
     '''
     Creates a list of plot ids to process from collect earth surveys 
@@ -303,7 +300,7 @@ def binary_ceo(v_train_data):
 
     for i in v_train_data:
         
-        df = pd.read_csv(f'../data/ceo-plantations-train-{i}.csv')
+        df = pd.read_csv(f'../data/ceo-plantations-train-{i}.csv', engine="pyarrow")
         
         # for multiclass surveys, change labels
         multiclass = ['v08', 'v14', 'v15']
@@ -349,6 +346,7 @@ def binary_ceo(v_train_data):
     
     return plot_ids
 
+@log_call
 def multiclass_ceo(v_train_data):
     '''
     Creates a list of plot ids to process from collect earth surveys 
@@ -360,7 +358,7 @@ def multiclass_ceo(v_train_data):
     plot_ids = []
 
     for i in v_train_data:
-        df = pd.read_csv(f'../data/ceo-plantations-train-{i}.csv')
+        df = pd.read_csv(f'../data/ceo-plantations-train-{i}.csv', engine="pyarrow")
 
         # map label categories to ints
         # this step might not be needed but leaving for now.
@@ -397,6 +395,7 @@ def multiclass_ceo(v_train_data):
 
     return plot_ids
 
+@log_call
 def create_xy(v_train_data, classes, drop_prob, drop_feats, feature_select, verbose=False):
     '''
     Gathers training data plots from collect earth surveys (v1, v2, v3, etc)
@@ -421,8 +420,7 @@ def create_xy(v_train_data, classes, drop_prob, drop_feats, feature_select, verb
     elif classes == 'multi':
         plot_ids = multiclass_ceo(v_train_data)
     
-    if verbose:
-        print(f'Training data includes {len(plot_ids)} plots.')
+    print(f'Training data includes {len(plot_ids)} plots.')
 
 
     # create empty x and y array based on number of plots (dropping TML probability changes dimensions from 78 -> 77)
@@ -439,9 +437,7 @@ def create_xy(v_train_data, classes, drop_prob, drop_feats, feature_select, verb
     else:
         x_all = np.zeros(shape=(n_samples, 14, 14, 94))
 
-    print(x_all.shape)
-    
-    for num, plot in enumerate(plot_ids):
+    for num, plot in enumerate(tqdm(plot_ids)):
 
         if drop_feats:
             slope = load_slope(plot)
@@ -461,20 +457,24 @@ def create_xy(v_train_data, classes, drop_prob, drop_feats, feature_select, verb
             validate.train_output_range_dtype(slope, s1, s2, tml_feats, feature_select, drop_prob)
             X = make_sample(sample_shape, slope, s1, s2, tml_feats, txt_feats, feature_select, drop_prob)
             y = load_label(plot, classes)
-            print(X.shape, y.shape)
             x_all[num] = X
             y_all[num] = y
 
-        # if verbose:
-        #     print(f'Sample: {num}')
-        #     print(f'Features: {X.shape}, Labels: {y.shape}')
+            # clean up memory
+            del slope, s1, s2, tml_feats, txt_feats, X, y
+            gc.collect()
+
+        if verbose:
+            print(f'Sample: {num}')
+            print(f'Features: {X.shape}, Labels: {y.shape}')
         
     # check class balance 
     labels, counts = np.unique(y_all, return_counts=True)
     print(f'Class count {dict(zip(labels, counts))}')
 
-    return x_all, y_all
+    
 
+    return x_all, y_all
 
 def reshape_and_scale_manual(X, y, v_train_data, verbose=False):
 
@@ -531,6 +531,7 @@ def reshape_and_scale_manual(X, y, v_train_data, verbose=False):
 
     return X_train_ss, X_test_ss, y_train, y_test
 
+@log_call
 def reshape_no_scaling(X, y, verbose=False):
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=22)
