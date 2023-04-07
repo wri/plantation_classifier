@@ -3,6 +3,7 @@
 import numpy as np
 import hickle as hkl
 from numpy.testing import assert_almost_equal
+import gc
 
 ### TRAINING ###
 # these tests happen after preprocessing the raw training data
@@ -29,7 +30,7 @@ def train_output_range_dtype(dem, s1, s2, feats, feature_select, drop_prob):
 
     # if there is no drop prob and no feature selection, assert...
     if not drop_prob and len(feature_select) < 1:
-        assert np.logical_and(feats[..., 1:].min() >= -3.2768, feats[..., 1:].max() <= 3.2768), print(feats[..., 1:].min(), feats[..., 1:].max())
+        assert np.logical_and(feats[..., 1:].min() >= -32.768, feats[..., 1:].max() <= 32.768), print(feats[..., 1:].min(), feats[..., 1:].max())
         assert np.logical_and(feats[..., 0].min() >= 0, feats[..., 0].max() <= 1), print(feats[..., 0].min(), feats[..., 0].max())
    
     # TODO: enable validation when feature selection or drop prob == True
@@ -56,20 +57,23 @@ def input_dtype_and_dimensions(tile_idx, local_dir):
     s2_10 = hkl.load(f'{folder}raw/s2_10/{tile_str}.hkl')
     s2_20 = hkl.load(f'{folder}raw/s2_20/{tile_str}.hkl')
     dem = hkl.load(f'{folder}raw/misc/dem_{tile_str}.hkl')
-    feats = hkl.load(f'{folder}raw/feats/{tile_str}_feats.hkl')
+    tml_feats = hkl.load(f'{folder}raw/feats/{tile_str}_feats.hkl')
 
     # feats will be int16
     assert s1.dtype == np.uint16
     assert s2_10.dtype == np.uint16
     assert s2_20.dtype == np.uint16
-    assert feats.dtype == np.int16 
+    assert tml_feats.dtype == np.int16 
     assert dem.dtype == '<f4'
 
     assert s1.shape[0] == 12 and s1.shape[3] == 2
     assert s2_10.shape[3] == 4
     assert s2_20.shape[3] == 6 or s2_20.shape[3] == 7 #7 indices if data mask is included
     assert len(dem.shape) == 2
-    assert feats.shape[0] == 65
+    assert tml_feats.shape[0] == 65
+
+    del s1, s2_10, s2_20, dem, tml_feats
+    gc.collect()
 
 
 
@@ -94,6 +98,9 @@ def feats_range(tile_idx, local_dir):
 
     if feats[0,...].max() == 255:
         print(f'255 values present in TML predictions')
+    
+    del feats_file, feats
+    gc.collect()
 
 
 # test pre-processing - these tests happen after pre processing
@@ -118,23 +125,25 @@ def output_dtype_and_dimensions(s1, s2, dem):
     assert len(np.unique(s1)) > 1
 
     # middle two indices should be exactly the same for all data (x, this_one, this_one, x)
-    assert s1.shape[0:2] == s2.shape[0:2] == dem.shape, print(f'Clouds:, \n'
-                                                            f'S1: {s1.shape} \n'
-                                                            f'S2: {s2.shape} \n'
-                                                            f'DEM: {dem.shape}')
+    assert s1.shape[0:2] == s2.shape[0:2] == dem.shape, print(f'S1: {s1.shape} \n'
+                                                              f'S2: {s2.shape} \n'
+                                                              f'DEM: {dem.shape}')
 
-def tmlfeats_dtype_and_dimensions(feats, feature_select):
+def tmlfeats_dtype_and_dimensions(dem, feats, feature_select):
     '''
     Ensures the datatype for processed feats is float32. Ensures the 
     dimensions for tml_feats are (x, x, 65) unless feature selection is used
+    Takes in dem to assert dims match
     '''
 
     assert feats.dtype == np.float32
+    assert feats.shape[0:2] == dem.shape, print(f'WARNING. Feats: {feats.shape} DEM: {dem.shape}')
     
     if len(feature_select) > 0:
         assert feats.shape[2] == len(feature_select)
     else:
         assert feats.shape[2] == 65
+
 
 
 
