@@ -29,9 +29,7 @@ RUN apt-get update && apt-get install -y software-properties-common &&\
 # copy over the appropriate scripts/data
 COPY src/ /app/src/
 COPY data/urbanmask.tif /app/data/urbanmask.tif
-COPY models/cat_v15_2.pkl /app/models/cat_v15_2.pkl
-COPY models/cat_v15_fs.pkl /app/models/cat_v15_fs.pkl
-COPY models/cat_v15_tuned.pkl /app/models/cat_v15_tuned.pkl
+COPY models/cat_v17_tuned.pkl /app/models/cat_v17_tuned.pkl
 COPY config.yaml /app/config.yaml
 
 EXPOSE 8080
