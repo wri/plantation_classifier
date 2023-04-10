@@ -6,6 +6,7 @@ models/*
 *.DS_Store
 plantations-packageslist.txt
 src/fil-result/*
+fil-result/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
