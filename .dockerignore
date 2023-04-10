@@ -6,12 +6,14 @@ notebooks/*
 models/*
 __pycache__/*
 fil-result/*
+src/ptype_prepare_data.py 
+src/ptype_run_preds.py 
+src/ptype_visualize.py 
+src/ptype_large_feats.py
 
 *.pem
 *.ipynb
 *.tif
 
-!models/cat_model_v11.pkl
+!models/cat_v17_tuned.pkl
 !data/urbanmask.tif
-!data/mins_v11.npy
-!data/maxs_v11.npy

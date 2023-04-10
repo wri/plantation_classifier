@@ -2,7 +2,41 @@
 
 import numpy as np
 import hickle as hkl
+from numpy.testing import assert_almost_equal
+import gc
 
+### TRAINING ###
+# these tests happen after preprocessing the raw training data
+
+def train_output_range_dtype(dem, s1, s2, feats, feature_select, drop_prob):
+    '''
+    Sentinel-1, float32, range from 0-1 (divided by 65535), unscaled decibels >-22
+    Sentinel-2, float32, range from 0-1 (divided by 65535), unscaled
+    TML Features feats[..., 1:], float32, range from ~-3 to ~ + 3 
+    TML prediction feats[..., 0], float32, range from 0-1 (deploy feats will be 0-100)
+    '''
+
+    assert s1.dtype == np.float32
+    assert s2.dtype == np.float32
+    assert feats.dtype == np.float32
+    assert dem.dtype == np.float32
+
+    assert np.logical_and(s1.min() >= 0, s1.max() <= 1)
+    assert np.logical_and(s2.min() >= 0, s2.max() <= 1)
+
+    # if drop prob is True there should be no feature selection
+    if drop_prob:
+        assert len(feature_select) < 1
+
+    # if there is no drop prob and no feature selection, assert...
+    if not drop_prob and len(feature_select) < 1:
+        assert np.logical_and(feats[..., 1:].min() >= -32.768, feats[..., 1:].max() <= 32.768), print(feats[..., 1:].min(), feats[..., 1:].max())
+        assert np.logical_and(feats[..., 0].min() >= 0, feats[..., 0].max() <= 1), print(feats[..., 0].min(), feats[..., 0].max())
+   
+    # TODO: enable validation when feature selection or drop prob == True
+
+
+### DEPLOYMENT ###
 # these tests happen after data is downloaded from s3
 
 def input_dtype_and_dimensions(tile_idx, local_dir):
@@ -23,20 +57,23 @@ def input_dtype_and_dimensions(tile_idx, local_dir):
     s2_10 = hkl.load(f'{folder}raw/s2_10/{tile_str}.hkl')
     s2_20 = hkl.load(f'{folder}raw/s2_20/{tile_str}.hkl')
     dem = hkl.load(f'{folder}raw/misc/dem_{tile_str}.hkl')
-    feats = hkl.load(f'{folder}raw/feats/{tile_str}_feats.hkl')
+    tml_feats = hkl.load(f'{folder}raw/feats/{tile_str}_feats.hkl')
 
     # feats will be int16
     assert s1.dtype == np.uint16
     assert s2_10.dtype == np.uint16
     assert s2_20.dtype == np.uint16
-    assert feats.dtype == np.int16 
+    assert tml_feats.dtype == np.int16 
     assert dem.dtype == '<f4'
 
     assert s1.shape[0] == 12 and s1.shape[3] == 2
     assert s2_10.shape[3] == 4
     assert s2_20.shape[3] == 6 or s2_20.shape[3] == 7 #7 indices if data mask is included
     assert len(dem.shape) == 2
-    assert feats.shape[0] == 65
+    assert tml_feats.shape[0] == 65
+
+    del s1, s2_10, s2_20, dem, tml_feats
+    gc.collect()
 
 
 
@@ -61,12 +98,15 @@ def feats_range(tile_idx, local_dir):
 
     if feats[0,...].max() == 255:
         print(f'255 values present in TML predictions')
+    
+    del feats_file, feats
+    gc.collect()
 
 
 # test pre-processing - these tests happen after pre processing
 
 
-def output_dtype_and_dimensions(s1, s2, dem, feats):
+def output_dtype_and_dimensions(s1, s2, dem):
 
     '''
     Ensures the datatype for all processed data (output of process_tile())
@@ -75,20 +115,36 @@ def output_dtype_and_dimensions(s1, s2, dem, feats):
     # as long as the workflow includes feats, otherwise feats will be a str
     assert s1.dtype == np.float32
     assert s2.dtype == np.float32
-    assert feats.dtype == np.float32
     assert dem.dtype == np.float32
 
     assert s1.shape[2] == 2
     assert s2.shape[2] == 10
     assert len(dem.shape) == 2
-    assert feats.shape[2] == 65
 
-    # middle two indices should be exactly the same for raw data (x, this_one, this_one, x)
-    assert s1.shape[0:2] == s2.shape[0:2] == dem.shape == feats.shape[0:2], print(f'Clouds:, \n'
-                                                                                f'S1: {s1.shape} \n'
-                                                                                f'S2: {s2.shape} \n'
-                                                                                f'Feats: {feats.shape} \n'
-                                                                                f'DEM: {dem.shape}')
+    # ensure array is not 0s, would indicate weird behavior
+    assert len(np.unique(s1)) > 1
+
+    # middle two indices should be exactly the same for all data (x, this_one, this_one, x)
+    assert s1.shape[0:2] == s2.shape[0:2] == dem.shape, print(f'S1: {s1.shape} \n'
+                                                              f'S2: {s2.shape} \n'
+                                                              f'DEM: {dem.shape}')
+
+def tmlfeats_dtype_and_dimensions(dem, feats, feature_select):
+    '''
+    Ensures the datatype for processed feats is float32. Ensures the 
+    dimensions for tml_feats are (x, x, 65) unless feature selection is used
+    Takes in dem to assert dims match
+    '''
+
+    assert feats.dtype == np.float32
+    assert feats.shape[0:2] == dem.shape, print(f'WARNING. Feats: {feats.shape} DEM: {dem.shape}')
+    
+    if len(feature_select) > 0:
+        assert feats.shape[2] == len(feature_select)
+    else:
+        assert feats.shape[2] == 65
+
+
 
 
 def model_inputs(arr):
@@ -99,9 +155,10 @@ def model_inputs(arr):
     assert len(arr.shape) == 2
     assert np.isfinite(arr).all()
     
-    # https://numpy.org/doc/stable/reference/generated/numpy.testing.assert_almost_equal.html 
+    # assert that the min and max are almost equal to 15 decimals
+    # assert_almost_equal(arr.min(), -1.0000000000000002, decimal=15)
+    # assert_almost_equal(arr.max(), 1.0000000000000002, decimal=15)
     #assert np.logical_and(arr.min() >= -1.0000000000000002, arr.max() <= 1.0000000000000002)
-    #print(f'Max: {arr.max()}' n\ f'Min: {arr.min()}')
 
 
 # test model outputs - these tests happen after predictions are generated
