@@ -171,7 +171,7 @@ def make_bbox(country: str, tile_idx: tuple, expansion: int = 10) -> list:
        Returns:
             bbx (list): expanded [min_x, min_y, max_x, max_y]
     """
-    bbx_df = pd.read_csv(f"data/{country}.csv")
+    bbx_df = pd.read_csv(f"data/{country}.csv", engine="pyarrow")
 
     # this will remove quotes around x and y tile indexes (not needed for all countries)
     # data['X_tile'] = data['X_tile'].str.extract('(\d+)', expand=False)
@@ -826,7 +826,7 @@ def remove_folder(tile_idx: tuple, local_dir: str):
         for file in os.listdir(folder):
             _file = folder + file
             os.remove(_file)
-    
+        
     return None
 
 
