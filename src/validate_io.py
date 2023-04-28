@@ -8,7 +8,7 @@ import gc
 ### TRAINING ###
 # these tests happen after preprocessing the raw training data
 
-def train_output_range_dtype(dem, s1, s2, feats, feature_select, drop_prob):
+def train_output_range_dtype(dem, s1, s2, feats, feature_select):
     '''
     Sentinel-1, float32, range from 0-1 (divided by 65535), unscaled decibels >-22
     Sentinel-2, float32, range from 0-1 (divided by 65535), unscaled
@@ -24,16 +24,14 @@ def train_output_range_dtype(dem, s1, s2, feats, feature_select, drop_prob):
     assert np.logical_and(s1.min() >= 0, s1.max() <= 1)
     assert np.logical_and(s2.min() >= 0, s2.max() <= 1)
 
-    # if drop prob is True there should be no feature selection
-    if drop_prob:
-        assert len(feature_select) < 1
 
-    # if there is no drop prob and no feature selection, assert...
-    if not drop_prob and len(feature_select) < 1:
-        assert np.logical_and(feats[..., 1:].min() >= -32.768, feats[..., 1:].max() <= 32.768), print(feats[..., 1:].min(), feats[..., 1:].max())
+    # if there is no feature selection, assert feats meet logic
+    # this only checks ttc feats and not txt feats
+    if len(feature_select) < 1:
+        assert np.logical_and(feats[..., 1:65].min() >= -32.768, feats[..., 1:65].max() <= 32.768), print(feats[..., 1:65].min(), feats[..., 1:65].max())
         assert np.logical_and(feats[..., 0].min() >= 0, feats[..., 0].max() <= 1), print(feats[..., 0].min(), feats[..., 0].max())
    
-    # TODO: enable validation when feature selection or drop prob == True
+    # TODO: enable validation when feature selection used
 
 
 ### DEPLOYMENT ###
@@ -128,6 +126,7 @@ def output_dtype_and_dimensions(s1, s2, dem):
     assert s1.shape[0:2] == s2.shape[0:2] == dem.shape, print(f'S1: {s1.shape} \n'
                                                               f'S2: {s2.shape} \n'
                                                               f'DEM: {dem.shape}')
+
 
 def tmlfeats_dtype_and_dimensions(dem, feats, feature_select):
     '''
