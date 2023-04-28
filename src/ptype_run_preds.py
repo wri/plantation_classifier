@@ -104,7 +104,11 @@ def fit_eval_classifier(X_train, X_test, y_train, y_test, model_name, v_train_da
     
     elif model_name == 'cat':
         # import param dist here
-        model = CatBoostClassifier(verbose=0, random_state=22)
+        print('Computing class weights...')
+        classes = np.unique(y_train)
+        weights = compute_class_weight(class_weight='balanced', classes=classes, y=y_train)
+        class_weights = dict(zip(classes, weights))
+        model = CatBoostClassifier(verbose=0, random_state=22, class_weights=class_weights)
         model.fit(X_train, y_train)
     
     # save trained model
@@ -153,7 +157,7 @@ def fit_eval_classifier(X_train, X_test, y_train, y_test, model_name, v_train_da
 
 
 
-def fit_eval_multiclassifier(X_train, X_test, y_train, y_test, model_name, v_train_data):
+def fit_eval_multiclassifier(X_train, X_test, y_train, y_test, model_name, v_train_data, depth=8, l2_leaf=11, itera=1100, learn_rate=0.03):
     
     '''
     Fits and evaluates a CatBoost multi-classification (3 class) model
@@ -163,6 +167,7 @@ def fit_eval_multiclassifier(X_train, X_test, y_train, y_test, model_name, v_tra
     feat_count = X_train.shape[1] - 13
 
     # estimates the class weights for unbalanced datsets
+    print('REMINDER: hyperparams are hard coded.')
     classes = np.unique(y_train)
     weights = compute_class_weight(class_weight='balanced', classes=classes, y=y_train)
     class_weights = dict(zip(classes, weights))
@@ -172,7 +177,11 @@ def fit_eval_multiclassifier(X_train, X_test, y_train, y_test, model_name, v_tra
     model = CatBoostClassifier(verbose=0, 
                               loss_function='MultiClass',
                               class_weights=class_weights,
-                              random_state=22)
+                              random_state=22,
+                              depth=depth, 
+                               l2_leaf_reg=l2_leaf, 
+                               iterations=itera, 
+                               learning_rate=learn_rate)
     
     model.fit(X_train, y_train)
     
@@ -220,7 +229,7 @@ def fit_eval_multiclassifier(X_train, X_test, y_train, y_test, model_name, v_tra
     
     return y_test, pred, probs, probs_pos
 
-def fit_eval_catboost(X_train, X_test, y_train, y_test, v_train_data, depth=10, l2_leaf=11, itera=1100, learn_rate=0.02):
+def fit_eval_catboost(X_train, X_test, y_train, y_test, v_train_data, depth=8, l2_leaf=11, itera=1100, learn_rate=0.03):
     
     '''
     Based on arguments provided, fits and evaluates a catboost classification 
@@ -235,12 +244,18 @@ def fit_eval_catboost(X_train, X_test, y_train, y_test, v_train_data, depth=10, 
     # Get the count of features used
     feat_count = X_train.shape[1] - 13
 
+    print('Computing class weights...')
+    classes = np.unique(y_train)
+    weights = compute_class_weight(class_weight='balanced', classes=classes, y=y_train)
+    class_weights = dict(zip(classes, weights))
+
     model = CatBoostClassifier(verbose=0, 
                                random_state=22, 
                                depth=depth, 
                                l2_leaf_reg=l2_leaf, 
                                iterations=itera, 
-                               learning_rate=learn_rate)
+                               learning_rate=learn_rate,
+                               class_weights=class_weights)
     
     model.fit(X_train, y_train)
     
