@@ -80,7 +80,7 @@ def fast_glcm(img, vmin=0, vmax=255, levels=256, kernel_size=5, distance=1.0, an
     glcm = glcm.astype(np.float32)
     return glcm
 
-
+@timer
 def fast_glcm_contrast(img, vmin=0, vmax=255, levels=256, ks=5, distance=1.0, angle=0.0):
     '''
     calc glcm contrast
@@ -99,7 +99,7 @@ def fast_glcm_contrast(img, vmin=0, vmax=255, levels=256, ks=5, distance=1.0, an
 
     return cont_crp
 
-
+@timer
 def fast_glcm_dissimilarity(img, vmin=0, vmax=255, levels=256, ks=5, distance=1.0, angle=0.0):
     '''
     calc glcm dissimilarity
@@ -118,7 +118,7 @@ def fast_glcm_dissimilarity(img, vmin=0, vmax=255, levels=256, ks=5, distance=1.
 
     return diss_crp
 
-
+@timer
 def fast_glcm_homogeneity(img, vmin=0, vmax=255, levels=256, ks=5, distance=1.0, angle=0.0):
     '''
     calc glcm homogeneity
@@ -137,7 +137,7 @@ def fast_glcm_homogeneity(img, vmin=0, vmax=255, levels=256, ks=5, distance=1.0,
 
     return homo_crp
 
-
+@timer
 def fast_glcm_correlation(img, vmin=0, vmax=255, levels=256, ks=5, distance=1.0, angle=0.0):
     '''
     calc glcm correlation
@@ -205,10 +205,11 @@ def fast_glcm_train(img):
 
     return output.astype(np.float32)
 
-@timer
 def fast_glcm_deply(img):
     '''
-    Exact texture properties will be determined
+    TODO: bands and texture properties shouldnt be hard coded
+    so it's easier to change or select a specific band and 
+    texture.
     '''
 
     blue = img[..., 0]
