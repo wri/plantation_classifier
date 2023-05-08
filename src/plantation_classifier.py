@@ -21,6 +21,8 @@ from datetime import datetime
 from scipy import ndimage
 from skimage.util import img_as_ubyte
 import gc
+from memory_profiler import profile
+import copy
 
 ## import other scripts
 import sys
@@ -29,7 +31,8 @@ import interpolation
 import cloud_removal
 import mosaic
 import validate_io as validate
-# import texture_veg_indices as txt
+import slow_glcm as slow_txt
+import fast_glcm as fast_txt
 
 with open("config.yaml", 'r') as stream:
     document = (yaml.safe_load(stream))
@@ -294,66 +297,6 @@ def adjust_shape(arr: np.ndarray, width: int, height: int) -> np.ndarray:
 
     return arr.squeeze()
 
-def process_tml_feats(tile_idx: tuple, local_path: str, feats: bool, feature_select:list) -> np.ndarray:
-    '''
-    Transforms the feats with shape (65, x, x) extracted from the TML model 
-    (in temp/raw/tile_feats..) to processed data structure
-        - scale tree prediction (feats[0]) between 0-1 to match the training
-          pipeline 
-        - roll the axis to adjust shape
-        - swap high and low level feats to match training pipeline
-        - filter to selected feats if feature_select param > 0
-        - creates no data and no tree flags for masking predictions
-    '''
-
-    x = tile_idx[0]
-    y = tile_idx[1]
-
-    folder = f"{local_path}/{str(x)}/{str(y)}/"
-    tile_str = f'{str(x)}X{str(y)}Y'
-
-    # load and prep features here
-    if feats:
-        feats_file = f'{folder}raw/feats/{tile_str}_feats.hkl'
-        feats_raw = hkl.load(feats_file).astype(np.float32)
-    
-        # adjust TML predictions feats[0] to match training data (0-1)
-        # adjust shape by rolling axis (65, 614, 618) ->  (618, 614, 65) 
-        # feats used for deply are multiplyed by 1000 before saving
-        feats_raw[0, ...] = feats_raw[0, ...] / 100 
-        feats_raw[1:, ...] = feats_raw[1:, ...] / 1000  
-        feats_rolled = np.rollaxis(feats_raw, 0, 3)
-        feats_rolled = np.rollaxis(feats_rolled, 0, 2)
-        
-        # now switch the feats
-        feats_ = feats_rolled.copy()
-
-        high_feats = [np.arange(1,33)]
-        low_feats = [np.arange(33,65)]
-
-        feats_[:, :, [low_feats]] = feats_rolled[:, :, [high_feats]]
-        feats_[:, :, [high_feats]] = feats_rolled[:, :, [low_feats]]
-
-        # create no data and no tree flag (boolean mask)
-        # where TML probability is 255 or 0, pass along to preds
-        # note that the feats shape is (x, x, 65)
-        no_data_flag = feats_[...,0] == 255.
-        no_tree_flag = feats_[...,0] == 0.
-
-        # if only using select feats, filter to those
-        if len(feature_select) > 0:
-            feats_ = np.squeeze(feats_[:, :, [feature_select]])
-
-    # in case we are doing a no feats analysis
-    # remove this else statement once pipeline updated to feat only 
-    else:
-        feats_ = []
-
-    del feats_raw, feats_rolled, high_feats, low_feats
-    gc.collect()
-
-    return feats_, no_data_flag, no_tree_flag
-
 def process_tile(tile_idx: tuple, local_path: str, bbx: list, verbose: bool = False, make_shadow: bool = True) -> np.ndarray:
     """
     Transforms raw data structure (in temp/raw/*) to processed data structure
@@ -559,17 +502,74 @@ def process_tile(tile_idx: tuple, local_path: str, bbx: list, verbose: bool = Fa
     sentinel2 = np.clip(sentinel2, 0, 1)
 
     # switch from monthly to annual median
-    s1 = np.median(s1, axis = 0)
-    s2 = np.median(sentinel2, axis = 0)
+    s1 = np.median(s1, axis = 0, overwrite_input=True)
+    s2 = np.median(sentinel2, axis = 0, overwrite_input=True)
 
-    del s2_10, s2_20, sentinel2, image_dates, clouds
-    gc.collect()
+    del s2_10, s2_20, sentinel2, image_dates, clouds, missing_px, interp
 
     # removing return of image_dates, interp, cloudshad as not used
     return s2, s1, dem
 
+def process_ttc(tile_idx: tuple, local_path: str, incl_feats: bool, feature_select:list) -> np.ndarray:
+    '''
+    Transforms the feats with shape (65, x, x) extracted from the TML model 
+    (in temp/raw/tile_feats..) to processed data structure
+        - scale tree prediction (feats[0]) between 0-1 to match the training
+          pipeline 
+        - roll the axis to adjust shape
+        - swap high and low level feats to match training pipeline
+        - filter to selected feats if feature_select param > 0
+        - creates no data and no tree flags for masking predictions
+    '''
 
-def process_txt_feats(s2):
+    x = tile_idx[0]
+    y = tile_idx[1]
+
+    folder = f"{local_path}/{str(x)}/{str(y)}/"
+    tile_str = f'{str(x)}X{str(y)}Y'
+
+    # load and prep features here
+    if incl_feats:
+        feats_file = f'{folder}raw/feats/{tile_str}_feats.hkl'
+        feats_raw = hkl.load(feats_file).astype(np.float32)
+    
+        # adjust TML predictions feats[0] to match training data (0-1)
+        # adjust shape by rolling axis 2x (65, 614, 618) ->  (618, 614, 65) 
+        # feats used for deply are multiplyed by 1000 before saving
+        feats_raw[0, ...] = feats_raw[0, ...] / 100 
+        feats_raw[1:, ...] = feats_raw[1:, ...] / 1000  
+        feats_rolled = np.rollaxis(feats_raw, 0, 3)
+        feats_rolled = np.rollaxis(feats_rolled, 0, 2)
+        
+        # now switch the feats
+        feats_ = copy.deepcopy(feats_rolled)
+
+        high_feats = [np.arange(1,33)]
+        low_feats = [np.arange(33,65)]
+
+        feats_[:, :, [low_feats]] = feats_rolled[:, :, [high_feats]]
+        feats_[:, :, [high_feats]] = feats_rolled[:, :, [low_feats]]
+
+        # create no data and no tree flag (boolean mask)
+        # where TML probability is 255 or 0, pass along to preds
+        # note that the feats shape is (x, x, 65)
+        no_data_flag = feats_[...,0] == 255.
+        no_tree_flag = feats_[...,0] == 0.
+
+        # if only using select feats, filter to those
+        if len(feature_select) > 0:
+            feats_ = np.squeeze(feats_[:, :, [feature_select]])
+
+    # in case we are doing a no feats analysis
+    # remove this else statement once pipeline updated to feat only 
+    else:
+        feats_ = []
+
+    del feats_raw, feats_rolled, high_feats, low_feats
+
+    return feats_, no_data_flag, no_tree_flag
+
+def glcm_slow(s2):
     
     '''
     Takes in a (x, x, 10) s2 array and performs texture analysis
@@ -583,23 +583,206 @@ def process_txt_feats(s2):
     green = s2[..., 1]
     red = s2[..., 2]
     nir = s2[..., 3]
-    output = np.zeros((14, 14, 16))
+    output = np.zeros((14, 14, 16), dtype=np.float32)
     
     print('Calculating GLCM textures for blue band...')
-    output[..., 0:4] = txt.extract_texture(blue)
+    output[..., 0:4] = slow_txt.extract_texture(blue)
     print('Calculating GLCM textures for green band...')
-    output[..., 4:8] = txt.extract_texture(green)
+    output[..., 4:8] = slow_txt.extract_texture(green)
     print('Calculating GLCM textures for red band...')
-    output[..., 8:12] = txt.extract_texture(red)
+    output[..., 8:12] = slow_txt.extract_texture(red)
     print('Calculating GLCM textures for nir band...')
-    output[..., 12:16] = txt.extract_texture(nir)
+    output[..., 12:16] = slow_txt.extract_texture(nir)
 
     return output.astype(np.float32)
 
+@timer
+def process_feats_fast(tile_idx: tuple, local_path: str, incl_feats: bool, feature_select:list, s2, upload_txt:bool) -> np.ndarray:
+    '''
+    Transforms the feats with shape (65, x, x) extracted from the TML model 
+    (in temp/raw/tile_feats..) to processed data structure
+        - scale tree prediction (feats[0]) between 0-1 to match the training
+          pipeline 
+        - roll the axis to adjust shape
+        - swap high and low level feats to match training pipeline
+        - filter to selected feats if feature_select param > 0
+        - creates no data and no tree flags for masking predictions
+
+    Import txt features if upload_txt is True, otherwise calculates txt properties with
+    fast_glcm implementation.
+
+    Combines ttc features THEN txt features in output array. Applies feature selection to 
+    only ttc features
+    '''
+    
+    x = tile_idx[0]
+    y = tile_idx[1]
+
+    folder = f"{local_path}/{str(x)}/{str(y)}/"
+    tile_str = f'{str(x)}X{str(y)}Y'
+    
+    # output shape will match s2 array num of ttc features + 10 txt features
+    n_feats = len(feature_select) + 10
+    output = np.zeros((s2.shape[0], s2.shape[1], n_feats), dtype=np.float32)
+    print(f'output shape is {output.shape}')
+
+    # load and prep features here
+    if incl_feats:
+        feats_file = f'{folder}raw/feats/{tile_str}_feats.hkl'
+        feats_raw = hkl.load(feats_file).astype(np.float32)
+    
+        # adjust TML predictions feats[0] to match training data (0-1)
+        # adjust shape by rolling axis 2x (65, 614, 618) ->  (618, 614, 65) 
+        # feats used for deply are multiplyed by 1000 before saving
+        feats_raw[0, ...] = feats_raw[0, ...] / 100 
+        feats_raw[1:, ...] = feats_raw[1:, ...] / 1000  
+        feats_rolled = np.rollaxis(feats_raw, 0, 3)
+        feats_rolled = np.rollaxis(feats_rolled, 0, 2)
+        
+        # now switch the feats
+        ttc = copy.deepcopy(feats_rolled)
+
+        high_feats = [np.arange(1,33)]
+        low_feats = [np.arange(33,65)]
+
+        ttc[:, :, [low_feats]] = feats_rolled[:, :, [high_feats]]
+        ttc[:, :, [high_feats]] = feats_rolled[:, :, [low_feats]]
+
+        # create no data and no tree flag (boolean mask)
+        # where TML probability is 255 or 0, pass along to preds
+        # note that the feats shape is (x, x, 65)
+        no_data_flag = ttc[...,0] == 255.
+        no_tree_flag = ttc[...,0] == 0.
+
+        # apply feature selection to ttc feats 
+        if len(feature_select) > 0:
+            ttc = np.squeeze(ttc[:, :, [feature_select]])
+            print(f'ttc shape is {ttc.shape}')
+
+    # in case we are doing a no feats analysis
+    # remove this else statement once pipeline updated to feat only 
+    else:
+        ttc = []
+
+    # import txt features if available, otherwise calc them
+    if upload_txt:
+        txt = np.load(f'{folder}raw/feats/{tile_str}_txt_fast.npy')
+
+    else:
+        print('Calculating texture features.')
+
+        # convert float32 to uint8
+        s2 = img_as_ubyte(s2)
+        assert s2.dtype == np.uint8, print(s2.dtype)
+        
+        # shape is (14, 14, 10)
+        txt = fast_txt.fast_glcm_deply(s2)
+
+        # save glcm texture properties in case
+        np.save(f'{folder}raw/feats/{tile_str}_txt_fast.npy', txt)
+
+    
+    output[..., :ttc.shape[-1]] = ttc
+    output[..., ttc.shape[-1]:] = txt
+
+    del feats_raw, feats_rolled, high_feats, low_feats, ttc, txt
+
+    return output, no_data_flag, no_tree_flag
+
+
+@timer
+def process_feats_slow(tile_idx: tuple, local_path: str, incl_feats: bool, feature_select:list, s2, upload_txt) -> np.ndarray:
+    '''
+    Transforms the feats with shape (65, x, x) extracted from the TML model 
+    (in temp/raw/tile_feats..) to processed data structure
+        - scale tree prediction (feats[0]) between 0-1 to match the training
+          pipeline 
+        - roll the axis to adjust shape
+        - swap high and low level feats to match training pipeline
+        - filter to selected feats if feature_select param > 0
+        - creates no data and no tree flags for masking predictions
+    '''
+    
+    x = tile_idx[0]
+    y = tile_idx[1]
+
+    folder = f"{local_path}/{str(x)}/{str(y)}/"
+    tile_str = f'{str(x)}X{str(y)}Y'
+    
+    # output shape will match s2 array ttc feats and 5 txt feats
+    n_feats = len(feature_select) + 5
+    output = np.zeros((s2.shape[0], s2.shape[1], n_feats), dtype=np.float32)
+    print(f'output shape is {output.shape}')
+
+    # load and prep features here
+    if incl_feats:
+        feats_file = f'{folder}raw/feats/{tile_str}_feats.hkl'
+        feats_raw = hkl.load(feats_file).astype(np.float32)
+    
+        # adjust TML predictions feats[0] to match training data (0-1)
+        # adjust shape by rolling axis 2x (65, 614, 618) ->  (618, 614, 65) 
+        # feats used for deply are multiplyed by 1000 before saving
+        feats_raw[0, ...] = feats_raw[0, ...] / 100 
+        feats_raw[1:, ...] = feats_raw[1:, ...] / 1000  
+        feats_rolled = np.rollaxis(feats_raw, 0, 3)
+        feats_rolled = np.rollaxis(feats_rolled, 0, 2)
+        
+        # now switch the feats
+        ttc = copy.deepcopy(feats_rolled)
+
+        high_feats = [np.arange(1,33)]
+        low_feats = [np.arange(33,65)]
+
+        ttc[:, :, [low_feats]] = feats_rolled[:, :, [high_feats]]
+        ttc[:, :, [high_feats]] = feats_rolled[:, :, [low_feats]]
+
+        # create no data and no tree flag (boolean mask)
+        # where TML probability is 255 or 0, pass along to preds
+        # note that the feats shape is (x, x, 65)
+        no_data_flag = ttc[...,0] == 255.
+        no_tree_flag = ttc[...,0] == 0.
+
+        # apply feature selection to ttc feats 
+        if len(feature_select) > 0:
+            ttc = np.squeeze(ttc[:, :, [feature_select]])
+            print(f'ttc shape is {ttc.shape}')
+
+    # in case we are doing a no feats analysis
+    # remove this else statement once pipeline updated to feat only 
+    else:
+        ttc = []
+
+    # import txt features if available, otherwise calc them
+    if upload_txt:
+        txt = np.load(f'{folder}raw/feats/{tile_str}_texture.npy')
+
+    else:
+        print('Calculating texture features.')
+        s2 = img_as_ubyte(s2)
+        # assert s2.dtype == np.uint8, print(s2.dtype)
+        # print(f's2 shape: {s2.shape}, output shape: {output.shape}')
+        
+        red = s2[..., 2]
+        nir = s2[..., 3]
+        print('Calculating select GLCM textures for red band...')
+        output[..., 0:3] = slow_txt.deply_extract_texture(red, ['correlation', 'homogeneity', 'contrast'])
+        print('Calculating select GLCM textures for nir band...')
+        output[..., 3:5] = slow_txt.deply_extract_texture(nir, ['dissimilarity', 'contrast'])
+
+        # save glcm texture properties in case
+        np.save(f'{folder}raw/feats/{tile_str}_texture.npy', output[...,:5])
+
+    
+    output[..., :n_feats-5] = ttc
+    output[..., n_feats-5:] = txt
+
+    del feats_raw, feats_rolled, high_feats, low_feats, ttc
+
+    return output, no_data_flag, no_tree_flag
 
 ## Step 3: Combine raw data into a sample for input into the model 
 
-def make_sample(dem: np.array, s1: np.array, s2: np.array, tml_feats: np.array):
+def make_sample(dem: np.array, s1: np.array, s2: np.array, feats: np.array):
     
     ''' 
     Takes processed data, defines dimensions for the sample, then 
@@ -607,7 +790,7 @@ def make_sample(dem: np.array, s1: np.array, s2: np.array, tml_feats: np.array):
     '''
 
     # define number of features in the sample
-    n_feats = 1 + s1.shape[-1] + s2.shape[-1] + tml_feats.shape[-1] #+ txt_feats.shape[-1]
+    n_feats = 1 + s1.shape[-1] + s2.shape[-1] + feats.shape[-1] 
 
     # Create the empty array using shape of inputs
     sample = np.zeros((dem.shape[0], dem.shape[1], n_feats), dtype=np.float32)
@@ -616,8 +799,7 @@ def make_sample(dem: np.array, s1: np.array, s2: np.array, tml_feats: np.array):
     sample[..., 0] = dem
     sample[..., 1:3] = s1
     sample[..., 3:13] = s2
-    sample[..., 13:] = tml_feats
-    # sample[..., 78:] = txt_feats
+    sample[..., 13:] = feats
 
     # save dims for future use
     arr_dims = (sample.shape[0], sample.shape[1])
@@ -760,7 +942,6 @@ def post_process_tile(arr: np.array, feature_select: list, no_data_flag: np.arra
             arr[Zlabeled == label] = 0
     
     del Zlabeled, Nlabels, label_size
-    gc.collect()
 
     return arr
 
@@ -804,9 +985,7 @@ def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, suffix 
     new_dataset.write(arr, 1)
     new_dataset.close()
     
-    del arr
-    del new_dataset
-    gc.collect()
+    del arr, new_dataset
 
     return None
 
@@ -829,77 +1008,48 @@ def remove_folder(tile_idx: tuple, local_dir: str):
         
     return None
 
-
-# Execute steps
-@timer
-def execute(country: str, model: str, verbose: bool, feats: bool, feature_select: list):
-    '''
-    Executes all preprocessing, modeling and postprocessing steps in the pipeline
-    according to the supplied model and country.
-    '''
+def execute_per_tile(tile_idx: tuple, country: str, model, verbose: bool, incl_feats: bool, feature_select: list):
+    
+    print(f'Processing tile: {tile_idx}')
     local_dir = 'tmp/' + country
+    successful = download_raw_tile(tile_idx, local_dir, aak, ask)
 
-    tiles_to_process = download_tile_ids(country, aak, ask)[:330]
-    tile_count = len(tiles_to_process)
-    counter = 0
+    if successful:
+        validate.input_dtype_and_dimensions(tile_idx, local_dir)
+        validate.feats_range(tile_idx, local_dir)
+        bbx = make_bbox(country, tile_idx)
+        s2_proc, s1_proc, dem_proc = process_tile(tile_idx, local_dir, bbx, verbose)
+        validate.output_dtype_and_dimensions(s1_proc, s2_proc, dem_proc)
 
-    # load specified model
-    with open(f'models/{model}.pkl', 'rb') as file:  
-        pretrained_model = pickle.load(file)
+        # feats option will be removed in the future
+        if incl_feats:
+            feats, no_data_flag, no_tree_flag = process_feats_fast(tile_idx, local_dir, incl_feats, feature_select, s2_proc, upload_txt=False)
+            #tml_feats, no_data_flag, no_tree_flag = process_ttc(tile_idx, local_dir, incl_feats, feature_select)
+            #validate.tmlfeats_dtype_and_dimensions(dem_proc, feats, feature_select)
+            #txt_feats = process_txt_feats_select(s2_proc)
+            # sample, sample_dims = make_sample(dem_proc, s1_proc, s2_proc, tml_feats, txt_feats)
+            sample, sample_dims = make_sample(dem_proc, s1_proc, s2_proc, feats)
+            sample_ss = reshape_no_scaling(sample, verbose)
+            #sample_ss = reshape_and_scale_manual('v17', sample, verbose)
 
-    print('............................................')
-    print(f'Processing {tile_count} tiles for {country}.')
-    print('............................................')
-
-    for tile_idx in tiles_to_process:
-        print(f'Processing tile: {tile_idx}')
-        counter += 1
-        successful = download_raw_tile(tile_idx, local_dir, aak, ask)
-
-        if successful:
-            validate.input_dtype_and_dimensions(tile_idx, local_dir)
-            validate.feats_range(tile_idx, local_dir)
-            bbx = make_bbox(country, tile_idx)
-            s2_proc, s1_proc, dem_proc = process_tile(tile_idx, local_dir, bbx, verbose)
-            validate.output_dtype_and_dimensions(s1_proc, s2_proc, dem_proc)
-
-            # feats option will be removed in the future
-            if feats:
-                tml_feats, no_data_flag, no_tree_flag = process_tml_feats(tile_idx, local_dir, feats, feature_select)
-                validate.tmlfeats_dtype_and_dimensions(dem_proc, tml_feats, feature_select)
-                #txt_feats = process_txt_feats(s2_proc)
-                sample, sample_dims = make_sample(dem_proc, s1_proc, s2_proc, tml_feats)
-                sample_ss = reshape_no_scaling(sample, verbose)
-                #sample_ss = reshape_and_scale_manual('v17', sample, verbose)
-    
-            else:
-                sample, sample_dims = make_sample_nofeats(dem_proc, s1_proc, s2_proc)
-                sample_ss = reshape_no_scaling(sample, verbose)
-                #sample_ss = reshape_and_scale_manual('v10', sample, verbose)
-            
-            validate.model_inputs(sample_ss)
-            preds = predict_classification(sample_ss, pretrained_model, sample_dims)
-            preds_final = post_process_tile(preds, feature_select, no_data_flag, no_tree_flag)
-
-            #validate.classification_scores(preds)
-            write_tif(preds_final, bbx, tile_idx, country, 'preds')
-            remove_folder(tile_idx, local_dir)
-
-            # clean up memory
-            del bbx, s2_proc, s1_proc, dem_proc, tml_feats, no_data_flag, no_tree_flag, sample, sample_ss, preds, preds_final
-            gc.collect()
-        
         else:
-            print(f'Raw data for {tile_idx} does not exist on s3.')
+            sample, sample_dims = make_sample_nofeats(dem_proc, s1_proc, s2_proc)
+            sample_ss = reshape_no_scaling(sample, verbose)
+            #sample_ss = reshape_and_scale_manual('v10', sample, verbose)
         
-        if counter %5 == 0:
-            print(f'{counter}/{tile_count} tiles processed...')
+        validate.model_inputs(sample_ss)
+        preds = predict_classification(sample_ss, model, sample_dims)
+        preds_final = post_process_tile(preds, feature_select, no_data_flag, no_tree_flag)
+
+        #validate.classification_scores(preds)
+        write_tif(preds_final, bbx, tile_idx, country, 'preds')
+        #remove_folder(tile_idx, local_dir)
+
+        # clean up memory
+        del bbx, s2_proc, s1_proc, dem_proc, feats, no_data_flag, no_tree_flag, sample, sample_ss, preds, preds_final
     
-    # for now mosaic and upload to s3 bucket
-    mosaic.mosaic_tif(country, model, compile_from='csv')
-    mosaic.upload_mosaic(country, model, aak, ask)
-    
-   
+    else:
+        print(f'Raw data for {tile_idx} does not exist on s3.')
 
     return None
 
@@ -913,10 +1063,112 @@ if __name__ == '__main__':
     parser.add_argument('--country', dest='country', type=str)
     parser.add_argument('--model', dest='model', type=str)
     parser.add_argument('--verbose', dest='verbose', default=False, type=bool) 
-    parser.add_argument('--feats', dest='feats', default=True, type=bool) 
+    parser.add_argument('--incl_feats', dest='incl_feats', default=True, type=bool) 
     parser.add_argument('--feature_select', dest='feature_select', nargs='*', type=int) 
 
 
     args = parser.parse_args()
     
-    execute(args.country, args.model, args.verbose, args.feats, args.feature_select)
+    #execute(args.country, args.model, args.verbose, args.feats, args.feature_select)
+
+    tiles_to_process = download_tile_ids(args.country, aak, ask)[:4]
+    tile_count = len(tiles_to_process)
+    counter = 0
+
+    # load specified model
+    with open(f'models/{args.model}.pkl', 'rb') as file:  
+        loaded_model = pickle.load(file)
+
+    print('............................................')
+    print(f'Processing {tile_count} tiles for {args.country}.')
+    print('............................................')
+
+    for tile_idx in tiles_to_process:
+        counter += 1
+        execute_per_tile(tile_idx, country=args.country, model=loaded_model, verbose=args.verbose, incl_feats=args.incl_feats, feature_select=args.feature_select)
+
+        if counter % 5 == 0:
+            print(f'{counter}/{tile_count} tiles processed...')
+    
+    # for now mosaic and upload to s3 bucket
+    mosaic.mosaic_tif(args.country, args.model, compile_from='csv')
+    #mosaic.upload_mosaic(args.country, args.model, aak, ask)
+    
+
+
+
+
+
+
+    # Execute steps
+#@timer
+# def execute(country: str, model: str, verbose: bool, feats: bool, feature_select: list):
+#     '''
+#     Executes all preprocessing, modeling and postprocessing steps in the pipeline
+#     according to the supplied model and country.
+#     '''
+#     local_dir = 'tmp/' + country
+
+#     tiles_to_process = download_tile_ids(country, aak, ask)[:330]
+#     tile_count = len(tiles_to_process)
+#     counter = 0
+
+#     # load specified model
+#     with open(f'models/{model}.pkl', 'rb') as file:  
+#         loaded_model = pickle.load(file)
+
+#     print('............................................')
+#     print(f'Processing {tile_count} tiles for {country}.')
+#     print('............................................')
+
+#     for tile_idx in tiles_to_process:
+#         print(f'Processing tile: {tile_idx}')
+#         counter += 1
+#         successful = download_raw_tile(tile_idx, local_dir, aak, ask)
+
+#         if successful:
+#             validate.input_dtype_and_dimensions(tile_idx, local_dir)
+#             validate.feats_range(tile_idx, local_dir)
+#             bbx = make_bbox(country, tile_idx)
+#             s2_proc, s1_proc, dem_proc = process_tile(tile_idx, local_dir, bbx, verbose)
+#             validate.output_dtype_and_dimensions(s1_proc, s2_proc, dem_proc)
+
+#             # feats option will be removed in the future
+#             if feats:
+#                 tml_feats, no_data_flag, no_tree_flag = process_ttc(tile_idx, local_dir, feats, feature_select)
+#                 validate.tmlfeats_dtype_and_dimensions(dem_proc, tml_feats, feature_select)
+#                 #txt_feats = process_txt_feats(s2_proc)
+#                 sample, sample_dims = make_sample(dem_proc, s1_proc, s2_proc, tml_feats)
+#                 sample_ss = reshape_no_scaling(sample, verbose)
+#                 #sample_ss = reshape_and_scale_manual('v17', sample, verbose)
+    
+#             else:
+#                 sample, sample_dims = make_sample_nofeats(dem_proc, s1_proc, s2_proc)
+#                 sample_ss = reshape_no_scaling(sample, verbose)
+#                 #sample_ss = reshape_and_scale_manual('v10', sample, verbose) 
+            
+#             validate.model_inputs(sample_ss)
+#             preds = predict_classification(sample_ss, loaded_model, sample_dims)
+#             preds_final = post_process_tile(preds, feature_select, no_data_flag, no_tree_flag)
+
+#             #validate.classification_scores(preds)
+#             write_tif(preds_final, bbx, tile_idx, country, 'preds')
+#             remove_folder(tile_idx, local_dir)
+
+#             # clean up memory
+#             del bbx, s2_proc, s1_proc, dem_proc, tml_feats, no_data_flag, no_tree_flag, sample, sample_ss, preds, preds_final
+#             gc.collect()
+        
+#         else:
+#             print(f'Raw data for {tile_idx} does not exist on s3.')
+        
+#         if counter %5 == 0:
+#             print(f'{counter}/{tile_count} tiles processed...')
+    
+#     # for now mosaic and upload to s3 bucket
+#     mosaic.mosaic_tif(country, model, compile_from='csv')
+#     mosaic.upload_mosaic(country, model, aak, ask)
+    
+   
+
+#     return None
