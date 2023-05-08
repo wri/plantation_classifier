@@ -3,13 +3,29 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
-
+import functools
+from datetime import datetime
 
 
 ### CODE ADAPTED FROM https://github.com/tzm030329/GLCM/blob/master/fast_glcm.py
 ### Credit to Taka Izumi
 
-def fast_glcm(img, vmin=0, vmax=255, levels=8, kernel_size=5, distance=1.0, angle=0.0):
+def timer(func):
+    '''
+    Prints the runtime of the decorated function.
+    '''
+    
+    @functools.wraps(func)
+    def wrapper_timer(*args, **kwargs):
+        start = datetime.now() 
+        value = func(*args, **kwargs)
+        end = datetime.now() 
+        run_time = end - start
+        print(f'Completed {func.__name__!r} in {run_time}.')
+        return value
+    return wrapper_timer
+
+def fast_glcm(img, vmin=0, vmax=255, levels=256, kernel_size=5, distance=1.0, angle=0.0):
     '''
     Parameters
     ----------
@@ -65,7 +81,7 @@ def fast_glcm(img, vmin=0, vmax=255, levels=8, kernel_size=5, distance=1.0, angl
     return glcm
 
 
-def fast_glcm_contrast(img, vmin=0, vmax=255, levels=8, ks=5, distance=1.0, angle=0.0):
+def fast_glcm_contrast(img, vmin=0, vmax=255, levels=256, ks=5, distance=1.0, angle=0.0):
     '''
     calc glcm contrast
     '''
@@ -84,7 +100,7 @@ def fast_glcm_contrast(img, vmin=0, vmax=255, levels=8, ks=5, distance=1.0, angl
     return cont_crp
 
 
-def fast_glcm_dissimilarity(img, vmin=0, vmax=255, levels=8, ks=5, distance=1.0, angle=0.0):
+def fast_glcm_dissimilarity(img, vmin=0, vmax=255, levels=256, ks=5, distance=1.0, angle=0.0):
     '''
     calc glcm dissimilarity
     '''
@@ -103,7 +119,7 @@ def fast_glcm_dissimilarity(img, vmin=0, vmax=255, levels=8, ks=5, distance=1.0,
     return diss_crp
 
 
-def fast_glcm_homogeneity(img, vmin=0, vmax=255, levels=8, ks=5, distance=1.0, angle=0.0):
+def fast_glcm_homogeneity(img, vmin=0, vmax=255, levels=256, ks=5, distance=1.0, angle=0.0):
     '''
     calc glcm homogeneity
     '''
@@ -122,7 +138,7 @@ def fast_glcm_homogeneity(img, vmin=0, vmax=255, levels=8, ks=5, distance=1.0, a
     return homo_crp
 
 
-def fast_glcm_correlation(img, vmin=0, vmax=255, levels=8, ks=5, distance=1.0, angle=0.0):
+def fast_glcm_correlation(img, vmin=0, vmax=255, levels=256, ks=5, distance=1.0, angle=0.0):
     '''
     calc glcm correlation
     '''
@@ -159,7 +175,6 @@ def fast_glcm_correlation(img, vmin=0, vmax=255, levels=8, ks=5, distance=1.0, a
 
     return corr_crp
 
-
 def fast_glcm_train(img):
 
     blue = img[..., 0]
@@ -168,32 +183,56 @@ def fast_glcm_train(img):
     nir = img[..., 3]
     output = np.zeros((14, 14, 16))
 
-    output[...,0] = fast_glcm_dissimilarity(blue)
-    output[...,1] = fast_glcm_correlation(blue)
-    output[...,2] = fast_glcm_homogeneity(blue)
-    output[...,3] = fast_glcm_contrast(blue)
+    output[...,0:1] = fast_glcm_dissimilarity(blue)
+    output[...,1:2] = fast_glcm_correlation(blue)
+    output[...,2:3] = fast_glcm_homogeneity(blue)
+    output[...,3:4] = fast_glcm_contrast(blue)
 
-    output[...,4] = fast_glcm_dissimilarity(green)
-    output[...,5] = fast_glcm_correlation(green)
-    output[...,6] = fast_glcm_homogeneity(green)
-    output[...,7] = fast_glcm_contrast(green)
+    output[...,4:5] = fast_glcm_dissimilarity(green)
+    output[...,5:6] = fast_glcm_correlation(green)
+    output[...,6:7] = fast_glcm_homogeneity(green)
+    output[...,7:8] = fast_glcm_contrast(green)
 
-    output[...,8] = fast_glcm_dissimilarity(red)
-    output[...,9] = fast_glcm_correlation(red)
-    output[...,10] = fast_glcm_homogeneity(red)
-    output[...,11] = fast_glcm_contrast(red)
+    output[...,8:9] = fast_glcm_dissimilarity(red)
+    output[...,9:10] = fast_glcm_correlation(red)
+    output[...,10:11] = fast_glcm_homogeneity(red)
+    output[...,11:12] = fast_glcm_contrast(red)
 
-    output[...,12] = fast_glcm_dissimilarity(nir)
-    output[...,13] = fast_glcm_correlation(nir)
-    output[...,14] = fast_glcm_homogeneity(nir)
-    output[...,15] = fast_glcm_contrast(nir)
+    output[...,12:13] = fast_glcm_dissimilarity(nir)
+    output[...,13:14] = fast_glcm_correlation(nir)
+    output[...,14:15] = fast_glcm_homogeneity(nir)
+    output[...,15:16] = fast_glcm_contrast(nir)
 
-    return output
+    return output.astype(np.float32)
 
-
+@timer
 def fast_glcm_deply(img):
     '''
     Exact texture properties will be determined
     '''
 
-    return output
+    blue = img[..., 0]
+    green = img[..., 1]
+    red = img[..., 2]
+    nir = img[..., 3]
+    output = np.zeros((14, 14, 10))
+
+    print('Calculating blue band texture properties...')
+    output[...,0:1] = fast_glcm_homogeneity(blue)
+    output[...,1:2] = fast_glcm_contrast(blue)
+
+    print('Calculating green band texture properties...')
+    output[...,2:3] = fast_glcm_correlation(green)
+    output[...,3:4] = fast_glcm_contrast(green)
+
+    print('Calculating red band texture properties...')
+    output[...,4:5] = fast_glcm_correlation(red)
+    output[...,5:6] = fast_glcm_contrast(red)
+
+    print('Calculating nir band texture properties...')
+    output[...,6:7] = fast_glcm_dissimilarity(nir)
+    output[...,7:8] = fast_glcm_correlation(nir)
+    output[...,8:9] = fast_glcm_homogeneity(nir)
+    output[...,9:10] = fast_glcm_contrast(nir)
+
+    return output.astype(np.float32)
