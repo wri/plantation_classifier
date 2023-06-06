@@ -11,26 +11,26 @@ import boto3
 import glob
 import gc
 
-def mosaic_tif(country: str, model: str, compile_from: str):
+def mosaic_tif(location: list, model: str, compile_from: str):
 
     ''''
     Takes in a list of tiles and merges them to form a single tif.
     Alternatively... merges all tifs in a folder.
     '''
     
-    if not os.path.exists(f'tmp/{country}/preds/mosaic/'):
-        os.makedirs(f'tmp/{country}/preds/mosaic/')
+    if not os.path.exists(f'tmp/{location[0]}/preds/mosaic/'):
+        os.makedirs(f'tmp/{location[0]}/preds/mosaic/')
         
     # use the list of tiles to create a list of filenames
     # this will need to be updated to take in a specific list of tiles to mosaic
     tifs_to_mosaic = []
 
     if compile_from == 'csv':
-        database = pd.read_csv(f'data/{country}.csv')
+        database = pd.read_csv(f'data/{location[1]}.csv')
         tiles = database[['X_tile', 'Y_tile']].to_records(index=False)
 
         # specify here if there's a specific set of tiles to merge
-        for tile_idx in tiles[:330]:
+        for tile_idx in tiles:
             x = tile_idx[0]
             y = tile_idx[1]
             filename = f'{str(x)}X{str(y)}Y_preds.tif'
@@ -41,7 +41,7 @@ def mosaic_tif(country: str, model: str, compile_from: str):
     # filename slice specific to puntarenas -- update
     # use this in the event some tiles need to be skipped
     if compile_from == 'dir':
-        tifs = glob.glob(f'../tmp/{country}/preds/*.tif')  
+        tifs = glob.glob(f'../tmp/{location[0]}/preds/*.tif')  
         for file in tifs:
             tifs_to_mosaic.append(file[21:])
 
@@ -49,7 +49,7 @@ def mosaic_tif(country: str, model: str, compile_from: str):
     reader_mode = []
 
     for file in tifs_to_mosaic:
-        src = rs.open(f'tmp/{country}/preds/{file}')
+        src = rs.open(f'tmp/{location[0]}/preds/{file}')
         reader_mode.append(src) 
 
     print(f'Merging {len(reader_mode)} tifs.')
@@ -64,9 +64,8 @@ def mosaic_tif(country: str, model: str, compile_from: str):
 
     date = datetime.today().strftime('%Y-%m-%d')
     
-    # outpath will be the new filename
-    suffix = f'{country}_{model}_{date}.tif'
-    outpath = f'tmp/{country}/preds/mosaic/{suffix}'
+    # outpath will be the new filename 
+    outpath = f'tmp/{location[0]}/preds/mosaic/{location[1]}_{model}_{date}.tif'
     out_meta = src.meta.copy()  
     out_meta.update({'driver': "GTiff",
                      'dtype': 'uint8',
