@@ -23,6 +23,7 @@ from skimage.util import img_as_ubyte
 import gc
 from memory_profiler import profile
 import copy
+import subprocess
 
 ## import other scripts
 import sys
@@ -57,19 +58,21 @@ def timer(func):
 
 
 ## Step 1: Download raw data from s3
-def download_tile_ids(country: str, aws_access_key: str, aws_secret_key: str):
+def download_tile_ids(location: list, aws_access_key: str, aws_secret_key: str):
     '''
     Checks to see if a country csv file exists locally,
     if not downloads the file from s3 and creates
     a list of tiles for processing.
     '''
-    dest_file = f'data/{country}.csv'
-    s3_file = f'2020/databases/{country}.csv'
+
+    dest_file = f'data/{location[1]}.csv'
+    s3_file = f'2020/databases/{location[1]}.csv'
 
     # check if csv exists locally
     # confirm subdirectory exists otherwise download can fail
     if os.path.exists(dest_file):
-        print('Csv file exists locally.')
+        print(f'Csv file for {location[1]} exists locally.')
+    
     if not os.path.exists('data/'):
         os.makedirs('data/')
 
@@ -97,7 +100,7 @@ def download_tile_ids(country: str, aws_access_key: str, aws_secret_key: str):
     return tiles
 
 
-def download_folder(s3_folder: str, local_dir: str, aws_access_key: str, aws_secret_key: str):
+def download_s3(s3_folder: str, local_dir: str, aws_access_key: str, aws_secret_key: str):
     '''
     Download the contents of the tof-output + s3-folder 
     into a local folder.
@@ -120,7 +123,7 @@ def download_folder(s3_folder: str, local_dir: str, aws_access_key: str, aws_sec
     return None
 
 
-def download_raw_tile(tile_idx: tuple, local_dir: str, access_key: str, secret_key: str) -> None:
+def download_raw_tile(tile_idx: tuple, local_dir: str, access_key: str, secret_key: str, update_feats:bool) -> None:
     '''
     If data is not present locally, downloads raw data (clouds, DEM and 
     image dates, s1 and s2 (10 and 20m bands)) for the specified tile from s3. 
@@ -133,31 +136,55 @@ def download_raw_tile(tile_idx: tuple, local_dir: str, access_key: str, secret_k
     
     # state local path and s3
     path_to_tile = f'{local_dir}/{str(x)}/{str(y)}/'
-    s3_path_to_tile = f'2020/raw/{str(x)}/{str(y)}/'
+    s3_path_to_tile = f'/2020/raw/{str(x)}/{str(y)}/'
     
-    # check if feats folder exists locally
-    folder_check = os.path.exists(path_to_tile + f"raw/feats/{str(x)}X{str(y)}Y_feats.hkl")
+    # check if s1 folder exists locally
+    folder_check = os.path.exists(path_to_tile + f"raw/s1/{str(x)}X{str(y)}Y.hkl")
 
     if folder_check:
         print('Raw data exists locally.')
-        return True
     
     # if feats folder doesn't exist locally, download raw tile
     # and return True
     if not folder_check:
         print(f"Downloading data for {(x, y)}")
         try: 
-            download_folder(s3_folder = s3_path_to_tile,
-                            local_dir = path_to_tile,
-                            aws_access_key = access_key,
-                            aws_secret_key = secret_key)
-
-            return True
+            download_s3(s3_folder = s3_path_to_tile,
+                        local_dir = path_to_tile,
+                        aws_access_key = access_key,
+                        aws_secret_key = secret_key)
 
         # if the tiles do not exist on s3, catch the error and return False
         except botocore.exceptions.ClientError as e:
             if e.response['Error']['Code'] == "404":
                 return False
+    
+    # use aws cli since boto3 doesnt have sync. for sync must use directory
+    # source and endpoints to download the newest version of feats 
+    # (ignores if timestamps match)
+    if update_feats:
+        print('Updating ttc feats to most recent version.')
+        # s3_feats = f'{s3_path_to_tile}/raw/feats/{str(x)}X{str(y)}Y_feats.hkl'
+        # local_feats = f'{path_to_tile}/raw/feats/{str(x)}X{str(y)}Y_feats.hkl'
+
+        # s3 = boto3.resource('s3',
+        #             aws_access_key_id=access_key, 
+        #             aws_secret_access_key=secret_key)
+        # bucket = s3.Bucket('tof-output')
+        # bucket.download_file(s3_feats, local_feats)
+
+        #s3_feats_subprocess = f's3://tof-output/{s3_path_to_tile}/raw/feats/'
+        #local_feats_subprocess = f'{path_to_tile}/raw/feats/'
+        # result = subprocess.run(args=['/usr/local/bin/aws', 's3', 'sync', s3_feats, local_feats, '--exact-timestamps'], 
+        #                env={'AWS_ACCESS_KEY_ID': access_key,'AWS_SECRET_ACCESS_KEY': secret_key})
+        
+        # # passes successfully even though sync doesnt happen
+        # if result.returncode == 0:
+        #     print("Sync completed successfully.")
+        # else:
+        #     print("Sync failed.")
+        
+    return True
 
 
 ## Step 2: Create a cloud free composte
@@ -569,7 +596,7 @@ def process_ttc(tile_idx: tuple, local_path: str, incl_feats: bool, feature_sele
 
     return feats_, no_data_flag, no_tree_flag
 
-def glcm_slow(s2):
+def process_full_glcm_slow(s2):
     
     '''
     Takes in a (x, x, 10) s2 array and performs texture analysis
@@ -710,9 +737,10 @@ def process_feats_slow(tile_idx: tuple, local_path: str, incl_feats: bool, featu
     tile_str = f'{str(x)}X{str(y)}Y'
     
     # output shape will match s2 array ttc feats and 5 txt feats
-    n_feats = len(feature_select) + 5
+    n_feats = len(feature_select) + 8 # for catv19 we have 8 txts
+    #n_feats = 65 + 8
     output = np.zeros((s2.shape[0], s2.shape[1], n_feats), dtype=np.float32)
-    print(f'output shape is {output.shape}')
+
 
     # load and prep features here
     if incl_feats:
@@ -745,7 +773,6 @@ def process_feats_slow(tile_idx: tuple, local_path: str, incl_feats: bool, featu
         # apply feature selection to ttc feats 
         if len(feature_select) > 0:
             ttc = np.squeeze(ttc[:, :, [feature_select]])
-            print(f'ttc shape is {ttc.shape}')
 
     # in case we are doing a no feats analysis
     # remove this else statement once pipeline updated to feat only 
@@ -753,28 +780,30 @@ def process_feats_slow(tile_idx: tuple, local_path: str, incl_feats: bool, featu
         ttc = []
 
     # import txt features if available, otherwise calc them
-    if upload_txt:
-        txt = np.load(f'{folder}raw/feats/{tile_str}_texture.npy')
+    if os.path.exists(f'{folder}raw/feats/{tile_str}_txtv19.npy'):
+        print('Importing texture features.')
+        txt = np.load(f'{folder}raw/feats/{tile_str}_txtv19.npy')
 
     else:
-        print('Calculating texture features.')
         s2 = img_as_ubyte(s2)
-        # assert s2.dtype == np.uint8, print(s2.dtype)
-        # print(f's2 shape: {s2.shape}, output shape: {output.shape}')
+        assert s2.dtype == np.uint8, print(s2.dtype)
         
+        txt = np.zeros((s2.shape[0], s2.shape[1], 8), dtype=np.float32)
+        green = s2[..., 1]
         red = s2[..., 2]
         nir = s2[..., 3]
+        print('Calculating select GLCM textures for green band...')
+        txt[..., 0:4] = slow_txt.deply_extract_texture(green, ['dissimilarity', 'correlation', 'homogeneity', 'contrast'])
         print('Calculating select GLCM textures for red band...')
-        output[..., 0:3] = slow_txt.deply_extract_texture(red, ['correlation', 'homogeneity', 'contrast'])
+        txt[..., 4:5] = slow_txt.deply_extract_texture(red, ['contrast'])
         print('Calculating select GLCM textures for nir band...')
-        output[..., 3:5] = slow_txt.deply_extract_texture(nir, ['dissimilarity', 'contrast'])
+        txt[..., 5:] = slow_txt.deply_extract_texture(nir, ['dissimilarity', 'correlation', 'contrast'])
 
         # save glcm texture properties in case
-        np.save(f'{folder}raw/feats/{tile_str}_texture.npy', output[...,:5])
+        np.save(f'{folder}raw/feats/{tile_str}_txtv19.npy', txt)
 
-    
-    output[..., :n_feats-5] = ttc
-    output[..., n_feats-5:] = txt
+    output[..., :ttc.shape[-1]] = ttc
+    output[..., ttc.shape[-1]:] = txt
 
     del feats_raw, feats_rolled, high_feats, low_feats, ttc
 
@@ -1008,22 +1037,22 @@ def remove_folder(tile_idx: tuple, local_dir: str):
         
     return None
 
-def execute_per_tile(tile_idx: tuple, country: str, model, verbose: bool, incl_feats: bool, feature_select: list):
+def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, incl_feats: bool, feature_select: list):
     
     print(f'Processing tile: {tile_idx}')
-    local_dir = 'tmp/' + country
-    successful = download_raw_tile(tile_idx, local_dir, aak, ask)
+    local_dir = 'tmp/' + location[0]
+    successful = download_raw_tile(tile_idx, local_dir, aak, ask, update_feats=True)
 
     if successful:
         validate.input_dtype_and_dimensions(tile_idx, local_dir)
         validate.feats_range(tile_idx, local_dir)
-        bbx = make_bbox(country, tile_idx)
+        bbx = make_bbox(location[1], tile_idx)
         s2_proc, s1_proc, dem_proc = process_tile(tile_idx, local_dir, bbx, verbose)
         validate.output_dtype_and_dimensions(s1_proc, s2_proc, dem_proc)
 
         # feats option will be removed in the future
         if incl_feats:
-            feats, no_data_flag, no_tree_flag = process_feats_fast(tile_idx, local_dir, incl_feats, feature_select, s2_proc, upload_txt=False)
+            feats, no_data_flag, no_tree_flag = process_feats_slow(tile_idx, local_dir, incl_feats, feature_select, s2_proc, upload_txt=False)
             #tml_feats, no_data_flag, no_tree_flag = process_ttc(tile_idx, local_dir, incl_feats, feature_select)
             #validate.tmlfeats_dtype_and_dimensions(dem_proc, feats, feature_select)
             #txt_feats = process_txt_feats_select(s2_proc)
@@ -1042,7 +1071,7 @@ def execute_per_tile(tile_idx: tuple, country: str, model, verbose: bool, incl_f
         preds_final = post_process_tile(preds, feature_select, no_data_flag, no_tree_flag)
 
         #validate.classification_scores(preds)
-        write_tif(preds_final, bbx, tile_idx, country, 'preds')
+        write_tif(preds_final, bbx, tile_idx, location[0], 'preds')
         #remove_folder(tile_idx, local_dir)
 
         # clean up memory
@@ -1058,20 +1087,20 @@ if __name__ == '__main__':
    
     import argparse
     parser = argparse.ArgumentParser()
-    #print("Argument List:", str(sys.argv))
+    print("Argument List:", str(sys.argv))
 
-    parser.add_argument('--country', dest='country', type=str)
+    parser.add_argument('--loc', dest='location', nargs='+', type=str)
     parser.add_argument('--model', dest='model', type=str)
     parser.add_argument('--verbose', dest='verbose', default=False, type=bool) 
     parser.add_argument('--incl_feats', dest='incl_feats', default=True, type=bool) 
-    parser.add_argument('--feature_select', dest='feature_select', nargs='*', type=int) 
+    parser.add_argument('--fs', dest='feature_select', nargs='*', type=int) 
 
 
     args = parser.parse_args()
     
     #execute(args.country, args.model, args.verbose, args.feats, args.feature_select)
 
-    tiles_to_process = download_tile_ids(args.country, aak, ask)[:4]
+    tiles_to_process = download_tile_ids(args.location, aak, ask)
     tile_count = len(tiles_to_process)
     counter = 0
 
@@ -1080,95 +1109,17 @@ if __name__ == '__main__':
         loaded_model = pickle.load(file)
 
     print('............................................')
-    print(f'Processing {tile_count} tiles for {args.country}.')
+    print(f'Processing {tile_count} tiles for {args.location[1], args.location[0]}.')
     print('............................................')
 
-    for tile_idx in tiles_to_process:
+    for tile_idx in tiles_to_process[:1]:
         counter += 1
-        execute_per_tile(tile_idx, country=args.country, model=loaded_model, verbose=args.verbose, incl_feats=args.incl_feats, feature_select=args.feature_select)
+        execute_per_tile(tile_idx, location=args.location, model=loaded_model, verbose=args.verbose, incl_feats=args.incl_feats, feature_select=args.feature_select)
 
         if counter % 5 == 0:
             print(f'{counter}/{tile_count} tiles processed...')
     
     # for now mosaic and upload to s3 bucket
-    mosaic.mosaic_tif(args.country, args.model, compile_from='csv')
-    #mosaic.upload_mosaic(args.country, args.model, aak, ask)
+    mosaic.mosaic_tif(args.location, args.model, compile_from='csv')
+    #mosaic.upload_mosaic(args.loc, args.model, aak, ask)
     
-
-
-
-
-
-
-    # Execute steps
-#@timer
-# def execute(country: str, model: str, verbose: bool, feats: bool, feature_select: list):
-#     '''
-#     Executes all preprocessing, modeling and postprocessing steps in the pipeline
-#     according to the supplied model and country.
-#     '''
-#     local_dir = 'tmp/' + country
-
-#     tiles_to_process = download_tile_ids(country, aak, ask)[:330]
-#     tile_count = len(tiles_to_process)
-#     counter = 0
-
-#     # load specified model
-#     with open(f'models/{model}.pkl', 'rb') as file:  
-#         loaded_model = pickle.load(file)
-
-#     print('............................................')
-#     print(f'Processing {tile_count} tiles for {country}.')
-#     print('............................................')
-
-#     for tile_idx in tiles_to_process:
-#         print(f'Processing tile: {tile_idx}')
-#         counter += 1
-#         successful = download_raw_tile(tile_idx, local_dir, aak, ask)
-
-#         if successful:
-#             validate.input_dtype_and_dimensions(tile_idx, local_dir)
-#             validate.feats_range(tile_idx, local_dir)
-#             bbx = make_bbox(country, tile_idx)
-#             s2_proc, s1_proc, dem_proc = process_tile(tile_idx, local_dir, bbx, verbose)
-#             validate.output_dtype_and_dimensions(s1_proc, s2_proc, dem_proc)
-
-#             # feats option will be removed in the future
-#             if feats:
-#                 tml_feats, no_data_flag, no_tree_flag = process_ttc(tile_idx, local_dir, feats, feature_select)
-#                 validate.tmlfeats_dtype_and_dimensions(dem_proc, tml_feats, feature_select)
-#                 #txt_feats = process_txt_feats(s2_proc)
-#                 sample, sample_dims = make_sample(dem_proc, s1_proc, s2_proc, tml_feats)
-#                 sample_ss = reshape_no_scaling(sample, verbose)
-#                 #sample_ss = reshape_and_scale_manual('v17', sample, verbose)
-    
-#             else:
-#                 sample, sample_dims = make_sample_nofeats(dem_proc, s1_proc, s2_proc)
-#                 sample_ss = reshape_no_scaling(sample, verbose)
-#                 #sample_ss = reshape_and_scale_manual('v10', sample, verbose) 
-            
-#             validate.model_inputs(sample_ss)
-#             preds = predict_classification(sample_ss, loaded_model, sample_dims)
-#             preds_final = post_process_tile(preds, feature_select, no_data_flag, no_tree_flag)
-
-#             #validate.classification_scores(preds)
-#             write_tif(preds_final, bbx, tile_idx, country, 'preds')
-#             remove_folder(tile_idx, local_dir)
-
-#             # clean up memory
-#             del bbx, s2_proc, s1_proc, dem_proc, tml_feats, no_data_flag, no_tree_flag, sample, sample_ss, preds, preds_final
-#             gc.collect()
-        
-#         else:
-#             print(f'Raw data for {tile_idx} does not exist on s3.')
-        
-#         if counter %5 == 0:
-#             print(f'{counter}/{tile_count} tiles processed...')
-    
-#     # for now mosaic and upload to s3 bucket
-#     mosaic.mosaic_tif(country, model, compile_from='csv')
-#     mosaic.upload_mosaic(country, model, aak, ask)
-    
-   
-
-#     return None
