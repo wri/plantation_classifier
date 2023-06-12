@@ -17,7 +17,7 @@ from skimage.transform import resize
 from glob import glob
 import functools
 from time import time, strftime
-from datetime import datetime
+from datetime import datetime, timezone
 from scipy import ndimage
 from skimage.util import img_as_ubyte
 import gc
@@ -105,7 +105,7 @@ def download_s3(s3_folder: str, local_dir: str, aws_access_key: str, aws_secret_
     Download the contents of the tof-output + s3-folder 
     into a local folder.
     '''
-    
+
     s3 = boto3.resource('s3',
                         aws_access_key_id=aws_access_key, 
                         aws_secret_access_key=aws_secret_key)
@@ -113,6 +113,7 @@ def download_s3(s3_folder: str, local_dir: str, aws_access_key: str, aws_secret_
     bucket = s3.Bucket('tof-output')
 
     for obj in bucket.objects.filter(Prefix=s3_folder):
+
         target = os.path.join(local_dir, os.path.relpath(obj.key, s3_folder))
         if not os.path.exists(os.path.dirname(target)):
             os.makedirs(os.path.dirname(target))
@@ -135,11 +136,12 @@ def download_raw_tile(tile_idx: tuple, local_dir: str, access_key: str, secret_k
     y = tile_idx[1]
     
     # state local path and s3
-    path_to_tile = f'{local_dir}/{str(x)}/{str(y)}/'
-    s3_path_to_tile = f'/2020/raw/{str(x)}/{str(y)}/'
+    local_raw = f'{local_dir}/{str(x)}/{str(y)}/'
+    #s3_raw = f'/2020/raw/{str(x)}/{str(y)}/raw/'
+    s3_raw = f'2020/raw/{str(x)}/{str(y)}/'
     
     # check if s1 folder exists locally
-    folder_check = os.path.exists(path_to_tile + f"raw/s1/{str(x)}X{str(y)}Y.hkl")
+    folder_check = os.path.exists(local_raw + f"raw/s1/{str(x)}X{str(y)}Y.hkl")
 
     if folder_check:
         print('Raw data exists locally.')
@@ -149,8 +151,8 @@ def download_raw_tile(tile_idx: tuple, local_dir: str, access_key: str, secret_k
     if not folder_check:
         print(f"Downloading data for {(x, y)}")
         try: 
-            download_s3(s3_folder = s3_path_to_tile,
-                        local_dir = path_to_tile,
+            download_s3(s3_folder = s3_raw,
+                        local_dir = local_raw,
                         aws_access_key = access_key,
                         aws_secret_key = secret_key)
 
@@ -158,31 +160,35 @@ def download_raw_tile(tile_idx: tuple, local_dir: str, access_key: str, secret_k
         except botocore.exceptions.ClientError as e:
             if e.response['Error']['Code'] == "404":
                 return False
-    
-    # use aws cli since boto3 doesnt have sync. for sync must use directory
-    # source and endpoints to download the newest version of feats 
-    # (ignores if timestamps match)
+            
     if update_feats:
-        print('Updating ttc feats to most recent version.')
-        # s3_feats = f'{s3_path_to_tile}/raw/feats/{str(x)}X{str(y)}Y_feats.hkl'
-        # local_feats = f'{path_to_tile}/raw/feats/{str(x)}X{str(y)}Y_feats.hkl'
-
-        # s3 = boto3.resource('s3',
-        #             aws_access_key_id=access_key, 
-        #             aws_secret_access_key=secret_key)
-        # bucket = s3.Bucket('tof-output')
-        # bucket.download_file(s3_feats, local_feats)
-
-        #s3_feats_subprocess = f's3://tof-output/{s3_path_to_tile}/raw/feats/'
-        #local_feats_subprocess = f'{path_to_tile}/raw/feats/'
-        # result = subprocess.run(args=['/usr/local/bin/aws', 's3', 'sync', s3_feats, local_feats, '--exact-timestamps'], 
-        #                env={'AWS_ACCESS_KEY_ID': access_key,'AWS_SECRET_ACCESS_KEY': secret_key})
         
-        # # passes successfully even though sync doesnt happen
-        # if result.returncode == 0:
-        #     print("Sync completed successfully.")
-        # else:
-        #     print("Sync failed.")
+        # Create an S3 client and define bucket
+        s3_client = boto3.client('s3')
+        bucket_name = 'tof-output'
+
+        # try these first
+        s3_feats = f'2020/raw/{str(x)}/{str(y)}/raw/feats/{str(x)}X{str(y)}Y_feats.hkl'
+        local_feats = f'{local_dir}/{str(x)}/{str(y)}/raw/feats/{str(x)}X{str(y)}Y_feats.hkl'
+
+        # Get the metadata of the S3 object
+        response = s3_client.head_object(Bucket=bucket_name, 
+                                         Key=s3_feats)
+
+        # Compare the LastModified timestamps
+        s3_last_modified = response['LastModified'].replace(tzinfo=timezone.utc)
+        local_last_modified = os.path.getmtime(local_feats)
+        local_last_modified = datetime.fromtimestamp(local_last_modified, tz=timezone.utc)
+
+        if s3_last_modified > local_last_modified:
+            print('Updating TTC features with most recent version.')
+            # Remote version is newer, download the file
+            s3_client.download_file(bucket_name, 
+                                    s3_feats, 
+                                    local_feats)
+        else:
+            # Local version is up to date, no need to download
+            print("TTC features are up to date.")
         
     return True
 
@@ -953,7 +959,7 @@ def post_process_tile(arr: np.array, feature_select: list, no_data_flag: np.arra
     plantation size (0.1 ha?)will remove the "noisy" pixels
     '''
 
-    # TODO: confirm how this would work if all feats are used?
+    # flag - this wouldnt apply if all feats used
     if 0 in feature_select:
         arr[no_data_flag] = 255.
         arr[no_tree_flag] = 0.
@@ -969,6 +975,8 @@ def post_process_tile(arr: np.array, feature_select: list, no_data_flag: np.arra
     for label,size in enumerate(label_size):
         if size < thresh:
             arr[Zlabeled == label] = 0
+    
+    # TODO: for monoculture, must be greater than x connected pixels
     
     del Zlabeled, Nlabels, label_size
 
@@ -1100,6 +1108,7 @@ if __name__ == '__main__':
     
     #execute(args.country, args.model, args.verbose, args.feats, args.feature_select)
 
+    # specify tiles HERE
     tiles_to_process = download_tile_ids(args.location, aak, ask)
     tile_count = len(tiles_to_process)
     counter = 0
@@ -1112,7 +1121,7 @@ if __name__ == '__main__':
     print(f'Processing {tile_count} tiles for {args.location[1], args.location[0]}.')
     print('............................................')
 
-    for tile_idx in tiles_to_process[:1]:
+    for tile_idx in tiles_to_process[:5]:
         counter += 1
         execute_per_tile(tile_idx, location=args.location, model=loaded_model, verbose=args.verbose, incl_feats=args.incl_feats, feature_select=args.feature_select)
 
