@@ -216,24 +216,26 @@ def fast_glcm_deply(img):
     green = img[..., 1]
     red = img[..., 2]
     nir = img[..., 3]
-    output = np.zeros((14, 14, 10))
+    output = np.zeros((14, 14, 8))
 
-    print('Calculating blue band texture properties...')
-    output[...,0:1] = fast_glcm_homogeneity(blue)
-    output[...,1:2] = fast_glcm_contrast(blue)
+    # print('Calculating blue band texture properties...')
+    # output[...,0:1] = fast_glcm_homogeneity(blue)
+    # output[...,1:2] = fast_glcm_contrast(blue)
 
     print('Calculating green band texture properties...')
-    output[...,2:3] = fast_glcm_correlation(green)
+    output[...,0:1] = fast_glcm_dissimilarity(green)
+    output[...,1:2] = fast_glcm_correlation(green)
+    output[...,2:3] = fast_glcm_homogeneity(green)
     output[...,3:4] = fast_glcm_contrast(green)
 
     print('Calculating red band texture properties...')
-    output[...,4:5] = fast_glcm_correlation(red)
-    output[...,5:6] = fast_glcm_contrast(red)
+    #output[...,4:5] = fast_glcm_correlation(red)
+    output[...,4:5] = fast_glcm_contrast(red)
 
     print('Calculating nir band texture properties...')
-    output[...,6:7] = fast_glcm_dissimilarity(nir)
-    output[...,7:8] = fast_glcm_correlation(nir)
-    output[...,8:9] = fast_glcm_homogeneity(nir)
-    output[...,9:10] = fast_glcm_contrast(nir)
+    output[...,5:6] = fast_glcm_dissimilarity(nir)
+    output[...,6:7] = fast_glcm_correlation(nir)
+    output[...,7:8] = fast_glcm_contrast(nir)
+    # output[...,8:9] = fast_glcm_homogeneity(nir)
 
     return output.astype(np.float32)
