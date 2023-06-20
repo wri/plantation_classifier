@@ -540,6 +540,14 @@ def process_tile(tile_idx: tuple, local_path: str, bbx: list, verbose: bool = Fa
 
     del s2_10, s2_20, sentinel2, image_dates, clouds, missing_px, interp
 
+    # temporarily save to file
+    # hkl.dump(s2, '../tmp/s2_ghana.hkl', mode='w')
+    # hkl.dump(s1, '../tmp/s1_ghana.hkl', mode='w')
+    # hkl.dump(dem, '../tmp/dem_ghana.hkl', mode='w')
+    np.save('../tmp/s2_cr.npy', s2)
+    np.save('../tmp/s1_cr.npy', s1)
+    np.save('../tmp/dem_cr.npy', dem)
+
     # removing return of image_dates, interp, cloudshad as not used
     return s2, s1, dem
 
@@ -630,7 +638,7 @@ def process_full_glcm_slow(s2):
     return output.astype(np.float32)
 
 @timer
-def process_feats_fast(tile_idx: tuple, local_path: str, incl_feats: bool, feature_select:list, s2, upload_txt:bool) -> np.ndarray:
+def process_feats_fast(tile_idx: tuple, local_path: str, incl_feats: bool, feature_select:list, s2) -> np.ndarray:
     '''
     Transforms the feats with shape (65, x, x) extracted from the TML model 
     (in temp/raw/tile_feats..) to processed data structure
@@ -654,8 +662,8 @@ def process_feats_fast(tile_idx: tuple, local_path: str, incl_feats: bool, featu
     folder = f"{local_path}/{str(x)}/{str(y)}/"
     tile_str = f'{str(x)}X{str(y)}Y'
     
-    # output shape will match s2 array num of ttc features + 10 txt features
-    n_feats = len(feature_select) + 10
+    # output shape will match s2 array num of ttc features + 8 txt for v19
+    n_feats = len(feature_select) + 8
     output = np.zeros((s2.shape[0], s2.shape[1], n_feats), dtype=np.float32)
     print(f'output shape is {output.shape}')
 
@@ -698,7 +706,8 @@ def process_feats_fast(tile_idx: tuple, local_path: str, incl_feats: bool, featu
         ttc = []
 
     # import txt features if available, otherwise calc them
-    if upload_txt:
+    if os.path.exists(f'{folder}raw/feats/{tile_str}_txt_fast.npy'):
+        print('Importing texture features.')
         txt = np.load(f'{folder}raw/feats/{tile_str}_txt_fast.npy')
 
     else:
@@ -724,7 +733,7 @@ def process_feats_fast(tile_idx: tuple, local_path: str, incl_feats: bool, featu
 
 
 @timer
-def process_feats_slow(tile_idx: tuple, local_path: str, incl_feats: bool, feature_select:list, s2, upload_txt) -> np.ndarray:
+def process_feats_slow(tile_idx: tuple, local_path: str, incl_feats: bool, feature_select:list, s2) -> np.ndarray:
     '''
     Transforms the feats with shape (65, x, x) extracted from the TML model 
     (in temp/raw/tile_feats..) to processed data structure
@@ -960,12 +969,16 @@ def post_process_tile(arr: np.array, feature_select: list, no_data_flag: np.arra
     '''
 
     # flag - this wouldnt apply if all feats used
+    # getting float 32 prediction from neural network and it's rarely going to be 0.
+    # will be a continuous value
+    # should be less than 0.1
     if 0 in feature_select:
         arr[no_data_flag] = 255.
         arr[no_tree_flag] = 0.
 
     # returns a labeled array, where each unique feature has a unique label
     # returns how many objects were found
+    # nlabels is number of unique patches
     Zlabeled, Nlabels = ndimage.label(arr)
     
     # get pixel count for each label
@@ -977,7 +990,7 @@ def post_process_tile(arr: np.array, feature_select: list, no_data_flag: np.arra
             arr[Zlabeled == label] = 0
     
     # TODO: for monoculture, must be greater than x connected pixels
-    
+  
     del Zlabeled, Nlabels, label_size
 
     return arr
@@ -1060,7 +1073,7 @@ def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, incl
 
         # feats option will be removed in the future
         if incl_feats:
-            feats, no_data_flag, no_tree_flag = process_feats_slow(tile_idx, local_dir, incl_feats, feature_select, s2_proc, upload_txt=False)
+            feats, no_data_flag, no_tree_flag = process_feats_fast(tile_idx, local_dir, incl_feats, feature_select, s2_proc)
             #tml_feats, no_data_flag, no_tree_flag = process_ttc(tile_idx, local_dir, incl_feats, feature_select)
             #validate.tmlfeats_dtype_and_dimensions(dem_proc, feats, feature_select)
             #txt_feats = process_txt_feats_select(s2_proc)
@@ -1109,7 +1122,7 @@ if __name__ == '__main__':
     #execute(args.country, args.model, args.verbose, args.feats, args.feature_select)
 
     # specify tiles HERE
-    tiles_to_process = download_tile_ids(args.location, aak, ask)
+    tiles_to_process = download_tile_ids(args.location, aak, ask)[1:2]
     tile_count = len(tiles_to_process)
     counter = 0
 
@@ -1121,7 +1134,7 @@ if __name__ == '__main__':
     print(f'Processing {tile_count} tiles for {args.location[1], args.location[0]}.')
     print('............................................')
 
-    for tile_idx in tiles_to_process[:5]:
+    for tile_idx in tiles_to_process:
         counter += 1
         execute_per_tile(tile_idx, location=args.location, model=loaded_model, verbose=args.verbose, incl_feats=args.incl_feats, feature_select=args.feature_select)
 
@@ -1129,6 +1142,6 @@ if __name__ == '__main__':
             print(f'{counter}/{tile_count} tiles processed...')
     
     # for now mosaic and upload to s3 bucket
-    mosaic.mosaic_tif(args.location, args.model, compile_from='csv')
+    #mosaic.mosaic_tif(args.location, args.model, compile_from='csv')
     #mosaic.upload_mosaic(args.loc, args.model, aak, ask)
     
