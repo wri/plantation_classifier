@@ -25,7 +25,7 @@ def timer(func):
         return value
     return wrapper_timer
 
-def fast_glcm(img, vmin=0, vmax=255, levels=256, kernel_size=5, distance=1.0, angle=0.0):
+def fast_glcm(img, vmin=0, vmax=255, levels=8, kernel_size=5, distance=1.0, angle=0.0):
     '''
     Parameters
     ----------
@@ -81,7 +81,7 @@ def fast_glcm(img, vmin=0, vmax=255, levels=256, kernel_size=5, distance=1.0, an
     return glcm
 
 @timer
-def fast_glcm_contrast(img, vmin=0, vmax=255, levels=256, ks=5, distance=1.0, angle=0.0):
+def fast_glcm_contrast(img, vmin=0, vmax=255, levels=8, ks=5, distance=1.0, angle=0.0):
     '''
     calc glcm contrast
     '''
@@ -97,10 +97,10 @@ def fast_glcm_contrast(img, vmin=0, vmax=255, levels=256, ks=5, distance=1.0, an
     border_y = (cont.shape[1] - 14) // 2
     cont_crp = cont[border_x:-border_x, border_y:-border_y, np.newaxis]
 
-    return cont_crp
+    return cont[:,:,np.newaxis]
 
 @timer
-def fast_glcm_dissimilarity(img, vmin=0, vmax=255, levels=256, ks=5, distance=1.0, angle=0.0):
+def fast_glcm_dissimilarity(img, vmin=0, vmax=255, levels=8, ks=5, distance=1.0, angle=0.0):
     '''
     calc glcm dissimilarity
     '''
@@ -116,10 +116,10 @@ def fast_glcm_dissimilarity(img, vmin=0, vmax=255, levels=256, ks=5, distance=1.
     border_y = (diss.shape[1] - 14) // 2
     diss_crp = diss[border_x:-border_x, border_y:-border_y, np.newaxis]
 
-    return diss_crp
+    return diss[:,:,np.newaxis]
 
 @timer
-def fast_glcm_homogeneity(img, vmin=0, vmax=255, levels=256, ks=5, distance=1.0, angle=0.0):
+def fast_glcm_homogeneity(img, vmin=0, vmax=255, levels=8, ks=5, distance=1.0, angle=0.0):
     '''
     calc glcm homogeneity
     '''
@@ -135,10 +135,10 @@ def fast_glcm_homogeneity(img, vmin=0, vmax=255, levels=256, ks=5, distance=1.0,
     border_y = (homo.shape[1] - 14) // 2
     homo_crp = homo[border_x:-border_x, border_y:-border_y, np.newaxis]
 
-    return homo_crp
+    return homo[:,:,np.newaxis]
 
 @timer
-def fast_glcm_correlation(img, vmin=0, vmax=255, levels=256, ks=5, distance=1.0, angle=0.0):
+def fast_glcm_correlation(img, vmin=0, vmax=255, levels=8, ks=5, distance=1.0, angle=0.0):
     '''
     calc glcm correlation
     '''
@@ -173,35 +173,43 @@ def fast_glcm_correlation(img, vmin=0, vmax=255, levels=256, ks=5, distance=1.0,
     border_y = (corr.shape[1] - 14) // 2
     corr_crp = corr[border_x:-border_x, border_y:-border_y, np.newaxis]
 
-    return corr_crp
+    return corr[:,:,np.newaxis]
 
 def fast_glcm_train(img):
+
+    print('WARNING - check fast_glcm parameters are correct.')
+    vmin, vmax = 0, 255
+    levels=8
+    ks=5
+    distance=1.0
+    angle=0.0
 
     blue = img[..., 0]
     green = img[..., 1]
     red = img[..., 2]
     nir = img[..., 3]
-    output = np.zeros((14, 14, 16))
 
-    output[...,0:1] = fast_glcm_dissimilarity(blue)
-    output[...,1:2] = fast_glcm_correlation(blue)
-    output[...,2:3] = fast_glcm_homogeneity(blue)
-    output[...,3:4] = fast_glcm_contrast(blue)
+    output = np.zeros((14, 14, 16), dtype=np.float32)
 
-    output[...,4:5] = fast_glcm_dissimilarity(green)
-    output[...,5:6] = fast_glcm_correlation(green)
-    output[...,6:7] = fast_glcm_homogeneity(green)
-    output[...,7:8] = fast_glcm_contrast(green)
+    output[...,0:1] = fast_glcm_dissimilarity(blue, vmin, vmax, levels, ks, distance, angle)
+    output[...,1:2] = fast_glcm_correlation(blue, vmin, vmax, levels, ks, distance, angle)
+    output[...,2:3] = fast_glcm_homogeneity(blue, vmin, vmax, levels, ks, distance, angle)
+    output[...,3:4] = fast_glcm_contrast(blue, vmin, vmax, levels, ks, distance, angle)
 
-    output[...,8:9] = fast_glcm_dissimilarity(red)
-    output[...,9:10] = fast_glcm_correlation(red)
-    output[...,10:11] = fast_glcm_homogeneity(red)
-    output[...,11:12] = fast_glcm_contrast(red)
+    output[...,4:5] = fast_glcm_dissimilarity(green, vmin, vmax, levels, ks, distance, angle)
+    output[...,5:6] = fast_glcm_correlation(green, vmin, vmax, levels, ks, distance, angle)
+    output[...,6:7] = fast_glcm_homogeneity(green, vmin, vmax, levels, ks, distance, angle)
+    output[...,7:8] = fast_glcm_contrast(green, vmin, vmax, levels, ks, distance, angle)
 
-    output[...,12:13] = fast_glcm_dissimilarity(nir)
-    output[...,13:14] = fast_glcm_correlation(nir)
-    output[...,14:15] = fast_glcm_homogeneity(nir)
-    output[...,15:16] = fast_glcm_contrast(nir)
+    output[...,8:9] = fast_glcm_dissimilarity(red, vmin, vmax, levels, ks, distance, angle)
+    output[...,9:10] = fast_glcm_correlation(red, vmin, vmax, levels, ks, distance, angle)
+    output[...,10:11] = fast_glcm_homogeneity(red, vmin, vmax, levels, ks, distance, angle)
+    output[...,11:12] = fast_glcm_contrast(red, vmin, vmax, levels, ks, distance, angle)
+
+    output[...,12:13] = fast_glcm_dissimilarity(nir, vmin, vmax, levels, ks, distance, angle)
+    output[...,13:14] = fast_glcm_correlation(nir, vmin, vmax, levels, ks, distance, angle)
+    output[...,14:15] = fast_glcm_homogeneity(nir, vmin, vmax, levels, ks, distance, angle)
+    output[...,15:16] = fast_glcm_contrast(nir, vmin, vmax, levels, ks, distance, angle)
 
     return output.astype(np.float32)
 
@@ -210,32 +218,41 @@ def fast_glcm_deply(img):
     TODO: bands and texture properties shouldnt be hard coded
     so it's easier to change or select a specific band and 
     texture.
+
     '''
+    print('WARNING - check fast_glcm parameters are correct.')
+    vmin, vmax = 0, 255
+    levels=256
+    ks=5
+    distance=1.0
+    angle=0.0
 
     blue = img[..., 0]
     green = img[..., 1]
     red = img[..., 2]
     nir = img[..., 3]
-    output = np.zeros((14, 14, 8))
+    output = np.zeros((img.shape[0], img.shape[1], 6), dtype=np.float32)
+    print(img.shape)
+    print(green.shape)
 
     # print('Calculating blue band texture properties...')
-    # output[...,0:1] = fast_glcm_homogeneity(blue)
-    # output[...,1:2] = fast_glcm_contrast(blue)
+    # output[...,0:1] = fast_glcm_homogeneity(blue, vmin, vmax, levels, ks, distance, angle)
+    # output[...,1:2] = fast_glcm_contrast(blue, vmin, vmax, levels, ks, distance, angle)
 
     print('Calculating green band texture properties...')
-    output[...,0:1] = fast_glcm_dissimilarity(green)
-    output[...,1:2] = fast_glcm_correlation(green)
-    output[...,2:3] = fast_glcm_homogeneity(green)
-    output[...,3:4] = fast_glcm_contrast(green)
+    output[...,0:1] = fast_glcm_dissimilarity(green, vmin, vmax, levels, ks, distance, angle)
+    #output[...,1:2] = fast_glcm_correlation(green, vmin, vmax, levels, ks, distance, angle)
+    output[...,1:2] = fast_glcm_homogeneity(green, vmin, vmax, levels, ks, distance, angle)
+    output[...,2:3] = fast_glcm_contrast(green, vmin, vmax, levels, ks, distance, angle)
 
     print('Calculating red band texture properties...')
-    #output[...,4:5] = fast_glcm_correlation(red)
-    output[...,4:5] = fast_glcm_contrast(red)
+    #output[...,4:5] = fast_glcm_correlation(red, vmin, vmax, levels, ks, distance, angle)
+    output[...,3:4] = fast_glcm_contrast(red, vmin, vmax, levels, ks, distance, angle)
 
     print('Calculating nir band texture properties...')
-    output[...,5:6] = fast_glcm_dissimilarity(nir)
-    output[...,6:7] = fast_glcm_correlation(nir)
-    output[...,7:8] = fast_glcm_contrast(nir)
-    # output[...,8:9] = fast_glcm_homogeneity(nir)
+    output[...,4:5] = fast_glcm_dissimilarity(nir, vmin, vmax, levels, ks, distance, angle)
+    #output[...,6:7] = fast_glcm_correlation(nir, vmin, vmax, levels, ks, distance, angle)
+    output[...,5:6] = fast_glcm_contrast(nir, vmin, vmax, levels, ks, distance, angle)
+    # output[...,8:9] = fast_glcm_homogeneity(nir, vmin, vmax, levels, ks, distance, angle)
 
     return output.astype(np.float32)
