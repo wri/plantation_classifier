@@ -137,7 +137,7 @@ def download_raw_tile(tile_idx: tuple, local_dir: str, access_key: str, secret_k
     
     # state local path and s3
     local_raw = f'{local_dir}/{str(x)}/{str(y)}/'
-    #s3_raw = f'/2020/raw/{str(x)}/{str(y)}/raw/'
+    # doesnt work s3_raw = f'/2020/raw/{str(x)}/{str(y)}/raw/'
     s3_raw = f'2020/raw/{str(x)}/{str(y)}/'
     
     # check if s1 folder exists locally
@@ -544,9 +544,9 @@ def process_tile(tile_idx: tuple, local_path: str, bbx: list, verbose: bool = Fa
     # hkl.dump(s2, '../tmp/s2_ghana.hkl', mode='w')
     # hkl.dump(s1, '../tmp/s1_ghana.hkl', mode='w')
     # hkl.dump(dem, '../tmp/dem_ghana.hkl', mode='w')
-    np.save('../tmp/s2_cr.npy', s2)
-    np.save('../tmp/s1_cr.npy', s1)
-    np.save('../tmp/dem_cr.npy', dem)
+    # np.save('../tmp/s2_cr.npy', s2)
+    # np.save('../tmp/s1_cr.npy', s1)
+    # np.save('../tmp/dem_cr.npy', dem)
 
     # removing return of image_dates, interp, cloudshad as not used
     return s2, s1, dem
@@ -595,7 +595,7 @@ def process_ttc(tile_idx: tuple, local_path: str, incl_feats: bool, feature_sele
         # where TML probability is 255 or 0, pass along to preds
         # note that the feats shape is (x, x, 65)
         no_data_flag = feats_[...,0] == 255.
-        no_tree_flag = feats_[...,0] == 0.
+        no_tree_flag = feats_[...,0] <= 0.1
 
         # if only using select feats, filter to those
         if len(feature_select) > 0:
@@ -690,10 +690,9 @@ def process_feats_fast(tile_idx: tuple, local_path: str, incl_feats: bool, featu
         ttc[:, :, [high_feats]] = feats_rolled[:, :, [low_feats]]
 
         # create no data and no tree flag (boolean mask)
-        # where TML probability is 255 or 0, pass along to preds
-        # note that the feats shape is (x, x, 65)
+        # where TTC is 255 or <0.1 
         no_data_flag = ttc[...,0] == 255.
-        no_tree_flag = ttc[...,0] == 0.
+        no_tree_flag = ttc[...,0] <= 0.1
 
         # apply feature selection to ttc feats 
         if len(feature_select) > 0:
@@ -721,9 +720,10 @@ def process_feats_fast(tile_idx: tuple, local_path: str, incl_feats: bool, featu
         txt = fast_txt.fast_glcm_deply(s2)
 
         # save glcm texture properties in case
-        np.save(f'{folder}raw/feats/{tile_str}_txt_fast.npy', txt)
+        np.save(f'{folder}raw/feats/{tile_str}_txt_fast256.npy', txt)
 
-    
+    print(ttc.shape)
+    print(txt.shape)
     output[..., :ttc.shape[-1]] = ttc
     output[..., ttc.shape[-1]:] = txt
 
@@ -783,7 +783,7 @@ def process_feats_slow(tile_idx: tuple, local_path: str, incl_feats: bool, featu
         # where TML probability is 255 or 0, pass along to preds
         # note that the feats shape is (x, x, 65)
         no_data_flag = ttc[...,0] == 255.
-        no_tree_flag = ttc[...,0] == 0.
+        no_tree_flag = ttc[...,0] <= 0.1
 
         # apply feature selection to ttc feats 
         if len(feature_select) > 0:
@@ -925,7 +925,7 @@ def reshape_and_scale_manual(v_train_data: str, unseen: np.array, verbose: bool 
     return unseen_reshaped
 
 
-def reshape_no_scaling(arr: np.array, verbose: bool = False):
+def reshape(arr: np.array, verbose: bool = False):
 
     ''' 
     Do not apply scaling and only reshape the unseen data.
@@ -957,41 +957,55 @@ def predict_classification(arr: np.array, pretrained_model: str, sample_dims: tu
 
     return preds.reshape(sample_dims[0], sample_dims[1])
 
+def remove_small_patches(arr, thresh):
+    
+    '''
+    Label features in an array using ndimage.label() and count 
+    pixels for each lavel. If the count doesn't meet provided
+    threshold, make the label 0. Return an updated array
 
-def post_process_tile(arr: np.array, feature_select: list, no_data_flag: np.array, no_tree_flag: np.array, thresh=10):
+    (option to add a 3x3 structure which considers features connected even 
+    if they touch diagonally - probably dnt want this)
+    
+    '''
+
+    # creates arr where each unique feature (non zero value) has a unique label
+    # num features are the number of connected patches
+    labeled_array, num_features = ndimage.label(arr)
+
+    # get pixel count for each label
+    label_size = [(labeled_array == label).sum() for label in range(num_features + 1)]
+
+    for label,size in enumerate(label_size):
+        if size < thresh:
+            arr[labeled_array == label] = 0
+    
+    return arr
+
+def post_process_tile(arr: np.array, feature_select: list, no_data_flag: np.array, no_tree_flag: np.array):
 
     '''
-    Applies the no data and no tree flag *if* TTC predictions are used
-    in feature selection. 
+    Applies the no data and no tree flag *if* TTC tree cover predictions are used
+    in feature selection. The NN produces a float32 continuous prediction.
+
     Performs a connected component analysis to remove positive predictions 
-    where the connected pixel count is < thresh. Establishing a minimum 
-    plantation size (0.1 ha?)will remove the "noisy" pixels
+    where the connected pixel count is < thresh. 
     '''
 
-    # flag - this wouldnt apply if all feats used
-    # getting float 32 prediction from neural network and it's rarely going to be 0.
-    # will be a continuous value
-    # should be less than 0.1
+    # FLAG: requires feature selection
     if 0 in feature_select:
         arr[no_data_flag] = 255.
         arr[no_tree_flag] = 0.
 
-    # returns a labeled array, where each unique feature has a unique label
-    # returns how many objects were found
-    # nlabels is number of unique patches
-    Zlabeled, Nlabels = ndimage.label(arr)
+    postprocess_mono = remove_small_patches(arr == 1, thresh = 20)
+    postprocess_af = remove_small_patches(arr == 2, thresh = 15)
     
-    # get pixel count for each label
-    label_size = [(Zlabeled == label).sum() for label in range(Nlabels + 1)]
-    
-    # if the count of pixels doesn't meet the threshold, make label 0
-    for label,size in enumerate(label_size):
-        if size < thresh:
-            arr[Zlabeled == label] = 0
-    
-    # TODO: for monoculture, must be greater than x connected pixels
+    # multiplying by boolean will turn every False into 0 
+    # and keep every True as the original label
+    arr[arr == 1] *= postprocess_mono[arr == 1]
+    arr[arr == 2] *= postprocess_af[arr == 2]
   
-    del Zlabeled, Nlabels, label_size
+    del postprocess_af, postprocess_mono
 
     return arr
 
@@ -1073,18 +1087,18 @@ def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, incl
 
         # feats option will be removed in the future
         if incl_feats:
-            feats, no_data_flag, no_tree_flag = process_feats_fast(tile_idx, local_dir, incl_feats, feature_select, s2_proc)
+            feats, no_data_flag, no_tree_flag = process_feats_slow(tile_idx, local_dir, incl_feats, feature_select, s2_proc)
             #tml_feats, no_data_flag, no_tree_flag = process_ttc(tile_idx, local_dir, incl_feats, feature_select)
             #validate.tmlfeats_dtype_and_dimensions(dem_proc, feats, feature_select)
             #txt_feats = process_txt_feats_select(s2_proc)
             # sample, sample_dims = make_sample(dem_proc, s1_proc, s2_proc, tml_feats, txt_feats)
             sample, sample_dims = make_sample(dem_proc, s1_proc, s2_proc, feats)
-            sample_ss = reshape_no_scaling(sample, verbose)
+            sample_ss = reshape(sample, verbose)
             #sample_ss = reshape_and_scale_manual('v17', sample, verbose)
 
         else:
             sample, sample_dims = make_sample_nofeats(dem_proc, s1_proc, s2_proc)
-            sample_ss = reshape_no_scaling(sample, verbose)
+            sample_ss = reshape(sample, verbose)
             #sample_ss = reshape_and_scale_manual('v10', sample, verbose)
         
         validate.model_inputs(sample_ss)
@@ -1122,7 +1136,7 @@ if __name__ == '__main__':
     #execute(args.country, args.model, args.verbose, args.feats, args.feature_select)
 
     # specify tiles HERE
-    tiles_to_process = download_tile_ids(args.location, aak, ask)[1:2]
+    tiles_to_process = download_tile_ids(args.location, aak, ask)[:3]
     tile_count = len(tiles_to_process)
     counter = 0
 
@@ -1142,6 +1156,6 @@ if __name__ == '__main__':
             print(f'{counter}/{tile_count} tiles processed...')
     
     # for now mosaic and upload to s3 bucket
-    #mosaic.mosaic_tif(args.location, args.model, compile_from='csv')
+    mosaic.mosaic_tif(args.location, args.model, compile_from='csv')
     #mosaic.upload_mosaic(args.loc, args.model, aak, ask)
     
