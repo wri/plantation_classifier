@@ -21,9 +21,8 @@ from datetime import datetime, timezone
 from scipy import ndimage
 from skimage.util import img_as_ubyte
 import gc
-from memory_profiler import profile
 import copy
-import subprocess
+
 
 ## import other scripts
 import sys
@@ -124,7 +123,7 @@ def download_s3(s3_folder: str, local_dir: str, aws_access_key: str, aws_secret_
     return None
 
 
-def download_raw_tile(tile_idx: tuple, local_dir: str, access_key: str, secret_key: str, update_feats:bool) -> None:
+def download_raw_tile(tile_idx: tuple, country: str, access_key: str, secret_key: str, update_feats: bool) -> None:
     '''
     If data is not present locally, downloads raw data (clouds, DEM and 
     image dates, s1 and s2 (10 and 20m bands)) for the specified tile from s3. 
@@ -136,7 +135,7 @@ def download_raw_tile(tile_idx: tuple, local_dir: str, access_key: str, secret_k
     y = tile_idx[1]
     
     # state local path and s3
-    local_raw = f'{local_dir}/{str(x)}/{str(y)}/'
+    local_raw = f'tmp/{country}/{str(x)}/{str(y)}/'
     # doesnt work s3_raw = f'/2020/raw/{str(x)}/{str(y)}/raw/'
     s3_raw = f'2020/raw/{str(x)}/{str(y)}/'
     
@@ -147,7 +146,6 @@ def download_raw_tile(tile_idx: tuple, local_dir: str, access_key: str, secret_k
         print('Raw data exists locally.')
     
     # if feats folder doesn't exist locally, download raw tile
-    # and return True
     if not folder_check:
         print(f"Downloading data for {(x, y)}")
         try: 
@@ -169,7 +167,7 @@ def download_raw_tile(tile_idx: tuple, local_dir: str, access_key: str, secret_k
 
         # try these first
         s3_feats = f'2020/raw/{str(x)}/{str(y)}/raw/feats/{str(x)}X{str(y)}Y_feats.hkl'
-        local_feats = f'{local_dir}/{str(x)}/{str(y)}/raw/feats/{str(x)}X{str(y)}Y_feats.hkl'
+        local_feats = f'tmp/{country}/{str(x)}/{str(y)}/raw/feats/{str(x)}X{str(y)}Y_feats.hkl'
 
         # Get the metadata of the S3 object
         response = s3_client.head_object(Bucket=bucket_name, 
@@ -330,7 +328,7 @@ def adjust_shape(arr: np.ndarray, width: int, height: int) -> np.ndarray:
 
     return arr.squeeze()
 
-def process_tile(tile_idx: tuple, local_path: str, bbx: list, verbose: bool = False, make_shadow: bool = True) -> np.ndarray:
+def process_tile(tile_idx: tuple, country: str, bbx: list, verbose: bool = False, make_shadow: bool = True) -> np.ndarray:
     """
     Transforms raw data structure (in temp/raw/*) to processed data structure
         - align shapes of different data sources (clouds / shadows / s1 / s2 / dem)
@@ -352,7 +350,7 @@ def process_tile(tile_idx: tuple, local_path: str, bbx: list, verbose: bool = Fa
     x = tile_idx[0]
     y = tile_idx[1]
             
-    folder = f"{local_path}/{str(x)}/{str(y)}/"
+    folder = f"tmp/{country}/{str(x)}/{str(y)}/"
     tile_str = f'{str(x)}X{str(y)}Y'
 
     clouds_file = f'{folder}raw/clouds/clouds_{tile_str}.hkl'
@@ -551,7 +549,7 @@ def process_tile(tile_idx: tuple, local_path: str, bbx: list, verbose: bool = Fa
     # removing return of image_dates, interp, cloudshad as not used
     return s2, s1, dem
 
-def process_ttc(tile_idx: tuple, local_path: str, incl_feats: bool, feature_select:list) -> np.ndarray:
+def process_ttc(tile_idx: tuple, country: str, incl_feats: bool, feature_select:list) -> np.ndarray:
     '''
     Transforms the feats with shape (65, x, x) extracted from the TML model 
     (in temp/raw/tile_feats..) to processed data structure
@@ -566,7 +564,7 @@ def process_ttc(tile_idx: tuple, local_path: str, incl_feats: bool, feature_sele
     x = tile_idx[0]
     y = tile_idx[1]
 
-    folder = f"{local_path}/{str(x)}/{str(y)}/"
+    folder = f"tmp/{country}/{str(x)}/{str(y)}/"
     tile_str = f'{str(x)}X{str(y)}Y'
 
     # load and prep features here
@@ -638,7 +636,7 @@ def process_full_glcm_slow(s2):
     return output.astype(np.float32)
 
 @timer
-def process_feats_fast(tile_idx: tuple, local_path: str, incl_feats: bool, feature_select:list, s2) -> np.ndarray:
+def process_feats_fast(tile_idx: tuple, country: str, incl_feats: bool, feature_select:list, s2) -> np.ndarray:
     '''
     Transforms the feats with shape (65, x, x) extracted from the TML model 
     (in temp/raw/tile_feats..) to processed data structure
@@ -659,11 +657,11 @@ def process_feats_fast(tile_idx: tuple, local_path: str, incl_feats: bool, featu
     x = tile_idx[0]
     y = tile_idx[1]
 
-    folder = f"{local_path}/{str(x)}/{str(y)}/"
+    folder = f"tmp/{country}/{str(x)}/{str(y)}/"
     tile_str = f'{str(x)}X{str(y)}Y'
     
     # output shape will match s2 array num of ttc features + 8 txt for v19
-    n_feats = len(feature_select) + 8
+    n_feats = len(feature_select) + 6
     output = np.zeros((s2.shape[0], s2.shape[1], n_feats), dtype=np.float32)
     print(f'output shape is {output.shape}')
 
@@ -705,25 +703,45 @@ def process_feats_fast(tile_idx: tuple, local_path: str, incl_feats: bool, featu
         ttc = []
 
     # import txt features if available, otherwise calc them
-    if os.path.exists(f'{folder}raw/feats/{tile_str}_txt_fast.npy'):
+    if os.path.exists(f'{folder}raw/feats/{tile_str}_txt_blah.npy'):
         print('Importing texture features.')
-        txt = np.load(f'{folder}raw/feats/{tile_str}_txt_fast.npy')
+        txt = np.load(f'{folder}raw/feats/{tile_str}_txt_blah.npy')
 
     else:
         print('Calculating texture features.')
-
-        # convert float32 to uint8
-        s2 = img_as_ubyte(s2)
-        assert s2.dtype == np.uint8, print(s2.dtype)
         
-        # shape is (14, 14, 10)
-        txt = fast_txt.fast_glcm_deply(s2)
+        # convert img as type float32 to uint8
+        img = img_as_ubyte(s2)
+        green = img[..., 1]
+        red = img[..., 2]
+        nir = img[..., 3]
+        
+        # required order is blue, green, red, nir
+        # dissimilarity, correlation, homogeneity, contrast 
+        print('Calculating select GLCM textures for green band...')
+        green_txt = fast_txt.extract_texture(green, ['dissimilarity', 'correlation', 'homogeneity', 'contrast'], pipeline='deply')
+        print('Calculating select GLCM textures for red band...')
+        red_txt = fast_txt.extract_texture(red, ['contrast'], pipeline='deply')
+        print('Calculating select GLCM textures for nir band...')
+        nir_txt = fast_txt.extract_texture(nir, ['dissimilarity', 'correlation', 'contrast'], pipeline='deply')
+
+        # should be like this
+        # [..., 0:4] = green
+        # [..., 4:7] = red
+        # [..., 7:] = nir
+        property_count = green_txt.shape[-1] + red_txt.shape[-1] + nir_txt.shape[-1]
+        txt = np.zeros((img.shape[0], img.shape[1], property_count), dtype=np.float32)
+        print(green_txt.shape, red_txt.shape, nir_txt.shape)
+        print(f'output arr shape: {txt.shape}')
+
+        txt[..., 0:green_txt.shape[-1]] = green_txt 
+        txt[..., green_txt.shape[-1]: green_txt.shape[-1] + red_txt.shape[-1]] = red_txt
+        txt[..., - nir_txt.shape[-1]:] = nir_txt
 
         # save glcm texture properties in case
-        np.save(f'{folder}raw/feats/{tile_str}_txt_fast256.npy', txt)
+        np.save(f'{folder}raw/feats/{tile_str}_txt_newtest.npy', txt)
 
-    print(ttc.shape)
-    print(txt.shape)
+    # now combine ttc feats with txt feats
     output[..., :ttc.shape[-1]] = ttc
     output[..., ttc.shape[-1]:] = txt
 
@@ -733,7 +751,7 @@ def process_feats_fast(tile_idx: tuple, local_path: str, incl_feats: bool, featu
 
 
 @timer
-def process_feats_slow(tile_idx: tuple, local_path: str, incl_feats: bool, feature_select:list, s2) -> np.ndarray:
+def process_feats_slow(tile_idx: tuple, country: str, incl_feats: bool, feature_select:list, s2) -> np.ndarray:
     '''
     Transforms the feats with shape (65, x, x) extracted from the TML model 
     (in temp/raw/tile_feats..) to processed data structure
@@ -748,7 +766,7 @@ def process_feats_slow(tile_idx: tuple, local_path: str, incl_feats: bool, featu
     x = tile_idx[0]
     y = tile_idx[1]
 
-    folder = f"{local_path}/{str(x)}/{str(y)}/"
+    folder = f"tmp/{country}/{str(x)}/{str(y)}/"
     tile_str = f'{str(x)}X{str(y)}Y'
     
     # output shape will match s2 array ttc feats and 5 txt feats
@@ -795,14 +813,15 @@ def process_feats_slow(tile_idx: tuple, local_path: str, incl_feats: bool, featu
         ttc = []
 
     # import txt features if available, otherwise calc them
-    if os.path.exists(f'{folder}raw/feats/{tile_str}_txtv19.npy'):
+    if os.path.exists(f'{folder}raw/feats/{tile_str}_blah.npy'):
         print('Importing texture features.')
-        txt = np.load(f'{folder}raw/feats/{tile_str}_txtv19.npy')
+        txt = np.load(f'{folder}raw/feats/{tile_str}_blah.npy')
 
     else:
         s2 = img_as_ubyte(s2)
         assert s2.dtype == np.uint8, print(s2.dtype)
         
+        # dissimilarity, correlation, homogeneity, contrast 
         txt = np.zeros((s2.shape[0], s2.shape[1], 8), dtype=np.float32)
         green = s2[..., 1]
         red = s2[..., 2]
@@ -1053,7 +1072,7 @@ def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, suffix 
 
     return None
 
-def remove_folder(tile_idx: tuple, local_dir: str):
+def remove_folder(tile_idx: tuple, country: str):
     '''
     Deletes temporary raw data files in path_to_tile/raw/*
     after predictions are written to file
@@ -1062,7 +1081,7 @@ def remove_folder(tile_idx: tuple, local_dir: str):
     x = tile_idx[0]
     y = tile_idx[1]
   
-    path_to_tile = f'{local_dir}/{str(x)}/{str(y)}/'
+    path_to_tile = f'tmp/{country}/{str(x)}/{str(y)}/'
 
     # remove every folder/file in raw/
     for folder in glob(path_to_tile + "raw/*/"):
@@ -1075,19 +1094,18 @@ def remove_folder(tile_idx: tuple, local_dir: str):
 def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, incl_feats: bool, feature_select: list):
     
     print(f'Processing tile: {tile_idx}')
-    local_dir = 'tmp/' + location[0]
-    successful = download_raw_tile(tile_idx, local_dir, aak, ask, update_feats=True)
+    successful = download_raw_tile(tile_idx, location[0], aak, ask, update_feats=False)
 
     if successful:
-        validate.input_dtype_and_dimensions(tile_idx, local_dir)
-        validate.feats_range(tile_idx, local_dir)
+        validate.input_dtype_and_dimensions(tile_idx, location[0])
+        validate.feats_range(tile_idx, location[0])
         bbx = make_bbox(location[1], tile_idx)
-        s2_proc, s1_proc, dem_proc = process_tile(tile_idx, local_dir, bbx, verbose)
+        s2_proc, s1_proc, dem_proc = process_tile(tile_idx, location[0], bbx, verbose)
         validate.output_dtype_and_dimensions(s1_proc, s2_proc, dem_proc)
 
         # feats option will be removed in the future
         if incl_feats:
-            feats, no_data_flag, no_tree_flag = process_feats_slow(tile_idx, local_dir, incl_feats, feature_select, s2_proc)
+            feats, no_data_flag, no_tree_flag = process_feats_fast(tile_idx, location[0], incl_feats, feature_select, s2_proc)
             #tml_feats, no_data_flag, no_tree_flag = process_ttc(tile_idx, local_dir, incl_feats, feature_select)
             #validate.tmlfeats_dtype_and_dimensions(dem_proc, feats, feature_select)
             #txt_feats = process_txt_feats_select(s2_proc)
@@ -1104,12 +1122,12 @@ def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, incl
         validate.model_inputs(sample_ss)
         preds = predict_classification(sample_ss, model, sample_dims)
         preds_final = post_process_tile(preds, feature_select, no_data_flag, no_tree_flag)
-
-        #validate.classification_scores(preds)
+        validate.model_outputs(preds_final, 'classifier')
+        
         write_tif(preds_final, bbx, tile_idx, location[0], 'preds')
-        #remove_folder(tile_idx, local_dir)
-
+        
         # clean up memory
+        #remove_folder(tile_idx, location[0])
         del bbx, s2_proc, s1_proc, dem_proc, feats, no_data_flag, no_tree_flag, sample, sample_ss, preds, preds_final
     
     else:
