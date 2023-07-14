@@ -10,10 +10,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.model_selection import train_test_split
 import validate_io as validate
-import texture_veg_indices as txt
-import fast_glcm as txt_fast
+import slow_glcm as slow_txt
+import fast_glcm as fast_txt
 from tqdm import tqdm
-import gc
 
 ### Plot ID Labeling ###
 # Plot IDs are numbered according to ceo survey
@@ -140,7 +139,7 @@ def load_s2(idx, directory = '../data/train-s2/'):
     return s2
 
 
-def load_tml_feats(idx, directory = '../data/train-features/'):
+def load_ttc(idx, directory = '../data/train-features-ckpt-2023-02-09/'):
     '''
     Features are stored as a 14 x 14 x 65 float64 array. The last axis contains 
     the feature dimensions. Dtype needs to be converted to float32. The TML
@@ -188,10 +187,10 @@ def load_label(idx, classes, directory = '../data/train-labels/'):
     return labels
 
 
-def load_texture_feats(idx, directory = '../data/train-s2/'):
+def load_txt(idx, directory = '../data/train-s2/'):
     
     '''
-    Loads and performs some preprocessing steps to s2 data
+    Loads raw s2 data and preprocesses
     in order to extract texture features for RGB and NIR 
     bands. Outputs the texture analysis as a (14, 14, 16) 
     array as a float32 array.
@@ -200,8 +199,7 @@ def load_texture_feats(idx, directory = '../data/train-s2/'):
         output = np.load(f'../data/train-texture/{idx}.npy')
     
     else: 
-        print('Calculating GLCM texture features...')
-    # convert to uint8 for GLCM
+        #print('Calculating GLCM texture features...')
         s2 = hkl.load(directory + str(idx) + '.hkl')
         
         # remove date of imagery (last axis)
@@ -222,36 +220,41 @@ def load_texture_feats(idx, directory = '../data/train-s2/'):
         nir = s2[..., 3]
         output = np.zeros((14, 14, 16))
         
-        output[..., 0:4] = txt.extract_texture(blue)
-        output[..., 4:8] = txt.extract_texture(green)
-        output[..., 8:12] = txt.extract_texture(red)
-        output[..., 12:16] = txt.extract_texture(nir)
+        output[..., 0:4] = slow_txt.extract_texture(blue)
+        output[..., 4:8] = slow_txt.extract_texture(green)
+        output[..., 8:12] = slow_txt.extract_texture(red)
+        output[..., 12:16] = slow_txt.extract_texture(nir)
 
         # save the output
         np.save(f'../data/train-texture/{idx}.npy', output)
     
     return output.astype(np.float32)
 
-def load_ttc_txt_feats(idx, directory = '../data/train-features/'):
+def load_feats(idx, import_txt, directory = '../data/train-features/'):
+    print('WARNING: check train-feats path')
+    if os.path.exists(f'../data/train-texture/{idx}_fast.npy'):
+        txt = np.load(f'../data/train-texture/{idx}_fast.npy')
+    
+    else: 
+        print(f'Calculating texture properties for {idx}')
+        # prepare s2
+        s2 = hkl.load('../data/train-s2/' + str(idx) + '.hkl')
+            
+        # remove date of imagery (last axis)
+        if s2.shape[-1] == 11:
+            s2 = np.delete(s2, -1, -1)
 
-    # prepare s2
-    s2 = hkl.load(directory + str(idx) + '.hkl')
-        
-    # remove date of imagery (last axis)
-    if s2.shape[-1] == 11:
-        s2 = np.delete(s2, -1, -1)
+        # convert monthly images to annual median
+        if len(s2.shape) == 4:
+            s2 = np.median(s2, axis = 0, overwrite_input=True)
 
-    # convert monthly images to annual median
-    if len(s2.shape) == 4:
-        s2 = np.median(s2, axis = 0, overwrite_input=True)
+        # this has to be done after median - doesnt work if just calling .astype(np.uint8)
+        s2 = ((s2.astype(np.float32) / 65535) * 255).astype(np.uint8)
 
-    # this has to be done after median - doesnt work if just calling .astype(np.uint8)
-    s2 = ((s2.astype(np.float32) / 65535) * 255).astype(np.uint8)
-
-    validate.train_glcm_input(s2)
-    txt = txt_fast.fast_glcm_train(s2)
-    validate.train_glcm_output(txt)
-    np.save(f'../data/train-texture/{idx}_fast.npy', txt)
+        validate.glcm_input(s2)
+        txt = fast_txt.fast_glcm_train(s2)
+        validate.glcm_output(txt)
+        np.save(f'../data/train-texture/{idx}_fast.npy', txt)
     
     ttc = hkl.load(directory + str(idx) + '.hkl')
     ttc[..., 1:] = np.clip(ttc[..., 1:], a_min=-32.768, a_max=32.767)
@@ -264,32 +267,8 @@ def load_ttc_txt_feats(idx, directory = '../data/train-features/'):
 
     return comb_feats.astype(np.float32)
 
-    
-def load_ttc_txt_feats_old(idx, directory = '../data/train-features/'):
-    
-    '''
-    ss
-    '''
 
-    if os.path.exists(f'../data/train-texture/{idx}.npy'):
-        txt = np.load(f'../data/train-texture/{idx}.npy')
-    else:
-        print('Texture feats could not be imported.')
-
-    ttc = hkl.load(directory + str(idx) + '.hkl')
-    ttc[..., 1:] = np.clip(ttc[..., 1:], a_min=-32.768, a_max=32.767)
-
-    n_feats = ttc.shape[-1] + txt.shape[-1]
-
-    output = np.zeros((14, 14, n_feats), dtype=np.float32)
-    output[..., 0:65] = ttc
-    output[..., 65:] = txt
-
-    return output.astype(np.float32)
-
-
-
-def make_sample(sample_shape, slope, s1, s2, feats, feature_select):
+def make_sample(sample_shape, slope, s1, s2, txt, ttc, feature_select):
     
     ''' 
     Defines dimensions and then combines slope, s1, s2, TML features and 
@@ -298,11 +277,14 @@ def make_sample(sample_shape, slope, s1, s2, feats, feature_select):
     '''
     # now filter to select features if arg provided
     # squeeze extra axis that is added (14,14,1,15) -> (14,14,15)
+    feats = np.zeros((14, 14, ttc.shape[-1] + txt.shape[-1]), dtype=np.float32)
+    feats[..., :65] = ttc
+    feats[..., 65:] = txt
     if len(feature_select) > 0:
         feats = np.squeeze(feats[:, :, [feature_select]])
 
     # define the last dimension of the array
-    n_feats = 1 + s1.shape[-1] + s2.shape[-1] + feats.shape[-1] # + tml_feats.shape[-1] + txt_feats.shape[-1]
+    n_feats = 1 + s1.shape[-1] + s2.shape[-1] + feats.shape[-1] 
 
     sample = np.empty((sample_shape[1], sample_shape[-1], n_feats))
 
@@ -311,8 +293,6 @@ def make_sample(sample_shape, slope, s1, s2, feats, feature_select):
     sample[..., 1:3] = s1
     sample[..., 3:13] = s2
     sample[..., 13:] = feats
-    # sample[..., 13:78] = tml_feats
-    # sample[..., 78:] = txt_feats
 
     return sample
 
@@ -383,16 +363,16 @@ def binary_ceo(v_train_data):
     plot_ids = [str(item).zfill(5) if len(str(item)) < 5 else str(item) for item in plot_ids]
 
     # check and remove any plot ids where there are no cloud free images (no s2 hkl file)
-    for plot in plot_ids:            
+    for plot in plot_ids[:]:            
         if not os.path.exists(f'../data/train-s2/{plot}.hkl'.strip()):
             print(f'Plot id {plot} has no cloud free imagery and will be removed.')
             plot_ids.remove(plot)
     
-    # cannot figure out why some plots persist
-    if '04008' in plot_ids: plot_ids.remove('04008')
-    if '08182' in plot_ids: plot_ids.remove('08182')
-    if '09168' in plot_ids: plot_ids.remove('09168')
-    if '09224' in plot_ids: plot_ids.remove('09224')
+    # # cannot figure out why some plots persist
+    # if '04008' in plot_ids: plot_ids.remove('04008')
+    # if '08182' in plot_ids: plot_ids.remove('08182')
+    # if '09168' in plot_ids: plot_ids.remove('09168')
+    # if '09224' in plot_ids: plot_ids.remove('09224')
     
     return plot_ids
 
@@ -410,22 +390,15 @@ def multiclass_ceo(v_train_data):
     for i in v_train_data:
         df = pd.read_csv(f'../data/ceo-plantations-train-{i}.csv', engine="pyarrow")
 
-        # map label categories to ints
-        # this step might not be needed but leaving for now.
-        df['PLANTATION_MULTI'] = df['PLANTATION'].map({'Monoculture': 1,
-                                                     'Agroforestry': 2,
-                                                     'Not plantation': 0,
-                                                     'Unknown': 255})
-
         # confirm that unknown labels are always a full 14x14 (196 points) of unknowns
         # if assertion fails, will print count of points
-        unknowns = df[df.PLANTATION_MULTI == 255]
+        unknowns = df[df.PLANTATION == 255]
         for plot in set(list(unknowns.PLOT_ID)):
             assert len(unknowns[unknowns.PLOT_ID == plot]) == 196,\
             f'{plot} has {len(unknowns[unknowns.PLOT_ID == plot])}/196 points labeled unknown.'
 
         # drop unknown samples
-        df_new = df.drop(df[df.PLANTATION_MULTI == 255].index)
+        df_new = df.drop(df[df.PLANTATION == 255].index)
         print(f'{(len(df) - len(df_new)) / 196} plots labeled unknown were dropped.')
 
         # now create list of plot_ids
@@ -433,15 +406,13 @@ def multiclass_ceo(v_train_data):
 
         # if the plot_ids do not have 5 digits, change to str and add leading 0
         plot_ids = [str(item).zfill(5) if len(str(item)) < 5 else str(item) for item in plot_ids]
-
+        
         # check and remove any plot ids where there are no cloud free images (no s2 hkl file)
-        for plot in plot_ids:            
-            if not os.path.exists(f'../data/train-s2/{plot}.hkl'.strip()):
+        for plot in plot_ids[:]:            
+            s2_check = os.path.exists(f'../data/train-s2/{plot}.hkl')
+            if s2_check == False:
                 print(f'Plot id {plot} has no cloud free imagery and will be removed.')
                 plot_ids.remove(plot)
-        
-        # not sure why this persists
-        if '08182' in plot_ids: plot_ids.remove('08182')
 
     return plot_ids
 
@@ -498,17 +469,18 @@ def create_xy(v_train_data, classes, drop_feats, feature_select, verbose=False):
             slope = load_slope(plot)
             s1 = load_s1(plot)
             s2 = load_s2(plot)
-            #feats = load_tml_feats(plot)
-            #txt_feats = load_texture_feats(plot)
-            feats = load_ttc_txt_feats(plot)
-            validate.train_output_range_dtype(slope, s1, s2, feats, feature_select)
-            X = make_sample(sample_shape, slope, s1, s2, feats, feature_select)
+            ttc = load_ttc(plot)
+            txt = load_txt(plot)
+            #print('REMINDER: Import fast or slow txt feats?')
+            #feats = load_feats(plot, import_txt=False)
+            validate.train_output_range_dtype(slope, s1, s2, ttc, feature_select)
+            X = make_sample(sample_shape, slope, s1, s2, txt, ttc, feature_select)
             y = load_label(plot, classes)
             x_all[num] = X
             y_all[num] = y
 
             # clean up memory
-            del slope, s1, s2, feats, X, y
+            del slope, s1, s2, ttc, txt, X, y
 
         if verbose:
             print(f'Sample: {num}')
