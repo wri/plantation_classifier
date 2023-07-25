@@ -129,15 +129,15 @@ def mosaic_tif(location: list, model: str, compile_from: str):
 
 
 
-def upload_mosaic(country: str, model: str, aws_access_key: str, aws_secret_key: str):
+def upload_mosaic(location: list, model: str, aws_access_key: str, aws_secret_key: str):
     '''
     Uploads the combined tif to an s3 bucket
     '''
     date = datetime.today().strftime('%Y-%m-%d')
     
     # outpath will be the new filename
-    suffix = f'{country}_{model}_{date}.tif'
-    mosaic_filepath = f'tmp/{country}/preds/mosaic/{suffix}'
+    suffix = f'{location[0]}_{model}_{date}.tif'
+    mosaic_filepath = f'tmp/{location[0]}/preds/mosaic/{suffix}'
 
     s3 = boto3.resource('s3',
                         aws_access_key_id=aws_access_key, 
