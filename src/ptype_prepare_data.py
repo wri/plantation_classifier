@@ -230,7 +230,7 @@ def load_txt(idx, directory = '../data/train-s2/'):
     
     return output.astype(np.float32)
 
-def load_feats(idx, import_txt, directory = '../data/train-features/'):
+def load_feats_fastglcm(idx, import_txt, directory = '../data/train-features/'):
     print('WARNING: check train-feats path')
     if os.path.exists(f'../data/train-texture/{idx}_fast.npy'):
         txt = np.load(f'../data/train-texture/{idx}_fast.npy')
@@ -330,7 +330,7 @@ def binary_ceo(v_train_data):
 
     for i in v_train_data:
         
-        df = pd.read_csv(f'../data/ceo-plantations-train-{i}.csv', engine="pyarrow")
+        df = pd.read_csv(f'../data/ceo-plantations-train-{i}.csv')
         
         # for multiclass surveys, change labels
         multiclass = ['v08', 'v14', 'v15']
@@ -363,6 +363,7 @@ def binary_ceo(v_train_data):
     plot_ids = [str(item).zfill(5) if len(str(item)) < 5 else str(item) for item in plot_ids]
 
     # check and remove any plot ids where there are no cloud free images (no s2 hkl file)
+    print('warning needs to be updated')
     for plot in plot_ids[:]:            
         if not os.path.exists(f'../data/train-s2/{plot}.hkl'.strip()):
             print(f'Plot id {plot} has no cloud free imagery and will be removed.')
@@ -388,33 +389,39 @@ def multiclass_ceo(v_train_data):
     plot_ids = []
 
     for i in v_train_data:
-        df = pd.read_csv(f'../data/ceo-plantations-train-{i}.csv', engine="pyarrow")
 
-        # confirm that unknown labels are always a full 14x14 (196 points) of unknowns
-        # if assertion fails, will print count of points
+        # for each training data survey, drop all unknown labels
+        df = pd.read_csv(f'../data/ceo-plantations-train-{i}.csv')
+
+        # assert unknown labels are always a full 14x14 (196 points) of unknowns
         unknowns = df[df.PLANTATION == 255]
         for plot in set(list(unknowns.PLOT_ID)):
             assert len(unknowns[unknowns.PLOT_ID == plot]) == 196,\
             f'{plot} has {len(unknowns[unknowns.PLOT_ID == plot])}/196 points labeled unknown.'
 
-        # drop unknown samples
+        # drop unknowns and add to full list
         df_new = df.drop(df[df.PLANTATION == 255].index)
-        print(f'{(len(df) - len(df_new)) / 196} plots labeled unknown were dropped.')
+        print(f'{int((len(df) - len(df_new)) / 196)} plots labeled unknown were dropped from {i}.')
+        plot_ids += df_new.PLOT_FNAME.drop_duplicates().tolist()
 
-        # now create list of plot_ids
-        plot_ids = plot_ids + df_new.PLOT_FNAME.drop_duplicates().tolist()
-
-        # if the plot_ids do not have 5 digits, change to str and add leading 0
-        plot_ids = [str(item).zfill(5) if len(str(item)) < 5 else str(item) for item in plot_ids]
+    # add leading 0 to plot_ids that do not have 5 digits
+    plot_ids = [str(item).zfill(5) if len(str(item)) < 5 else str(item) for item in plot_ids]
         
-        # check and remove any plot ids where there are no cloud free images (no s2 hkl file)
-        for plot in plot_ids[:]:            
-            s2_check = os.path.exists(f'../data/train-s2/{plot}.hkl')
-            if s2_check == False:
-                print(f'Plot id {plot} has no cloud free imagery and will be removed.')
-                plot_ids.remove(plot)
+    # remove any plot ids where there are no cloud free images (no s2 hkl file)
+    final_plots = [plot for plot in plot_ids if os.path.exists(f'../data/train-s2/{plot}.hkl')]
+    print(f'{len(plot_ids) - len(final_plots)} plots had no cloud free imagery and will be removed.')
 
-    return plot_ids
+    # no_s2 = []
+    # for plot in plot_ids:            
+    #     s2_check = os.path.exists(f'../data/train-s2/{plot}.hkl')
+    #     if s2_check == False:
+    #         print(f'Plot id {plot} has no cloud free imagery and will be removed.')
+    #         no_s2.append(plot)
+    #         plot_ids.remove(plot)
+    
+    # print(f'OLD APPROACH: {plot_ids}')
+
+    return final_plots
 
 def create_xy(v_train_data, classes, drop_feats, feature_select, verbose=False):
     '''
