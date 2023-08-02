@@ -205,7 +205,7 @@ def make_bbox(country: str, tile_idx: tuple, expansion: int = 10) -> list:
        Returns:
             bbx (list): expanded [min_x, min_y, max_x, max_y]
     """
-    bbx_df = pd.read_csv(f"data/{country}.csv", engine="pyarrow")
+    bbx_df = pd.read_csv(f"data/{country}.csv")
 
     # this will remove quotes around x and y tile indexes (not needed for all countries)
     # data['X_tile'] = data['X_tile'].str.extract('(\d+)', expand=False)
@@ -770,8 +770,8 @@ def process_feats_slow(tile_idx: tuple, country: str, incl_feats: bool, feature_
     tile_str = f'{str(x)}X{str(y)}Y'
     
     # output shape will match s2 array ttc feats and 5 txt feats
-    n_feats = len(feature_select) + 8 # for catv19 we have 8 txts
-    #n_feats = 65 + 8
+    txt_feats = 8
+    n_feats = len(feature_select) + txt_feats 
     output = np.zeros((s2.shape[0], s2.shape[1], n_feats), dtype=np.float32)
 
 
@@ -813,28 +813,28 @@ def process_feats_slow(tile_idx: tuple, country: str, incl_feats: bool, feature_
         ttc = []
 
     # import txt features if available, otherwise calc them
-    if os.path.exists(f'{folder}raw/feats/{tile_str}_blah.npy'):
+    if os.path.exists(f'{folder}raw/feats/{tile_str}_txtv19.npy'):
         print('Importing texture features.')
-        txt = np.load(f'{folder}raw/feats/{tile_str}_blah.npy')
+        txt = np.load(f'{folder}raw/feats/{tile_str}_txtv19.npy')
 
     else:
         s2 = img_as_ubyte(s2)
         assert s2.dtype == np.uint8, print(s2.dtype)
         
         # dissimilarity, correlation, homogeneity, contrast 
-        txt = np.zeros((s2.shape[0], s2.shape[1], 8), dtype=np.float32)
+        txt = np.zeros((s2.shape[0], s2.shape[1], txt_feats), dtype=np.float32)
         green = s2[..., 1]
         red = s2[..., 2]
         nir = s2[..., 3]
         print('Calculating select GLCM textures for green band...')
-        txt[..., 0:4] = slow_txt.deply_extract_texture(green, ['dissimilarity', 'correlation', 'homogeneity', 'contrast'])
+        txt[..., 0:1] = slow_txt.deply_extract_texture(green, ['contrast'])
         print('Calculating select GLCM textures for red band...')
-        txt[..., 4:5] = slow_txt.deply_extract_texture(red, ['contrast'])
+        txt[..., 1:2] = slow_txt.deply_extract_texture(red, ['contrast'])
         print('Calculating select GLCM textures for nir band...')
-        txt[..., 5:] = slow_txt.deply_extract_texture(nir, ['dissimilarity', 'correlation', 'contrast'])
+        txt[..., 2:] = slow_txt.deply_extract_texture(nir, ['dissimilarity', 'correlation', 'contrast'])
 
         # save glcm texture properties in case
-        np.save(f'{folder}raw/feats/{tile_str}_txtv19.npy', txt)
+        np.save(f'{folder}raw/feats/{tile_str}_txt_blah.npy', txt)
 
     output[..., :ttc.shape[-1]] = ttc
     output[..., ttc.shape[-1]:] = txt
@@ -850,14 +850,22 @@ def make_sample(dem: np.array, s1: np.array, s2: np.array, feats: np.array):
     ''' 
     Takes processed data, defines dimensions for the sample, then 
     combines dem, s1, s2 and features into a single array with shape (x, x, len(features))
+    Dimensions
+    dem (618, 614)
+    s1 (618, 614, 2)
+    s2 (618, 614, 10)
+    feats (618, 614, 40)
+    sample (618, 614, 53)
     '''
 
-    # define number of features in the sample
+    # define number of features in the sample (add one for dem)
     n_feats = 1 + s1.shape[-1] + s2.shape[-1] + feats.shape[-1] 
+    # ard = hkl.load(f'tmp/ghana/1667/1077/ard/1667X1077_ard.hkl')
+    # s2 = ard[..., 0:10]
 
     # Create the empty array using shape of inputs
     sample = np.zeros((dem.shape[0], dem.shape[1], n_feats), dtype=np.float32)
-    
+
     # populate empty array with each feature
     sample[..., 0] = dem
     sample[..., 1:3] = s1
@@ -1105,7 +1113,7 @@ def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, incl
 
         # feats option will be removed in the future
         if incl_feats:
-            feats, no_data_flag, no_tree_flag = process_feats_fast(tile_idx, location[0], incl_feats, feature_select, s2_proc)
+            feats, no_data_flag, no_tree_flag = process_feats_slow(tile_idx, location[0], incl_feats, feature_select, s2_proc)
             #tml_feats, no_data_flag, no_tree_flag = process_ttc(tile_idx, local_dir, incl_feats, feature_select)
             #validate.tmlfeats_dtype_and_dimensions(dem_proc, feats, feature_select)
             #txt_feats = process_txt_feats_select(s2_proc)
@@ -1154,7 +1162,7 @@ if __name__ == '__main__':
     #execute(args.country, args.model, args.verbose, args.feats, args.feature_select)
 
     # specify tiles HERE
-    tiles_to_process = download_tile_ids(args.location, aak, ask)[:3]
+    tiles_to_process = download_tile_ids(args.location, aak, ask)[1:2]
     tile_count = len(tiles_to_process)
     counter = 0
 
@@ -1174,6 +1182,6 @@ if __name__ == '__main__':
             print(f'{counter}/{tile_count} tiles processed...')
     
     # for now mosaic and upload to s3 bucket
-    mosaic.mosaic_tif(args.location, args.model, compile_from='csv')
+    #mosaic.mosaic_tif(args.location, args.model, compile_from='csv')
     #mosaic.upload_mosaic(args.loc, args.model, aak, ask)
     
