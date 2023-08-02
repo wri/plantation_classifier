@@ -214,16 +214,11 @@ def extract_texture(img, properties_list, pipeline):
     return texture_arr
 
 
-
-
-
 def old_fast_glcm_train(img):
     '''
     Bands must be calculated in this order: blue, green, red, nir
     Texture must be calculatd in this order: dissimilarity, correlation, homogeneity, contrast 
     '''
-
-    print('WARNING - check fast_glcm parameters are correct.')
     vmin, vmax = 0, 255
     levels=8
     ks=5
