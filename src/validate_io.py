@@ -8,6 +8,27 @@ import gc
 ### TRAINING ###
 # these tests happen after preprocessing the raw training data
 
+def glcm_input(img):
+    '''
+    check that the input band meets the following criteria
+    s2 should be shape (28, 28, 10) and dtype uint8
+    ranging between 0 - 255
+    '''
+
+    assert len(img.shape) == 3
+    assert img.dtype == np.uint8
+    assert np.logical_and(img.min() >= 0, img.max() <= 255)
+
+
+def glcm_output(txt):
+    '''
+    check that the output of fast_glcm contains 4 texture
+    properties for 4 bands (16 total) and is dtype float32
+    '''
+    assert txt.shape == (14, 14, 16)
+    assert txt.dtype == np.float32
+
+
 def train_output_range_dtype(dem, s1, s2, feats, feature_select):
     '''
     Sentinel-1, float32, range from 0-1 (divided by 65535), unscaled decibels >-22
@@ -37,7 +58,7 @@ def train_output_range_dtype(dem, s1, s2, feats, feature_select):
 ### DEPLOYMENT ###
 # these tests happen after data is downloaded from s3
 
-def input_dtype_and_dimensions(tile_idx, local_dir):
+def input_dtype_and_dimensions(tile_idx, country):
 
     '''
     Ensures the data type for raw s1, s2 and feats is uint16
@@ -48,34 +69,50 @@ def input_dtype_and_dimensions(tile_idx, local_dir):
     x = str(tile_idx[0])
     y = str(tile_idx[1])
 
-    folder = f"{local_dir}/{x}/{y}/"
+    folder = f"tmp/{country}/{x}/{y}/"
     tile_str = f'{x}X{y}Y'
 
     s1 = hkl.load(f'{folder}raw/s1/{tile_str}.hkl')
     s2_10 = hkl.load(f'{folder}raw/s2_10/{tile_str}.hkl')
     s2_20 = hkl.load(f'{folder}raw/s2_20/{tile_str}.hkl')
     dem = hkl.load(f'{folder}raw/misc/dem_{tile_str}.hkl')
-    tml_feats = hkl.load(f'{folder}raw/feats/{tile_str}_feats.hkl')
+    ttc_feats = hkl.load(f'{folder}raw/feats/{tile_str}_feats.hkl')
 
     # feats will be int16
     assert s1.dtype == np.uint16
     assert s2_10.dtype == np.uint16
     assert s2_20.dtype == np.uint16
-    assert tml_feats.dtype == np.int16 
+    assert ttc_feats.dtype == np.int16 
     assert dem.dtype == '<f4'
 
     assert s1.shape[0] == 12 and s1.shape[3] == 2
     assert s2_10.shape[3] == 4
     assert s2_20.shape[3] == 6 or s2_20.shape[3] == 7 #7 indices if data mask is included
     assert len(dem.shape) == 2
-    assert tml_feats.shape[0] == 65
+    assert ttc_feats.shape[0] == 65
 
-    del s1, s2_10, s2_20, dem, tml_feats
-    gc.collect()
-
+    del s1, s2_10, s2_20, dem, ttc_feats
 
 
-def feats_range(tile_idx, local_dir):
+def input_ard(tile_idx, country):
+    
+    x = str(tile_idx[0])
+    y = str(tile_idx[1])
+
+    folder = f"tmp/{country}/{x}/{y}/"
+    tile_str = f'{x}X{y}Y'
+    ard = hkl.load(f'{folder}ard/{tile_str}_ard.hkl')
+
+    # TODO: Confirm
+    # assert ard.dtype ==
+    assert ard.shape[3] == 13
+
+    del ard
+
+
+
+
+def feats_range(tile_idx, country):
 
     ''' 
     Ensures the first index of the feature array ranges from 0 to 100
@@ -84,7 +121,7 @@ def feats_range(tile_idx, local_dir):
     x = str(tile_idx[0])
     y = str(tile_idx[1])
 
-    folder = f"{local_dir}/{x}/{y}/"
+    folder = f"tmp/{country}/{x}/{y}/"
     tile_str = f'{x}X{y}Y'
 
     feats_file = f'{folder}raw/feats/{tile_str}_feats.hkl'
@@ -98,7 +135,6 @@ def feats_range(tile_idx, local_dir):
         print(f'255 values present in TML predictions')
     
     del feats_file, feats
-    gc.collect()
 
 
 # test pre-processing - these tests happen after pre processing
@@ -117,7 +153,7 @@ def output_dtype_and_dimensions(s1, s2, dem):
 
     assert s1.shape[2] == 2
     assert s2.shape[2] == 10
-    assert len(dem.shape) == 2
+    assert len(dem.shape) == 2, print(dem.shape)
 
     # ensure array is not 0s, would indicate weird behavior
     assert len(np.unique(s1)) > 1
@@ -144,8 +180,6 @@ def tmlfeats_dtype_and_dimensions(dem, feats, feature_select):
         assert feats.shape[2] == 65
 
 
-
-
 def model_inputs(arr):
     '''
     Ensures the range of all scaled data is between -1-1
@@ -162,19 +196,24 @@ def model_inputs(arr):
 
 # test model outputs - these tests happen after predictions are generated
 
-def classification_scores(preds):
+def model_outputs(arr, type):
 
-    '''ensures the classification ouput is a binary 1 or 0 (or 255 no data value)'''
-    ''' ensures no tile is solely plantation predictions (1) (highly unlikely)'''
+    '''
+    Ensures the classification ouput is 0, 1 or 2 or 255 
+    and ensures no tile is solely monoculture predictions (1) 
+    which is highly unlikely.
+
+    Ensures the classification output is between 0-100 or 255
+    and ensures no tile is solely 100% which is highly unlikely.
+    '''
+
+    # chain together multiple logical_or calls with reduce
+    if type == 'classifier':
+        assert np.logical_or.reduce((arr == 0, arr == 1, arr == 2)).all() or np.any(arr == 255)
+        assert arr.all() != 1
+
+    elif type == 'regressor':
+        assert np.logical_and(arr >= 0, arr <= 100).all() or np.any(arr == 255)
+        assert np.all(arr != 100)
+
     
-    assert np.logical_or(preds == 0, preds == 1).all() or np.any(preds == 255)
-    # assert preds.all() != 1, np.unique(preds)
-
-
-def regression_scores(preds):
-
-    ''' ensures the regression output ranges from 0 to 100'''
-    ''' ensures no tile is solely 100 (highly unlikely)'''
-
-    assert np.logical_and(preds >= 0, preds <= 100) or np.any(preds == 255)
-    assert np.all(preds != 100), np.unique(preds)
