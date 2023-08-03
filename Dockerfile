@@ -14,7 +14,7 @@ RUN conda env create -f environment.yaml
 
 # make run commands use the new environment
 # override the default shell with SHELL command
-SHELL ["conda", "run", "-n", "plantations3", "/bin/bash", "-c"]
+SHELL ["conda", "run", "-n", "plantations5", "/bin/bash", "-c"]
 
 # separately install the C++ version of GDAL
 # add-apt-repository is not in base image, so first install software properties
@@ -29,10 +29,10 @@ RUN apt-get update && apt-get install -y software-properties-common &&\
 # copy over the appropriate scripts/data
 COPY src/ /app/src/
 COPY data/urbanmask.tif /app/data/urbanmask.tif
-COPY models/cat_v17_tuned.pkl /app/models/cat_v17_tuned.pkl
+COPY models/cat_v20_tuned.pkl /app/models/cat_v20_tuned.pkl
 COPY config.yaml /app/config.yaml
 
 EXPOSE 8080
 
 # list of commands - supply args with docker run?
-ENTRYPOINT ["conda", "run","--no-capture-output", "-n", "plantations3", "python3", "src/plantation_classifier.py"]
+ENTRYPOINT ["conda", "run","--no-capture-output", "-n", "plantations5", "python3", "src/transfer_learning.py"]

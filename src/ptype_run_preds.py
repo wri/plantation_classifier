@@ -9,13 +9,14 @@ from natsort import natsorted
 import glob
 import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import cross_val_score
 from sklearn.metrics import roc_auc_score, f1_score, precision_score, recall_score
 from lightgbm import LGBMClassifier
 from xgboost import XGBClassifier
 from sklearn.svm import SVC
 import h5py
-from catboost import CatBoostClassifier
+from catboost import CatBoostClassifier, CatBoostRegressor
 from sklearn.utils.class_weight import compute_class_weight
 
 import sys
@@ -24,18 +25,22 @@ import rasterio as rs
 import validate_io as validate
 
 
+
 def fit_eval_regressor(X_train, X_test, y_train, y_test, model_name, v_train_data):
     '''
     Based on arguments provided, fits and evaluates a regression model
     saving the model to a pkl file and saving score in a csv.
     '''
-    # TODO: For multiregression models, loss_function should be 'MultiRMSE'
 
     # Get the count of features used
     feat_count = X_train.shape[1] - 13
 
     if model_name == 'rfr':
         model = RandomForestRegressor(random_state=22)  
+        model.fit(X_train, y_train)
+
+    elif model_name == 'catr':
+        model = CatBoostRegressor(random_state=22, loss_function='MultiRMSE')
         model.fit(X_train, y_train)
 
     # save trained model
@@ -66,20 +71,16 @@ def fit_eval_regressor(X_train, X_test, y_train, y_test, model_name, v_train_dat
     # write scores to new line of csv
     with open('../models/mvp_scores.csv', 'a') as f:
         f.write('\n')
-        eval_df.to_csv('../models/mvp_scores.csv', mode='a', index=False, header=False)
+    eval_df.to_csv('../models/mvp_scores.csv', mode='a', index=False, header=False)
 
     return eval_df
-
 
 def fit_eval_classifier(X_train, X_test, y_train, y_test, model_name, v_train_data):
     
     '''
     Based on arguments provided, fits and evaluates a classification model
-    saving the model to a pkl file and saving scores in a 
-    csv. 
+    saving the model to a pkl file and saving scores in a csv. 
     '''
-    # using this to check data scaling
-    validate.model_inputs(X_train)
 
     # Get the count of features used
     feat_count = X_train.shape[1] - 13
@@ -104,7 +105,15 @@ def fit_eval_classifier(X_train, X_test, y_train, y_test, model_name, v_train_da
     
     elif model_name == 'cat':
         # import param dist here
-        model = CatBoostClassifier(verbose=0, random_state=22)
+        print('Computing class weights...')
+        classes = np.unique(y_train)
+        weights = compute_class_weight(class_weight='balanced', classes=classes, y=y_train)
+        class_weights = dict(zip(classes, weights))
+        model = CatBoostClassifier(verbose=0, random_state=22, class_weights=class_weights)
+        model.fit(X_train, y_train)
+
+    elif model_name == 'lgr':
+        model = LogisticRegression(random_state=22, multi_class='multinomial', solver='sag')
         model.fit(X_train, y_train)
     
     # save trained model
@@ -142,27 +151,27 @@ def fit_eval_classifier(X_train, X_test, y_train, y_test, model_name, v_train_da
     eval_df = pd.DataFrame([scores]).round(4)
     
     # write scores to new line of csv
+    # with open('../models/mvp_scores.csv', 'a', newline='') as f:
     with open('../models/mvp_scores.csv', 'a', newline='') as f:
         f.write('\n')
     eval_df.to_csv('../models/mvp_scores.csv', mode='a', index=False, header=False)
     
-    # doesn't work
-    #eval_df.to_csv('../models/mvp_scores.csv', mode='a', index=False, header=False)
-    
     return y_test, pred, probs, probs_pos
 
-
-
-def fit_eval_multiclassifier(X_train, X_test, y_train, y_test, model_name, v_train_data):
+def fit_eval_multiclassifier(X_train, X_test, y_train, y_test, model_name, v_train_data, depth=10, l2_leaf=11, itera=1200, learn_rate=0.03):
     
     '''
     Fits and evaluates a CatBoost multi-classification (3 class) model
     saving the model to a pkl file and saving scores in a csv. 
+
+    cat_v19: {'depth': 8, 'l2_leaf_reg': 11, 'iterations': 1100, 'learning_rate': 0.03}
+    cat_v20: {'depth': 10, 'l2_leaf_reg': 11, 'iterations': 1200, 'learning_rate': 0.03}
     '''
     # Get the count of features used
     feat_count = X_train.shape[1] - 13
 
     # estimates the class weights for unbalanced datsets
+    #print('REMINDER: hyperparams are hard coded.')
     classes = np.unique(y_train)
     weights = compute_class_weight(class_weight='balanced', classes=classes, y=y_train)
     class_weights = dict(zip(classes, weights))
@@ -172,7 +181,11 @@ def fit_eval_multiclassifier(X_train, X_test, y_train, y_test, model_name, v_tra
     model = CatBoostClassifier(verbose=0, 
                               loss_function='MultiClass',
                               class_weights=class_weights,
-                              random_state=22)
+                              random_state=22,
+                              depth=depth, 
+                              l2_leaf_reg=l2_leaf, 
+                              iterations=itera, 
+                              learning_rate=learn_rate)
     
     model.fit(X_train, y_train)
     
@@ -220,7 +233,7 @@ def fit_eval_multiclassifier(X_train, X_test, y_train, y_test, model_name, v_tra
     
     return y_test, pred, probs, probs_pos
 
-def fit_eval_catboost(X_train, X_test, y_train, y_test, v_train_data, depth=10, l2_leaf=11, itera=1100, learn_rate=0.02):
+def fit_eval_catboost(X_train, X_test, y_train, y_test, v_train_data, depth=8, l2_leaf=11, itera=1100, learn_rate=0.03):
     
     '''
     Based on arguments provided, fits and evaluates a catboost classification 
@@ -235,12 +248,18 @@ def fit_eval_catboost(X_train, X_test, y_train, y_test, v_train_data, depth=10, 
     # Get the count of features used
     feat_count = X_train.shape[1] - 13
 
+    print('Computing class weights...')
+    classes = np.unique(y_train)
+    weights = compute_class_weight(class_weight='balanced', classes=classes, y=y_train)
+    class_weights = dict(zip(classes, weights))
+
     model = CatBoostClassifier(verbose=0, 
                                random_state=22, 
                                depth=depth, 
                                l2_leaf_reg=l2_leaf, 
                                iterations=itera, 
-                               learning_rate=learn_rate)
+                               learning_rate=learn_rate,
+                               class_weights=class_weights)
     
     model.fit(X_train, y_train)
     
