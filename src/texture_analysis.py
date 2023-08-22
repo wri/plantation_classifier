@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import yaml
 import os
 import boto3
 import botocore
@@ -11,6 +12,8 @@ import itertools
 import functools
 from time import time, strftime
 from datetime import datetime
+from skimage.util import img_as_ubyte
+import sys
 
 with open("config.yaml", 'r') as stream:
     document = (yaml.safe_load(stream))
@@ -32,7 +35,6 @@ def timer(func):
         print(f'Completed {func.__name__!r} in {run_time}.')
         return value
     return wrapper_timer
-
 
 def download_tile_ids(location: list, aws_access_key: str, aws_secret_key: str):
     '''
@@ -75,8 +77,7 @@ def download_tile_ids(location: list, aws_access_key: str, aws_secret_key: str):
 
     return tiles
 
-
-def download_ard(tile_idx: tuple, country: str, aws_access_key: str, aws_secret_key: str):
+def download_ard(tile_idx: tuple, location: list, aws_access_key: str, aws_secret_key: str):
     ''' 
     If ARD folder is not present locally,
     Download contents from s3 folder into local folder
@@ -88,13 +89,12 @@ def download_ard(tile_idx: tuple, country: str, aws_access_key: str, aws_secret_
     y = tile_idx[1]
 
     s3_path = f'2020/ard/{str(x)}/{str(y)}/'
-    s3_path_feats = f'2020/raw/{str(x)}/{str(y)}/raw/feats/'
-    local_path = f'tmp/{country}/{str(x)}/{str(y)}/'
+    local_path = f'tmp/{location[0]}/{str(x)}/{str(y)}/ard/'
 
     # check if ARD folder has been downloaded
-    ard_check = os.path.exists(local_path + 'ard/')
+    present = os.path.exists(local_path)
 
-    if not ard_check:
+    if not present:
         print(f"Downloading ARD for {(x, y)}")
 
         s3 = boto3.resource('s3',
@@ -120,8 +120,7 @@ def download_ard(tile_idx: tuple, country: str, aws_access_key: str, aws_secret_
                 if e.response['Error']['Code'] == "404":
                     return False
     
-    ard = hkl.load(f'{local_path}ard/{str(x)}X{str(y)}_ard.hkl')
-    return ard, True
+    return True
 
 def glcm(img, prop):
     '''
@@ -152,7 +151,7 @@ def glcm(img, prop):
     return glcm_props
 
 @timer
-def extract_texture(arr, properties_list):
+def extract_txt(arr, properties_list):
     
     '''
     Given a s2 array, calculates a 5x5 sliding window on a padded array
@@ -194,12 +193,12 @@ def extract_texture(arr, properties_list):
 
     return texture_arr
 
-def create_texture_array(tile_idx: tuple, location: list):
+def create_txt_array(tile_idx: tuple, location: list, aws_access_key: str, aws_secret_key: str):
         
     # prepare inputs
     x = tile_idx[0]
     y = tile_idx[1]
-    folder = f'tmp/{country}/{str(x)}/{str(y)}/'
+    folder = f'tmp/{location[0]}/{str(x)}/{str(y)}/'
     tile_str = f'{str(x)}X{str(y)}Y'
     ard = hkl.load(f'{folder}ard/{str(x)}X{str(y)}_ard.hkl') # note this file name is missing y
     s2 = ard[..., 0:10]
@@ -208,36 +207,51 @@ def create_texture_array(tile_idx: tuple, location: list):
     
     txt = np.zeros((s2.shape[0], s2.shape[1], 16), dtype=np.float32)
         
-    # FOR REGRESSION
     blue = s2[..., 0]
     green = s2[..., 1]
     red = s2[..., 2]
     nir = s2[..., 3]
     print('Calculating select GLCM textures for blue band...')
-    txt[..., 0:4] = slow_txt.deply_extract_texture(blue, ['dissimilarity', 'correlation', 'homogeneity','contrast'])
+    txt[..., 0:4] = extract_txt(blue, ['dissimilarity', 'correlation', 'homogeneity','contrast'])
     print('Calculating select GLCM textures for green band...')
-    txt[..., 4:8] = slow_txt.deply_extract_texture(green, ['dissimilarity', 'correlation', 'homogeneity','contrast'])
+    txt[..., 4:8] = extract_txt(green, ['dissimilarity', 'correlation', 'homogeneity','contrast'])
     print('Calculating select GLCM textures for red band...')
-    txt[..., 8:12] = slow_txt.deply_extract_texture(red, ['dissimilarity', 'correlation', 'homogeneity','contrast'])
+    txt[..., 8:12] = extract_txt(red, ['dissimilarity', 'correlation', 'homogeneity','contrast'])
     print('Calculating select GLCM textures for nir band...')
-    txt[..., 12:16] = slow_txt.deply_extract_texture(nir, ['dissimilarity', 'correlation', 'homogeneity','contrast'])
+    txt[..., 12:16] = extract_txt(nir, ['dissimilarity', 'correlation', 'homogeneity','contrast'])
 
-    # save glcm texture properties in case
-    np.save(f'{folder}raw/feats/{tile_str}_txt_lgr.npy', txt)
+    np.save(f'{folder}raw/feats/{tile_str}_txt.npy', txt)
+    
 
     # validate outputs and upload to s3
-    # outpath will be the new filename
-    suffix = f'{location[0]}_{model}_{date}.tif'
-    txt_filepath = f'tmp/{location[0]}/preds/mosaic/{suffix}'
-
+    s3_file = f'2020/raw/{str(x)}/{str(y)}/raw/feats/{tile_str}_txt.npy'
     s3 = boto3.resource('s3',
                         aws_access_key_id=aws_access_key, 
                         aws_secret_access_key=aws_secret_key)
     
-    print(f'Uploading {mosaic_filepath} to s3.')
-
-    s3.meta.client.upload_file(mosaic_filepath, 
-                              'restoration-monitoring', 
-                              'plantation-mapping/data/samples/' + suffix)
+    print(f'Uploading {s3_file} to s3.')
+    
+    # will need to confirm this is correct 
+    s3.meta.client.upload_file(f'{tile_str}_txt.npy', 
+                              'tof-output', 
+                               s3_file)
 
     return None
+
+if __name__ == '__main__':
+   
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--loc', dest='location', nargs='+', type=str)
+    args = parser.parse_args()
+
+    tiles_to_process = download_tile_ids(args.location, aak, ask)
+    tile_count = len(tiles_to_process)
+    counter = 0
+    for tile in tiles_to_process:
+        successful = download_ard(tile, args.location, aak, ask)
+        if successful:
+            create_txt_array(tile, args.location, aak, ask)
+            counter += 1
+            if counter % 2 == 0:
+                print(f'{counter}/{tile_count} tiles processed...')
