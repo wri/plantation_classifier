@@ -12,7 +12,6 @@ import botocore
 import rasterio as rs
 import yaml
 from osgeo import gdal
-from scipy.ndimage import median_filter
 from skimage.transform import resize
 from glob import glob
 import functools
@@ -31,7 +30,6 @@ sys.path.append('src/')
 import mosaic
 import validate_io as validate
 import slow_glcm as slow_txt
-#import fast_glcm as fast_txt
 
 with open("config.yaml", 'r') as stream:
     document = (yaml.safe_load(stream))
@@ -98,12 +96,9 @@ def download_tile_ids(location: list, aws_access_key: str, aws_secret_key: str):
 
 def download_ard(tile_idx: tuple, country: str, aws_access_key: str, aws_secret_key: str):
     ''' 
-    If ARD folder is not present locally,
-    Download contents from s3 folder into local folder
-    for specified tile
+    If ARD folder or the feats folder are not present locally,
+    Download contents from s3 into local for specified tile
     '''
-
-    # set x/y to the tile IDs
     x = tile_idx[0]
     y = tile_idx[1]
 
@@ -111,7 +106,7 @@ def download_ard(tile_idx: tuple, country: str, aws_access_key: str, aws_secret_
     s3_path_feats = f'2020/raw/{str(x)}/{str(y)}/raw/feats/'
     local_path = f'tmp/{country}/{str(x)}/{str(y)}/'
 
-    # check if ARD folder has been downloaded
+    # check if present locally
     ard_check = os.path.exists(local_path + 'ard/')
     feats_check = os.path.exists(local_path + 'raw/feats/')
 
@@ -143,15 +138,9 @@ def download_ard(tile_idx: tuple, country: str, aws_access_key: str, aws_secret_
         
     if not feats_check:
         print(f"Downloading feats for {(x, y)}")
-        s3 = boto3.resource('s3',
-                            aws_access_key_id=aws_access_key, 
-                            aws_secret_access_key=aws_secret_key)
-        bucket = s3.Bucket('tof-output')
-
         for obj in bucket.objects.filter(Prefix=s3_path_feats):
 
             feats_target = os.path.join(local_path + 'raw/feats/', os.path.relpath(obj.key, s3_path_feats))
-            print(f'target download path: {feats_target}')
 
             if not os.path.exists(os.path.dirname(feats_target)):
                 os.makedirs(os.path.dirname(feats_target))
@@ -165,7 +154,7 @@ def download_ard(tile_idx: tuple, country: str, aws_access_key: str, aws_secret_
                 if e.response['Error']['Code'] == "404":
                     return False
     
-    ard = hkl.load(f'{local_path}ard/{str(x)}X{str(y)}_ard.hkl')
+    ard = hkl.load(f'{local_path}ard/{str(x)}X{str(y)}Y_ard.hkl')
     return ard, True
 
 def make_bbox(country: str, tile_idx: tuple, expansion: int = 10) -> list:
@@ -224,22 +213,22 @@ def process_feats_slow(tile_idx: tuple, country: str, feature_select:list) -> np
         - swap high and low level feats to match training pipeline
         - filter to selected feats if feature_select param > 0
         - creates no data and no tree flags for masking predictions
+    Combines TTC feats with texture properties and returns array filtered
+    to selected feats
+
     '''
     
     # prepare inputs
     x = tile_idx[0]
     y = tile_idx[1]
-    folder = f'tmp/{country}/{str(x)}/{str(y)}/'
+    folder = f'tmp/{country}/{str(x)}/{str(y)}/raw/feats/'
     tile_str = f'{str(x)}X{str(y)}Y'
-    ard = hkl.load(f'{folder}ard/{str(x)}X{str(y)}_ard.hkl') # note this file name is missing y
-    s2 = ard[..., 0:10]
-    feats_file = f'{folder}raw/feats/{tile_str}_feats.hkl'
-    feats_raw = hkl.load(feats_file).astype(np.float32)
+    feats_raw = hkl.load(f'{folder}{tile_str}_feats.hkl').astype(np.float32)
+    txt = np.load(f'{folder}{tile_str}_txt.npy')
 
-    # prepare outputs
-    # output shape will match s2 array ttc feats and 5 txt feats
-    n_feats = len(feature_select) + 16 + 65
-    output = np.zeros((s2.shape[0], s2.shape[1], n_feats), dtype=np.float32)
+    # prepare outputs 
+    n_feats = 65 + 16
+    output = np.zeros((txt.shape[0], txt.shape[1], n_feats), dtype=np.float32)
 
     # adjust TML predictions feats[0] to match training data (0-1)
     # adjust shape by rolling axis 2x (65, 614, 618) ->  (618, 614, 65) 
@@ -264,54 +253,18 @@ def process_feats_slow(tile_idx: tuple, country: str, feature_select:list) -> np
     no_data_flag = ttc[...,0] == 255.
     no_tree_flag = ttc[...,0] == 0.
 
-    # apply feature selection to ttc feats 
-    if len(feature_select) > 0:
-        ttc = np.squeeze(ttc[:, :, [feature_select]])
-
-    # import txt features if available, otherwise calc them
-    if os.path.exists(f'{folder}raw/feats/{tile_str}_txt_lgr.npy'):
-        print('Importing texture features.')
-        txt = np.load(f'{folder}raw/feats/{tile_str}_txt_lgr.npy')
-
-    else:
-        s2 = img_as_ubyte(s2)
-        assert s2.dtype == np.uint8, print(s2.dtype)
-        
-        # developed to suit the v20 model
-        txt = np.zeros((s2.shape[0], s2.shape[1], 16), dtype=np.float32)
-        # green = s2[..., 1]
-        # red = s2[..., 2]
-        # nir = s2[..., 3]
-        # print('Calculating select GLCM textures for green band...')
-        # txt[..., 0:1] = slow_txt.deply_extract_texture(green, ['contrast'])
-        # print('Calculating select GLCM textures for red band...')
-        # txt[..., 1:2] = slow_txt.deply_extract_texture(red, ['contrast'])
-        # print('Calculating select GLCM textures for nir band...')
-        # txt[..., 2:] = slow_txt.deply_extract_texture(nir, ['dissimilarity', 'correlation', 'homogeneity','contrast'])
-        blue = s2[..., 0]
-        green = s2[..., 1]
-        red = s2[..., 2]
-        nir = s2[..., 3]
-        print('Calculating select GLCM textures for blue band...')
-        txt[..., 0:4] = slow_txt.deply_extract_texture(blue, ['dissimilarity', 'correlation', 'homogeneity','contrast'])
-        print('Calculating select GLCM textures for green band...')
-        txt[..., 4:8] = slow_txt.deply_extract_texture(green, ['dissimilarity', 'correlation', 'homogeneity','contrast'])
-        print('Calculating select GLCM textures for red band...')
-        txt[..., 8:12] = slow_txt.deply_extract_texture(red, ['dissimilarity', 'correlation', 'homogeneity','contrast'])
-        print('Calculating select GLCM textures for nir band...')
-        txt[..., 12:16] = slow_txt.deply_extract_texture(nir, ['dissimilarity', 'correlation', 'homogeneity','contrast'])
-
-        # save glcm texture properties in case
-        np.save(f'{folder}raw/feats/{tile_str}_txt_lgr.npy', txt)
-
+    # combine ttc feats and txt into a single array
     output[..., :ttc.shape[-1]] = ttc
     output[..., ttc.shape[-1]:] = txt
+
+    # apply feature selection
+    if len(feature_select) > 0:
+        output = np.squeeze(output[:, :, [feature_select]])
 
     del feats_raw, feats_rolled, high_feats, low_feats, ttc
 
     return output, no_data_flag, no_tree_flag
 
-# This will need updating based on how ARD is stored
 def make_sample(tile_idx: tuple, country: str, feats: np.array):
     
     ''' 
@@ -324,13 +277,10 @@ def make_sample(tile_idx: tuple, country: str, feats: np.array):
     # prepare inputs
     x = tile_idx[0]
     y = tile_idx[1]
+    ard = hkl.load(f'tmp/{country}/{str(x)}/{str(y)}/ard/{str(x)}X{str(y)}Y_ard.hkl')
 
-    ard = hkl.load(f'tmp/{country}/{str(x)}/{str(y)}/ard/{str(x)}X{str(y)}_ard.hkl')
-
-    # define number of features in the sample
+    # define number of features and create sample array
     n_feats = ard.shape[-1] + feats.shape[-1] 
-
-    # Create the empty array using shape of inputs
     sample = np.zeros((ard.shape[0], ard.shape[1], n_feats), dtype=np.float32)
     
     # populate empty array with each feature
