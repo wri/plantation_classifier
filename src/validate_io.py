@@ -2,13 +2,12 @@
 
 import numpy as np
 import hickle as hkl
-from numpy.testing import assert_almost_equal
 import gc
 
 ### TRAINING ###
 # these tests happen after preprocessing the raw training data
 
-def glcm_input(img):
+def fast_glcm_input(img):
     '''
     check that the input band meets the following criteria
     s2 should be shape (28, 28, 10) and dtype uint8
@@ -20,7 +19,7 @@ def glcm_input(img):
     assert np.logical_and(img.min() >= 0, img.max() <= 255)
 
 
-def glcm_output(txt):
+def fast_glcm_output(txt):
     '''
     check that the output of fast_glcm contains 4 texture
     properties for 4 bands (16 total) and is dtype float32
@@ -108,8 +107,6 @@ def input_ard(tile_idx, country):
     assert ard.shape[3] == 13
 
     del ard
-
-
 
 
 def feats_range(tile_idx, country):
@@ -217,3 +214,35 @@ def model_outputs(arr, type):
         assert np.all(arr != 100)
 
     
+## validate texture array 
+
+def texture_output_dims(arr):
+    '''
+    Confirm texture arr shape, dtype and count of properties
+
+    '''
+    assert len(arr.shape) == 3
+    assert arr.shape[-1] == 16
+    assert arr.dtype == np.float32
+
+def texture_output_range(arr, prop):
+    '''
+    Then check texture calculations fall within appropriate ranges
+    
+    Correlation Range = -1 to 1
+    Homogeneity Range = 0 to 1
+    Dissimilarity Range = min >= 0
+    Contrast Range = min >= 0
+    '''
+
+    if prop == 'dissimilarity':
+        assert arr.min() <= 0.0, print(arr.min())
+    
+    elif prop == 'correlation':
+        assert arr.min() >= -1.0 and arr.max() <= 1.0, print(arr.min(), arr.max())
+    
+    elif prop == 'homogeneity':
+        assert arr.min() >= 0.0 and arr.max() <= 1.0, print(arr.min(), arr.max())
+
+    elif prop == 'contrast':
+        assert arr.min() <= 0.0, print(arr.min())
