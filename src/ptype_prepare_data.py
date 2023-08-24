@@ -251,9 +251,9 @@ def load_feats_fastglcm(idx, import_txt, directory = '../data/train-features/'):
         # this has to be done after median - doesnt work if just calling .astype(np.uint8)
         s2 = ((s2.astype(np.float32) / 65535) * 255).astype(np.uint8)
 
-        validate.glcm_input(s2)
+        validate.fast_glcm_input(s2)
         txt = fast_txt.fast_glcm_train(s2)
-        validate.glcm_output(txt)
+        validate.fast_glcm_output(txt)
         np.save(f'../data/train-texture/{idx}_fast.npy', txt)
     
     ttc = hkl.load(directory + str(idx) + '.hkl')
@@ -387,6 +387,7 @@ def multiclass_ceo(v_train_data):
 
     # use CEO csv to gather plot id numbers
     plot_ids = []
+    no_labels = []
 
     for i in v_train_data:
 
@@ -395,13 +396,15 @@ def multiclass_ceo(v_train_data):
 
         # assert unknown labels are always a full 14x14 (196 points) of unknowns
         unknowns = df[df.PLANTATION == 255]
+        no_labels.extend(sorted(list(set(unknowns.PLOT_FNAME))))
+
         for plot in set(list(unknowns.PLOT_ID)):
             assert len(unknowns[unknowns.PLOT_ID == plot]) == 196,\
             f'{plot} has {len(unknowns[unknowns.PLOT_ID == plot])}/196 points labeled unknown.'
 
         # drop unknowns and add to full list
         df_new = df.drop(df[df.PLANTATION == 255].index)
-        print(f'{int((len(df) - len(df_new)) / 196)} plots labeled unknown were dropped from {i}.')
+        #print(f'{int((len(df) - len(df_new)) / 196)} plots labeled unknown were dropped from {i}.')
         plot_ids += df_new.PLOT_FNAME.drop_duplicates().tolist()
 
     # add leading 0 to plot_ids that do not have 5 digits
@@ -409,17 +412,11 @@ def multiclass_ceo(v_train_data):
         
     # remove any plot ids where there are no cloud free images (no s2 hkl file)
     final_plots = [plot for plot in plot_ids if os.path.exists(f'../data/train-s2/{plot}.hkl')]
-    print(f'{len(plot_ids) - len(final_plots)} plots had no cloud free imagery and will be removed.')
+    no_cloudfree = [plot for plot in plot_ids if plot not in final_plots]
+    #print(f'{len(plot_ids) - len(final_plots)} plots had no cloud free imagery and will be removed.')
 
-    # no_s2 = []
-    # for plot in plot_ids:            
-    #     s2_check = os.path.exists(f'../data/train-s2/{plot}.hkl')
-    #     if s2_check == False:
-    #         print(f'Plot id {plot} has no cloud free imagery and will be removed.')
-    #         no_s2.append(plot)
-    #         plot_ids.remove(plot)
-    
-    # print(f'OLD APPROACH: {plot_ids}')
+    print(f'{len(no_labels)} plots labeled "unknown" were dropped: {no_labels}')
+    print(f'{len(no_cloudfree)} plots had no cloud free imagery: {no_cloudfree}')
 
     return final_plots
 
@@ -447,7 +444,6 @@ def create_xy(v_train_data, classes, drop_feats, feature_select, verbose=False):
         plot_ids = multiclass_ceo(v_train_data)
     
     print(f'Training data includes {len(plot_ids)} plots.')
-
 
     # create empty x and y array based on number of plots (dropping TML probability changes dimensions from 78 -> 77)
     sample_shape = (14, 14)
@@ -478,8 +474,6 @@ def create_xy(v_train_data, classes, drop_feats, feature_select, verbose=False):
             s2 = load_s2(plot)
             ttc = load_ttc(plot)
             txt = load_txt(plot)
-            #print('REMINDER: Import fast or slow txt feats?')
-            #feats = load_feats(plot, import_txt=False)
             validate.train_output_range_dtype(slope, s1, s2, ttc, feature_select)
             X = make_sample(sample_shape, slope, s1, s2, txt, ttc, feature_select)
             y = load_label(plot, classes)
