@@ -14,6 +14,10 @@ from time import time, strftime
 from datetime import datetime
 from skimage.util import img_as_ubyte
 import sys
+from glob import glob
+sys.path.append('src/')
+
+import validate_io as validate
 
 with open("config.yaml", 'r') as stream:
     document = (yaml.safe_load(stream))
@@ -64,10 +68,9 @@ def download_tile_ids(location: list, aws_access_key: str, aws_secret_key: str):
         
         # turn the bucket + file into a object summary list
         objs = list(bucket.objects.filter(Prefix=s3_file))
-        print(s3_file, dest_file)
 
         if len(objs) > 0:
-            print(f"The s3 resource s3://{bucket.name}/{s3_file} exists.")
+            print(f"The s3 resource s3://{bucket.name}/{s3_file} will be downloaded.")
             bucket.download_file(s3_file, dest_file)
             
     database = pd.read_csv(dest_file)
@@ -77,49 +80,61 @@ def download_tile_ids(location: list, aws_access_key: str, aws_secret_key: str):
 
     return tiles
 
+def file_exists(tile_idx: tuple, aws_access_key: str, aws_secret_key: str):
+    '''
+    Checks if the texture array has already been created 
+    and saved on s3. If not, proceeds to calculation.
+    '''
+
+    x = tile_idx[0]
+    y = tile_idx[1]
+    bucket = 'tof-output'
+    key = f'2020/raw/{str(x)}/{str(y)}/raw/feats/{str(x)}X{str(y)}Y_txt.npy'
+
+    s3 = boto3.client('s3',
+                aws_access_key_id=aws_access_key, 
+                aws_secret_access_key=aws_secret_key)
+
+    try:
+        s3.head_object(Bucket=bucket, Key=key)
+        print(f'Texture file already exists for {x, y}')
+
+    except botocore.exceptions.ClientError as e:
+        if e.response['Error']['Code'] == "404":
+            print(f'No texture file exists for {x, y}')
+            return False
+
+    return True
+
 def download_ard(tile_idx: tuple, location: list, aws_access_key: str, aws_secret_key: str):
     ''' 
     If ARD folder is not present locally,
-    Download contents from s3 folder into local folder
-    for specified tile
+    Download the ard file for the specified tile (does
+    not download entire folder contents).
     '''
-
-    # set x/y to the tile IDs
     x = tile_idx[0]
     y = tile_idx[1]
+    tile_str = f'{str(x)}X{str(y)}Y'
 
-    s3_path = f'2020/ard/{str(x)}/{str(y)}/'
-    local_path = f'tmp/{location[0]}/{str(x)}/{str(y)}/ard/'
+    s3_file = f'2020/ard/{str(x)}/{str(y)}/{tile_str}_ard.hkl'
+    local_dir = f'tmp/{location[0]}/{str(x)}/{str(y)}/ard/'
+    local_file = f'{local_dir}{tile_str}_ard.hkl'
 
-    # check if ARD folder has been downloaded
-    present = os.path.exists(local_path)
+    s3 = boto3.resource('s3',
+                        aws_access_key_id=aws_access_key, 
+                        aws_secret_access_key=aws_secret_key)
 
-    if not present:
-        print(f"Downloading ARD for {(x, y)}")
+    bucket = s3.Bucket('tof-output')
+    if not os.path.exists(os.path.dirname(local_dir)):
+        os.makedirs(os.path.dirname(local_dir))
+    try:
+        bucket.download_file(s3_file, local_file)
 
-        s3 = boto3.resource('s3',
-                            aws_access_key_id=aws_access_key, 
-                            aws_secret_access_key=aws_secret_key)
-        bucket = s3.Bucket('tof-output')
+    except botocore.exceptions.ClientError as e:
+        if e.response['Error']['Code'] == "404":
+            print(f'Error downloading ARD file for {x, y}')
+            return False
 
-        # this will download whatever is in the ard folder 
-        for obj in bucket.objects.filter(Prefix=s3_path):
-
-            ard_target = os.path.join(local_path + 'ard/', os.path.relpath(obj.key, s3_path))
-            print(f'target download path: {ard_target}')
-
-            if not os.path.exists(os.path.dirname(ard_target)):
-                os.makedirs(os.path.dirname(ard_target))
-            if obj.key[-1] == '/':
-                continue
-            try:
-                bucket.download_file(obj.key, ard_target)
-
-            # if the tiles do not exist on s3, catch the error and return False
-            except botocore.exceptions.ClientError as e:
-                if e.response['Error']['Code'] == "404":
-                    return False
-    
     return True
 
 def glcm(img, prop):
@@ -176,7 +191,7 @@ def extract_txt(arr, properties_list):
 
     # for every texture property
     for prop in properties_list:
-        start = time()
+        start = datetime.now()
         output = np.zeros((windows.shape[0], windows.shape[1]), dtype=np.float32)
         
         # for every item in range of 0-610
@@ -188,23 +203,28 @@ def extract_txt(arr, properties_list):
         output = output[..., np.newaxis]
         texture_arr[..., index:index+1] = output
         index += 1
-        end = time()
-        print(f"Finished {prop} in {np.around(end - start, 1)} seconds.")
+        validate.texture_output_range(output, prop)
+        end = datetime.now()
+        print(f"Finished {prop} in {end - start}")
 
     return texture_arr
 
 def create_txt_array(tile_idx: tuple, location: list, aws_access_key: str, aws_secret_key: str):
-        
-    # prepare inputs
+    
+    # prepare inputs and create local folder
     x = tile_idx[0]
     y = tile_idx[1]
     folder = f'tmp/{location[0]}/{str(x)}/{str(y)}/'
     tile_str = f'{str(x)}X{str(y)}Y'
-    ard = hkl.load(f'{folder}ard/{str(x)}X{str(y)}_ard.hkl') # note this file name is missing y
+    if not os.path.exists(f'{folder}raw/feats/'):
+        os.makedirs(f'{folder}raw/feats/')
+
+    # prep s2 input
+    ard = hkl.load(f'{folder}ard/{tile_str}_ard.hkl') 
     s2 = ard[..., 0:10]
     s2 = img_as_ubyte(s2)
     assert s2.dtype == np.uint8, print(s2.dtype)
-    
+
     txt = np.zeros((s2.shape[0], s2.shape[1], 16), dtype=np.float32)
         
     blue = s2[..., 0]
@@ -220,23 +240,38 @@ def create_txt_array(tile_idx: tuple, location: list, aws_access_key: str, aws_s
     print('Calculating select GLCM textures for nir band...')
     txt[..., 12:16] = extract_txt(nir, ['dissimilarity', 'correlation', 'homogeneity','contrast'])
 
+    # save and upload to s3
+    validate.texture_output_dims(txt)
     np.save(f'{folder}raw/feats/{tile_str}_txt.npy', txt)
-    
-
-    # validate outputs and upload to s3
     s3_file = f'2020/raw/{str(x)}/{str(y)}/raw/feats/{tile_str}_txt.npy'
-    s3 = boto3.resource('s3',
+    print(f'Uploading {s3_file}')   
+    client = boto3.client('s3',
                         aws_access_key_id=aws_access_key, 
                         aws_secret_access_key=aws_secret_key)
     
-    print(f'Uploading {s3_file} to s3.')
-    
-    # will need to confirm this is correct 
-    s3.meta.client.upload_file(f'{tile_str}_txt.npy', 
-                              'tof-output', 
-                               s3_file)
+    client.upload_file(f'{folder}raw/feats/{tile_str}_txt.npy', "tof-output", s3_file)
 
     return None
+
+def remove_folder(tile_idx: tuple, location: list):
+    '''
+    Deletes temporary files after uploaded to s3
+    '''
+    # set x/y to the tile IDs
+    x = tile_idx[0]
+    y = tile_idx[1]
+  
+    path_to_tile = f'tmp/{location[0]}/{str(x)}/{str(y)}/'
+
+    # remove every folder/file in raw/
+    for folder in glob(path_to_tile + "raw/*/"):
+        for file in os.listdir(folder):
+            _file = folder + file
+            print(f'Deleting {_file}')
+            os.remove(_file)
+        
+    return None
+
 
 if __name__ == '__main__':
    
@@ -248,10 +283,19 @@ if __name__ == '__main__':
     tiles_to_process = download_tile_ids(args.location, aak, ask)
     tile_count = len(tiles_to_process)
     counter = 0
-    for tile in tiles_to_process:
-        successful = download_ard(tile, args.location, aak, ask)
-        if successful:
-            create_txt_array(tile, args.location, aak, ask)
-            counter += 1
-            if counter % 2 == 0:
-                print(f'{counter}/{tile_count} tiles processed...')
+
+    print('............................................')
+    print(f'Processing {tile_count} tiles for {args.location[1], args.location[0]}.')
+    print('............................................')
+
+    for tile_idx in tiles_to_process:
+        exists = file_exists(tile_idx, aak, ask)
+        if not exists:
+            print(f'Processing tile: {tile_idx}')
+            successful = download_ard(tile_idx, args.location, aak, ask)
+            if successful:
+                create_txt_array(tile_idx, args.location, aak, ask)
+                remove_folder(tile_idx, args.location)
+                counter += 1
+                if counter % 2 == 0:
+                    print(f'{counter}/{tile_count} tiles processed...')
