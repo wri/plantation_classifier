@@ -29,7 +29,7 @@ sys.path.append('src/')
 
 import mosaic
 import validate_io as validate
-import slow_glcm as slow_txt
+
 
 with open("config.yaml", 'r') as stream:
     document = (yaml.safe_load(stream))
@@ -102,42 +102,51 @@ def download_ard(tile_idx: tuple, country: str, aws_access_key: str, aws_secret_
     x = tile_idx[0]
     y = tile_idx[1]
 
-    s3_path = f'2020/ard/{str(x)}/{str(y)}/'
+    s3_path_ard = f'2020/ard/{str(x)}/{str(y)}/{str(x)}X{str(y)}Y_ard.hkl'
     s3_path_feats = f'2020/raw/{str(x)}/{str(y)}/raw/feats/'
-    local_path = f'tmp/{country}/{str(x)}/{str(y)}/'
 
     # check if present locally
-    ard_check = os.path.exists(local_path + 'ard/')
-    feats_check = os.path.exists(local_path + 'raw/feats/')
+    local_path = f'tmp/{country}/{str(x)}/{str(y)}/'
+    local_ard = os.path.exists(local_path + 'ard/')
+    local_feats = os.path.exists(local_path + 'raw/feats/')
 
-    if not ard_check:
+    s3 = boto3.resource('s3',
+                    aws_access_key_id=aws_access_key, 
+                    aws_secret_access_key=aws_secret_key)
+    bucket = s3.Bucket('tof-output')
+
+    if not local_ard:
+        os.makedirs(local_path + 'ard/')
         print(f"Downloading ARD for {(x, y)}")
+        print(s3_path_ard, f'{local_path}ard/{str(x)}X{str(y)}Y_ard.hkl')
+        try:
+            bucket.download_file(s3_path_ard, f'{local_path}ard/{str(x)}X{str(y)}Y_ard.hkl')
 
-        s3 = boto3.resource('s3',
-                            aws_access_key_id=aws_access_key, 
-                            aws_secret_access_key=aws_secret_key)
-        bucket = s3.Bucket('tof-output')
-
-        # this will download whatever is in the ard folder 
-        for obj in bucket.objects.filter(Prefix=s3_path):
-
-            ard_target = os.path.join(local_path + 'ard/', os.path.relpath(obj.key, s3_path))
-            print(f'target download path: {ard_target}')
-
-            if not os.path.exists(os.path.dirname(ard_target)):
-                os.makedirs(os.path.dirname(ard_target))
-            if obj.key[-1] == '/':
-                continue
-            try:
-                bucket.download_file(obj.key, ard_target)
-
-            # if the tiles do not exist on s3, catch the error and return False
-            except botocore.exceptions.ClientError as e:
+        except botocore.exceptions.ClientError as e:
                 if e.response['Error']['Code'] == "404":
                     return False
+
+        # # this will download whatever is in the ard folder 
+        # for obj in bucket.objects.filter(Prefix=s3_path):
+
+        #     ard_target = os.path.join(local_path + 'ard/', os.path.relpath(obj.key, s3_path))
+        #     print(f'target download path: {ard_target}')
+
+        #     if not os.path.exists(os.path.dirname(ard_target)):
+        #         os.makedirs(os.path.dirname(ard_target))
+        #     if obj.key[-1] == '/':
+        #         continue
+        #     try:
+        #         bucket.download_file(obj.key, ard_target)
+
+            # # if the tiles do not exist on s3, catch the error and return False
+            # except botocore.exceptions.ClientError as e:
+            #     if e.response['Error']['Code'] == "404":
+            #         return False
         
-    if not feats_check:
+    if not local_feats:
         print(f"Downloading feats for {(x, y)}")
+
         for obj in bucket.objects.filter(Prefix=s3_path_feats):
 
             feats_target = os.path.join(local_path + 'raw/feats/', os.path.relpath(obj.key, s3_path_feats))
@@ -153,9 +162,7 @@ def download_ard(tile_idx: tuple, country: str, aws_access_key: str, aws_secret_
             except botocore.exceptions.ClientError as e:
                 if e.response['Error']['Code'] == "404":
                     return False
-    
-    ard = hkl.load(f'{local_path}ard/{str(x)}X{str(y)}Y_ard.hkl')
-    return ard, True
+    return True
 
 def make_bbox(country: str, tile_idx: tuple, expansion: int = 10) -> list:
     """
@@ -413,15 +420,15 @@ def post_process_tile(arr: np.array, feature_select: list, no_data_flag: np.arra
         arr[no_data_flag] = 255.
         arr[no_tree_flag] = 0.
 
-    # postprocess_mono = remove_small_patches(arr == 1, thresh = 20)
-    # postprocess_af = remove_small_patches(arr == 2, thresh = 15)
+    postprocess_mono = remove_small_patches(arr == 1, thresh = 20)
+    postprocess_af = remove_small_patches(arr == 2, thresh = 15)
     
     # multiplying by boolean will turn every False into 0 
     # and keep every True as the original label
-    # arr[arr == 1] *= postprocess_mono[arr == 1]
-    # arr[arr == 2] *= postprocess_af[arr == 2]
+    arr[arr == 1] *= postprocess_mono[arr == 1]
+    arr[arr == 2] *= postprocess_af[arr == 2]
   
-    # del postprocess_af, postprocess_mono
+    del postprocess_af, postprocess_mono
 
     return arr
 
@@ -487,11 +494,18 @@ def remove_folder(tile_idx: tuple, local_dir: str):
     return None
 
 def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, feature_select: list):
-    
+
+    ''' 
+    will need to update
+    '''
+
     print(f'Processing tile: {tile_idx}')
-    ard, successful = download_ard(tile_idx, location[0], aak, ask)
+    successful = download_ard(tile_idx, location[0], aak, ask)
 
     if successful:
+        x = tile_idx[0]
+        y = tile_idx[1]
+        ard = hkl.load(f'tmp/{location[0]}/{str(x)}/{str(y)}/ard/{str(x)}X{str(y)}Y_ard.hkl')
         bbx = make_bbox(location[1], tile_idx)
         validate.output_dtype_and_dimensions(ard[..., 11:13], ard[..., 0:10], ard[..., 10])
         validate.feats_range(tile_idx, location[0])
@@ -512,7 +526,8 @@ def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, feat
         del ard, feats, no_data_flag, no_tree_flag, sample, sample_ss, preds, preds_final
     
     else:
-        print(f'Raw data for {tile_idx} does not exist on s3.')
+        print(f'Raw data for {tile_idx} could not be downloaded or does not exist on s3.')
+        return None
 
     return None
 
