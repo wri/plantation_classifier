@@ -17,8 +17,7 @@ dependencies:
 - rasterio==1.3.0
 - scipy==1.9.3
 - seaborn==0.12.1
+- scikit-image==0.19.3
 - pip
 - pip:
-  - scikit_image==0.19.3
-  - scikit_learn==1.1.3
   - hickle==5.0.2
