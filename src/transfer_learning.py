@@ -106,8 +106,9 @@ def download_ard(tile_idx: tuple, country: str, aws_access_key: str, aws_secret_
     s3_path_feats = f'2020/raw/{str(x)}/{str(y)}/raw/feats/'
 
     # check if present locally
+    # for ARD checks for single file, for feats checks for folder
     local_path = f'tmp/{country}/{str(x)}/{str(y)}/'
-    local_ard = os.path.exists(local_path + 'ard/')
+    local_ard = os.path.exists(f'{local_path}ard/{str(x)}X{str(y)}Y_ard.hkl')
     local_feats = os.path.exists(local_path + 'raw/feats/')
 
     s3 = boto3.resource('s3',
@@ -116,33 +117,16 @@ def download_ard(tile_idx: tuple, country: str, aws_access_key: str, aws_secret_
     bucket = s3.Bucket('tof-output')
 
     if not local_ard:
-        os.makedirs(local_path + 'ard/')
         print(f"Downloading ARD for {(x, y)}")
-        print(s3_path_ard, f'{local_path}ard/{str(x)}X{str(y)}Y_ard.hkl')
+        if not os.path.exists(local_path + 'ard/'):
+            os.makedirs(local_path + 'ard/')
+    
         try:
             bucket.download_file(s3_path_ard, f'{local_path}ard/{str(x)}X{str(y)}Y_ard.hkl')
 
         except botocore.exceptions.ClientError as e:
                 if e.response['Error']['Code'] == "404":
                     return False
-
-        # # this will download whatever is in the ard folder 
-        # for obj in bucket.objects.filter(Prefix=s3_path):
-
-        #     ard_target = os.path.join(local_path + 'ard/', os.path.relpath(obj.key, s3_path))
-        #     print(f'target download path: {ard_target}')
-
-        #     if not os.path.exists(os.path.dirname(ard_target)):
-        #         os.makedirs(os.path.dirname(ard_target))
-        #     if obj.key[-1] == '/':
-        #         continue
-        #     try:
-        #         bucket.download_file(obj.key, ard_target)
-
-            # # if the tiles do not exist on s3, catch the error and return False
-            # except botocore.exceptions.ClientError as e:
-            #     if e.response['Error']['Code'] == "404":
-            #         return False
         
     if not local_feats:
         print(f"Downloading feats for {(x, y)}")
@@ -258,7 +242,7 @@ def process_feats_slow(tile_idx: tuple, country: str, feature_select:list) -> np
     # where TML probability is 255 or 0, pass along to preds
     # note that the feats shape is (x, x, 65)
     no_data_flag = ttc[...,0] == 255.
-    no_tree_flag = ttc[...,0] == 0.
+    no_tree_flag = ttc[...,0] <= 0.1
 
     # combine ttc feats and txt into a single array
     output[..., :ttc.shape[-1]] = ttc
