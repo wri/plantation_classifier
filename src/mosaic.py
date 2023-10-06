@@ -1,9 +1,11 @@
 #! /usr/bin/env python3
 
 import pandas as pd
+import geopandas as gpd
 import numpy as np
 import rasterio as rs
 from rasterio.merge import merge
+from rasterio.mask import mask
 import os
 import sys
 from datetime import datetime
@@ -30,7 +32,7 @@ def mosaic_tif(location: list, model: str, compile_from: str):
         tiles = database[['X_tile', 'Y_tile']].to_records(index=False)
 
         # specify here if there's a specific set of tiles to merge
-        for tile_idx in tiles:
+        for tile_idx in tiles[:2]:
             x = tile_idx[0]
             y = tile_idx[1]
             filename = f'{str(x)}X{str(y)}Y_preds.tif'
@@ -60,12 +62,11 @@ def mosaic_tif(location: list, model: str, compile_from: str):
     del tiles
     del tifs_to_mosaic
     del reader_mode
-    gc.collect()
 
     date = datetime.today().strftime('%Y-%m-%d')
     
     # outpath will be the new filename 
-    outpath = f'tmp/{location[0]}/preds/mosaic/{location[1]}_{model}_{date}.tif'
+    outpath = f'tmp/{location[0]}/preds/mosaic/{location[1]}_{model}_{date}_mrgd.tif'
     out_meta = src.meta.copy()  
     out_meta.update({'driver': "GTiff",
                      'dtype': 'uint8',
@@ -79,54 +80,33 @@ def mosaic_tif(location: list, model: str, compile_from: str):
 
     return None
 
+def clip_it(location: list, model: str, shapefile: str):
+    ''''
+    imports a mosaic tif and clips it to the extent of a 
+    given shapefile
+    '''
+    date = datetime.today().strftime('%Y-%m-%d')
+    merged = f'tmp/{location[0]}/preds/mosaic/{location[1]}_{model}_{date}_mrgd.tif'
+    shapefile = gpd.read_file(f'data/{shapefile}')
+    clipped = f'tmp/{location[0]}/preds/mosaic/{location[1]}_{model}_{date}.tif'
 
-# def mosaic_tif(country: str, model: str):
+    with rs.open(merged) as src:
+        shapefile = shapefile.to_crs(src.crs)
+        out_image, out_transform = mask(src, shapefile.geometry, crop=True)
+        out_meta = src.meta.copy() 
 
-#     ''''
-#     Takes in a list of tiles and merges them to form a single tif.
-#     Alternatively... merges all tifs in a folder.
-#     NOTE: filepaths are based on relative path!
-#     '''
+    out_meta.update({
+        "driver":"Gtiff",
+        "height":out_image.shape[1], # height starts with shape[1]
+        "width":out_image.shape[2], # width starts with shape[2]
+        "transform":out_transform
+    })
+
+    with rs.open(clipped,'w',**out_meta) as dst:
+        dst.write(out_image)
+    os.remove(merged)
     
-#     if not os.path.exists(f'../tmp/{country}/preds/mosaic/'):
-#         os.makedirs(f'../tmp/{country}/preds/mosaic/')
-        
-#     # use the list of tiles to create a list of filenames
-#     # this will need to be updated to take in a specific list of tiles to mosaic
-#     tifs_to_mosaic = []
-    
-#     tifs = glob.glob(f'../tmp/{country}/preds/*.tif')  
-#     for file in tifs:
-#         tifs_to_mosaic.append(file)
-
-#     # now open each item in dataset reader mode (required to merge)
-#     reader_mode = []
-
-#     for file in tifs_to_mosaic:
-#         src = rs.open(file)
-#         reader_mode.append(src) 
-    
-#     print(f'Merging {len(reader_mode)} tifs.')
-#     mosaic, out_transform = merge(reader_mode)
-
-#     date = datetime.today().strftime('%Y-%m-%d')
-    
-#     # outpath will be the new filename
-#     suffix = f'{country}_{model}_{date}.tif'
-#     outpath = f'../tmp/{country}/preds/mosaic/{suffix}'
-#     out_meta = src.meta.copy()  
-#     out_meta.update({'driver': "GTiff",
-#                      'dtype': 'uint8',
-#                      'height': mosaic.shape[1],
-#                      'width': mosaic.shape[2],
-#                      'transform': out_transform,
-#                      'compress':'lzw'})
-
-#     with rs.open(outpath, "w", **out_meta) as dest:
-#         dest.write(mosaic)
-
-#     return None
-
+    return None
 
 
 def upload_mosaic(location: list, model: str, aws_access_key: str, aws_secret_key: str):
