@@ -22,7 +22,7 @@ from sklearn.utils.class_weight import compute_class_weight
 import sys
 from datetime import datetime
 import rasterio as rs
-import validate_io as validate
+import features.validate_io as validate
 
 
 

@@ -9,9 +9,9 @@ import glob
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.model_selection import train_test_split
-import validate_io as validate
-import slow_glcm as slow_txt
-import fast_glcm as fast_txt
+import features.validate_io as validate
+import features.slow_glcm as slow_txt
+import features.fast_glcm as fast_txt
 from tqdm import tqdm
 
 ### Plot ID Labeling ###
