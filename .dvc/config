@@ -1,4 +1,4 @@
 [core]
-    remote = dvc-remote
-['remote "dvc-remote"']
+    remote = plantation_data
+['remote "plantation_data"']
     url = /home/rlrognstad/data/gri/plantation/
