@@ -318,7 +318,7 @@ def make_sample_nofeats(sample_shape, slope, s1, s2):
     return sample
 
 
-def binary_ceo(v_train_data):
+def binary_ceo(v_train_data, data_dir):
     '''
     Creates a list of plot ids to process from collect earth surveys 
     with binary class labels (0, 1). Drops all plots w/o s2 imagery. 
@@ -330,7 +330,7 @@ def binary_ceo(v_train_data):
 
     for i in v_train_data:
         
-        df = pd.read_csv(f'../data/ceo-plantations-train-{i}.csv')
+        df = pd.read_csv(f'{data_dir}/ceo-plantations-train-{i}.csv')
         
         # for multiclass surveys, change labels
         multiclass = ['v08', 'v14', 'v15']
@@ -378,7 +378,7 @@ def binary_ceo(v_train_data):
     return plot_ids
 
 
-def multiclass_ceo(v_train_data):
+def multiclass_ceo(v_train_data, data_dir):
     '''
     Creates a list of plot ids to process from collect earth surveys 
     with multi-class labels (0, 1, 2, 255). Drops all plots with 
@@ -391,7 +391,7 @@ def multiclass_ceo(v_train_data):
     for i in v_train_data:
 
         # for each training data survey, drop all unknown labels
-        df = pd.read_csv(f'../data/ceo-plantations-train-{i}.csv')
+        df = pd.read_csv(f'{data_dir}/ceo-plantations-train-{i}.csv')
 
         # assert unknown labels are always a full 14x14 (196 points) of unknowns
         unknowns = df[df.PLANTATION == 255]
@@ -423,7 +423,7 @@ def multiclass_ceo(v_train_data):
 
     return final_plots
 
-def create_xy(v_train_data, classes, drop_feats, feature_select, verbose=False):
+def create_xy(v_train_data, classes, drop_feats, data_dir='../data/', feature_select=[], verbose=False):
     '''
     Gathers training data plots from collect earth surveys (v1, v2, v3, etc)
     and loads data to create a sample for each plot. Removes ids where there is no
@@ -442,9 +442,9 @@ def create_xy(v_train_data, classes, drop_feats, feature_select, verbose=False):
     
     # need to be able to create xy for 1) binary only 2) multiclass only 3) binary and multi
     if classes == 'binary':
-        plot_ids = binary_ceo(v_train_data)
+        plot_ids = binary_ceo(v_train_data, data_dir)
     elif classes == 'multi':
-        plot_ids = multiclass_ceo(v_train_data)
+        plot_ids = multiclass_ceo(v_train_data, data_dir)
     
     print(f'Training data includes {len(plot_ids)} plots.')
 
