@@ -1,0 +1,4 @@
+[core]
+    remote = plantation
+['remote "plantation"']
+    url = /home/rlrognstad/data/gri/plantation/data/
