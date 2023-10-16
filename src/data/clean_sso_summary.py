@@ -1,5 +1,4 @@
 # CLeans CEO summary Excel spreadsheet and converts to dictionary
-
 import pandas as pd
 
 ceo_filepath = '../data/Training_Data.xlsx'
@@ -12,4 +11,3 @@ def import_ceo_summary(ceo_filepath, survey_sheetname):
     ceo_summary = ceo_summary.map(lambda x: x.lower() if isinstance(x, str) else x)
     ceo_summary_dict = ceo_summary.set_index(ceo_survey_id_col).T.to_dict()
     return ceo_summary_dict
-
