@@ -6,7 +6,6 @@ import yaml
 from utils.logs import get_logger
 
 def data_download(config_path: Text) -> None:
-    config_path='../params.yaml'
     with open(config_path) as conf_file:
         config = yaml.safe_load(conf_file)
     logger = get_logger('DATA_DOWNLOAD', log_level=config['base']['log_level'])
@@ -32,4 +31,6 @@ def data_download(config_path: Text) -> None:
         logger.info('Data download complete')
     else: 
         logger.info('No new data downloaded')
+
+        
         

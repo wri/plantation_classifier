@@ -27,12 +27,12 @@ import copy
 ## import other scripts
 import sys
 sys.path.append('src/')
-import interpolation
-import cloud_removal
-import mosaic
-import validate_io as validate
-import slow_glcm as slow_txt
-import fast_glcm as fast_txt
+import src.utils.interpolation as interpolation
+import src.utils.cloud_removal as cloud_removal
+import src.utils.mosaic as mosaic
+import src.features.validate_io as validate
+import src.features.slow_glcm as slow_txt
+import src.features.fast_glcm as fast_txt
 
 with open("config.yaml", 'r') as stream:
     document = (yaml.safe_load(stream))
