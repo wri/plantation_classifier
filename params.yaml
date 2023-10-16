@@ -1,5 +1,6 @@
 base:
   log_level: INFO
+  random_state: 121
 
 data_load:
   download_data: False
@@ -7,8 +8,9 @@ data_load:
   bucket_name: 'restoration-monitoring'
   folder_prefix: 'plantation-mapping/data/train/'
   local_prefix: '../data/train/'
-  summary_filename: 'Training_Data.xlsx'
+  summary_filename: '../data/Training_Data.xlsx'
   summary_sheetname: 'CEO_Surveys'
+  survey_id_column_name: 'CEO Survey'
   data_prefix_list:
     - slope
     - s1
