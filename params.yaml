@@ -1,0 +1,19 @@
+data_load:
+  download_data: FALSE
+  sso_profile_name: 'rognstad-dev'
+  bucket_name: 'restoration-monitoring'
+  folder_prefix: 'plantation-mapping/data/train/'
+  local_prefix: '../data/train/'
+  summary_filename: 'Training_Data.xlsx'
+  summary_sheetname: 'CEO_Surveys'
+  data_prefix_list:
+    - slope
+    - s1
+    - s2
+    - dem
+    - features-ckpt-2023-02-09
+    - labels
+  
+
+data_condition:
+
