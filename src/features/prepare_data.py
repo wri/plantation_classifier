@@ -8,6 +8,7 @@ from utils.logs import get_logger
 import data.clean_ceo_summary as cc
 import features.slow_glcm as slow_txt
 import features.fast_glcm as fast_txt
+import features.validate_io as validate
 
 
 def get_ceo_plot_ids(v_train_data, config_path, label_type=['binary']):
@@ -200,7 +201,7 @@ def load_label(idx, classes, local_data_path):
     
     return labels
 
-def load_txt(idx, local_Data_path):
+def load_txt(idx, local_data_path):
     
     '''
     Loads raw s2 data and preprocesses
@@ -241,9 +242,90 @@ def load_txt(idx, local_Data_path):
         output[..., 12:16] = slow_txt.extract_texture(nir)
 
         # save the output
-        np.save(f'../data/train-texture/{idx}.npy', output)
+        np.save(f'{local_data_path}/train-texture/{idx}.npy', output)
     
     return output.astype(np.float32)
+
+def make_sample(sample_shape, slope, s1, s2, txt, ttc, feature_select):
+    
+    ''' 
+    Defines dimensions and then combines slope, s1, s2, TML features and 
+    texture features from a plot into a sample with shape (14, 14, 94)
+    Feature select is a list of features that will be used, otherwise empty list
+    '''
+    # now filter to select features if arg provided
+    # squeeze extra axis that is added (14,14,1,15) -> (14,14,15)
+    feats = np.zeros((14, 14, ttc.shape[-1] + txt.shape[-1]), dtype=np.float32)
+    feats[..., :65] = ttc
+    feats[..., 65:] = txt
+    if len(feature_select) > 0:
+        feats = np.squeeze(feats[:, :, [feature_select]])
+
+    # define the last dimension of the array
+    n_feats = 1 + s1.shape[-1] + s2.shape[-1] + feats.shape[-1] 
+
+    sample = np.empty((sample_shape[1], sample_shape[-1], n_feats))
+
+    # populate empty array with each feature
+    sample[..., 0] = slope
+    sample[..., 1:3] = s1
+    sample[..., 3:13] = s2
+    sample[..., 13:] = feats
+
+    return sample
+
+def make_sample_nofeats(sample_shape, slope, s1, s2):
+    
+    ''' 
+    Defines dimensions and then combines slope, s1 and s2 features from a plot
+    into a sample with shape (14, 14, 13). 
+    '''
+    # validate that the inputs are correct -- TODO adapt to do no feats
+    # validate.train_output_range_dtype(slope, s1, s2)
+
+    # define the last dimension of the array
+    n_feats = 1 + s1.shape[-1] + s2.shape[-1] 
+
+    sample = np.empty((sample_shape[1], sample_shape[-1], n_feats))
+    
+    # populate empty array with each feature
+    sample[..., 0] = slope
+    sample[..., 1:3] = s1
+    sample[..., 3:13] = s2
+    
+    return sample
+
+def convert_to_db(x: np.ndarray, min_db: int) -> np.ndarray:
+    """ 
+    Converts Sentinel 1 unitless backscatter coefficient
+    to decible with a min_db lower threshold
+
+    Background: S1 is required to be processed to equivalent backscatter coefficient
+    images in decibels (dB) scale. This backscatter coefficient represents the target 
+    backscattering area (radar cross-section) per unit ground area. 
+    It is required to be converted into dB as it can vary by several orders of magnitude. 
+    It measures whether the surface backscatters from the incident microwave radiation 
+    are preferentially away from the SAR sensor dB < 0) or towards the SAR sensor dB > 0).
+    
+    Parameters:
+        x (np.ndarray): unitless backscatter (T, X, Y, B) array
+        min_db (int): integer from -50 to 0
+            (-22 db is the lower limit of sensitivity for s1)
+
+    Returns:
+        x (np.ndarray): db backscatter (T, X, Y, B) array
+    
+    (T, X, Y, B): time, x dimension, y dimension, band
+    """
+    # converts the array to decibel
+    x = 10 * np.log10(x + 1/65535)
+    x[x < -min_db] = -min_db
+    x = (x + min_db) / min_db
+
+    # return array clipped to values between 0-1
+    x = np.clip(x, 0, 1)
+    
+    return x
 
 def create_xy(v_train_data, classes, drop_feats, config_path, feature_select=[], verbose=False):
     '''
@@ -301,7 +383,7 @@ def create_xy(v_train_data, classes, drop_feats, config_path, feature_select=[],
             #feats = load_feats(plot, import_txt=False)
             validate.train_output_range_dtype(slope, s1, s2, ttc, feature_select)
             X = make_sample(sample_shape, slope, s1, s2, txt, ttc, feature_select)
-            y = load_label(plot, classes)
+            y = load_label(plot, classes, local_data_path)
             x_all[num] = X
             y_all[num] = y
 
