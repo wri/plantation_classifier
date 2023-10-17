@@ -32,4 +32,34 @@ data_condition:
     Unknown: 255
   scale_features: True
 
+train: 
+  cv: 3
+  estimator_name: cat
+  max_features: 40
+  metric: rmse
+  estimators:
+    rfc: #sklearn.ensemble.RandomForestClassifier
+      importance_metric: shap
+      use_class_weights: True
+      param_grid:
+    svm:
+      importance_metric: shap
+      use_class_weights: True
+      param_grid:
+    lgbm:
+      importance_metric: shap
+      use_class_weights: True 
+      param_grid:
+    xgb:
+      importance_metric: shap 
+      use_class_weights: True
+      param_grid:
+    cat: 
+      importance_metric: shap
+      param_grid:
+    logreg:
+      importance_metric: shap
+      use_class_weights: True
+      param_grid:
+  model_path: ../models/model.joblib
 
