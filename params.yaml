@@ -30,5 +30,6 @@ data_condition:
     Agroforestry: 2
     Not plantation: 0
     Unknown: 255
+  scale_features: True
 
 
