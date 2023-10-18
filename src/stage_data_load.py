@@ -19,6 +19,7 @@ def data_load(config_path: Text) -> None:
     ceo_batch_list = id_ceo_batches(config_path, ceo_summary)
     with open(config['data_load']['ceo_json'], "w") as fp:
         json.dump(ceo_batch_list, fp)
+    logger.info('CEO survey targets identified')
     
         
 if __name__ == '__main__':

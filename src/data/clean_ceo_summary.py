@@ -6,7 +6,7 @@ from utils.logs import get_logger
 def import_ceo_summary(config_path):
     with open(config_path) as conf_file:
         config = yaml.safe_load(conf_file)
-    logger = get_logger('CEO_SUMMARY_LOAD', log_level=config['base']['log_level'])
+    logger = get_logger('DATA_LOAD', log_level=config['base']['log_level'])
     ceo_summary = pd.read_excel(config['data_load']['summary_filename'], sheet_name=config['data_load']['summary_sheetname'], header=1)
     ceo_summary = ceo_summary[ceo_summary[config['data_load']['survey_id_column_name']].notna()]
     ceo_summary = ceo_summary.map(lambda x: x.lower() if isinstance(x, str) else x)

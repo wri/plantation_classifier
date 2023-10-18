@@ -1,0 +1,12 @@
+stages:
+  data_load:
+    cmd: python src/stage_data_load.py --config=params.yaml
+    deps:
+    - src/data/clean_ceo_summary.py
+    - src/data/s3_download_sso.py
+    - src/stage_data_load.py
+    params:
+    - base
+    - data_load
+    outs:
+    - src/report/ceo_list.json
