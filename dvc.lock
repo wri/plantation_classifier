@@ -44,3 +44,77 @@ stages:
       hash: md5
       md5: 3647c2fd24928b026e1f38bbfa0b7391
       size: 28
+  featureize:
+    cmd: python src/stage_featureize.py --config=params.yaml
+    deps:
+    - path: src/features/prepare_data.py
+      hash: md5
+      md5: 428a8fe14249e4466d907606558c6990
+      size: 17605
+    - path: src/report/ceo_list.json
+      hash: md5
+      md5: 3647c2fd24928b026e1f38bbfa0b7391
+      size: 28
+    - path: src/stage_featureize.py
+      hash: md5
+      md5: 898bb0e1cd22ca0c822734fa961b0008
+      size: 1940
+    params:
+      params.yaml:
+        base:
+          log_level: INFO
+          random_state: 121
+        data_condition:
+          train_filter_features:
+            Use?: yes
+            Classes: multi
+          label_cats:
+            Monoculture: 1
+            Agroforestry: 2
+            Not plantation: 0
+            Unknown: 255
+          scale_features: true
+          test_split: 20
+          val_split: 25
+          train_data_x: data/train_features/train_X.pkl
+          train_data_y: data/train_features/train_y.pkl
+          test_data_x: data/test_features/test_X.pkl
+          test_data_y: data/test_features/test_y.pkl
+          val_data_x: data/val_features/val_X.pkl
+          val_data_y: data/val_features/val_y.pkl
+        data_load:
+          download_data: false
+          sso_profile_name: rognstad-dev
+          bucket_name: restoration-monitoring
+          folder_prefix: plantation-mapping/data/train/
+          local_prefix: data/train/
+          summary_filename: data/Training_Data.xlsx
+          summary_sheetname: CEO_Surveys
+          survey_id_column_name: CEO Survey
+          ceo_survey_directory: data/ceo-surveys
+          data_prefix_list:
+          - slope
+          - s1
+          - s2
+          - dem
+          - features-ckpt-2023-02-09
+          - labels
+          ceo_json: src/report/ceo_list.json
+          report_output_dir: /report/
+    outs:
+    - path: data/test_features/test_X.pkl
+      hash: md5
+      md5: ee3f08213891b64b6d010f26104cf7f9
+      size: 12675874
+    - path: data/test_features/test_y.pkl
+      hash: md5
+      md5: 07fbf57540b6bd1adca2cfa4b8b23a4b
+      size: 135008
+    - path: data/train_features/train_X.pkl
+      hash: md5
+      md5: 6faba42a7da189d58e3b5a8f2c6de3c4
+      size: 47018210
+    - path: data/train_features/train_y.pkl
+      hash: md5
+      md5: 0ac642db2b433ca7495d3f793f3c39ea
+      size: 500352

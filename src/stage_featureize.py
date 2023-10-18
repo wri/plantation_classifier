@@ -20,9 +20,9 @@ def featureize(config_path: Text) -> None:
                     config_path =config_path, 
                     verbose=False)
     logger.info('X,y features loaded')
-    X_train, X_test, y_train, y_test = prep.reshape_training_data(X, y, config_path, config['data_condition']['scale_features'])
+    X_train, X_test, X_val, y_train, y_test, y_val = prep.reshape_training_data(X, y, config_path, config['data_condition']['scale_features'])
     scale_data = config['data_condition']['scale_features']
-    logger.info(f'Train and test set generated, scaled data: {scale_data}')
+    logger.info(f'Train, test, and validation set generated, scaled data: {scale_data}')
     with open(config['data_condition']['train_data_x'], 'wb') as fp:
         pickle.dump(X_train, fp)
     with open(config['data_condition']['train_data_y'], 'wb') as fp:
@@ -31,7 +31,11 @@ def featureize(config_path: Text) -> None:
         pickle.dump(X_test, fp)
     with open(config['data_condition']['test_data_y'], 'wb') as fp:
         pickle.dump(y_test, fp)
-    logger.info("Training and testing data exported")
+    with open(config['data_condition']['val_data_x'], 'wb') as fp:
+        pickle.dump(X_val, fp)
+    with open(config['data_condition']['val_data_y'], 'wb') as fp:
+        pickle.dump(y_val, fp)
+    logger.info("Training, testing, and validation data exported")
     
 if __name__ == '__main__':
     args_parser = argparse.ArgumentParser()
