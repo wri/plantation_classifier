@@ -7,11 +7,11 @@ data_load:
   sso_profile_name: 'rognstad-dev'
   bucket_name: 'restoration-monitoring'
   folder_prefix: 'plantation-mapping/data/train/'
-  local_prefix: '../data/train/'
-  summary_filename: '../data/Training_Data.xlsx'
+  local_prefix: 'data/train/'
+  summary_filename: 'data/Training_Data.xlsx'
   summary_sheetname: 'CEO_Surveys'
   survey_id_column_name: 'CEO Survey'
-  ceo_survey_directory: '../data/ceo-surveys'
+  ceo_survey_directory: 'data/ceo-surveys'
   data_prefix_list:
     - slope
     - s1
@@ -19,6 +19,8 @@ data_load:
     - dem
     - features-ckpt-2023-02-09
     - labels
+  ceo_json: 'src/report/ceo_list.json'
+  report_output_dir: /report/
   
 data_condition:
   train_filter_features:
