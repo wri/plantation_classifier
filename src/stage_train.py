@@ -52,7 +52,8 @@ def train_model(config_path: Text) -> None:
                                       X_test, 
                                       y_train, 
                                       y_test, 
-                                      estimator_name, 
+                                      estimator_name,
+                                      config['train']['tuning_metric'], 
                                       config['train']['estimators'][estimator_name]['param_grid'], 
                                       config['train']['fit_params'], 
                                       config['train']['max_features'])
