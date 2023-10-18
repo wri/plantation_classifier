@@ -1,7 +1,7 @@
 import argparse
 from typing import Text
 import yaml
-import json
+import joblib
 import pickle
 from utils.logs import get_logger
 import models.feature_selection as fsl
@@ -43,8 +43,23 @@ def train(config_path: Text) -> None:
         logger.info("Using all features")
     if config['train']['tune_hyperparams']:
         logger.info("Starting hyperparameter tuning")
+#       TODO: implement hyperparameter tuning
     else:
         logger.info("Using default hyperparameters")
+    
+    logger.info("Training model")
+    metric, model, X_test = trn.train(X_train, 
+                                      X_test, 
+                                      y_train, 
+                                      y_test, 
+                                      estimator_name, 
+                                      config['train']['estimators'][estimator_name]['param_grid'], 
+                                      config['train']['fit_params'], 
+                                      config['train']['max_features'])
+    logger.info('Saving model')
+    model_path = config['train']['model_path']
+    joblib.dump(model, model_path)
+    
 
 if __name__ == '__main__':
     args_parser = argparse.ArgumentParser()

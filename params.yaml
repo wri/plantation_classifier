@@ -44,10 +44,10 @@ data_condition:
 
 train:
   select_features: True
-  tune_hyperparams: True
+  tune_hyperparams: False
   cv: 3
   estimator_name: catb
-  max_features: 40
+  max_features: 50
   tuning_metric: balanced_accuracy
   testing_metrics: 
     accuracy
@@ -90,5 +90,5 @@ train:
       importance_metric: shap
       use_class_weights: True
       param_grid:
-  model_path: ../models/model.joblib
+  model_path: models/model.joblib
 

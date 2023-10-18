@@ -36,7 +36,7 @@ def backward_selection(X_train, X_test, y_train, y_test, estimator_name, metric_
                                       metric_name,
                                       model_params_dict,
                                       fit_params_dict)
-    logger.info(f"{metric} with {select_X_train.shape[1]}")
+    logger.info(f"{metric} with {select_X_train.shape[1]} features")
     last_metric = metric
     
     # Drop least important feature and recalculate model peformance
@@ -59,7 +59,7 @@ def backward_selection(X_train, X_test, y_train, y_test, estimator_name, metric_
                                           metric_name,
                                           model_params_dict, 
                                           fit_params_dict)
-        logger.info(f"{metric} with {tmp_X_train.shape[1]}")
+        logger.info(f"{metric} with {tmp_X_train.shape[1]} features")
         if (num_features < max_features) and (metric < last_metric):
             # metric decreased, return last dataframe
             return select_X_train
@@ -68,7 +68,7 @@ def backward_selection(X_train, X_test, y_train, y_test, estimator_name, metric_
             last_metric = metric
             select_X_train = tmp_X_train
             select_X_test = tmp_X_test
-    return select_X_train
+    return select_X_train, select_X_test
     
 
 
