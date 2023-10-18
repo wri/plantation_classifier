@@ -42,11 +42,23 @@ data_condition:
   val_data_x: 'data/val_features/val_X.pkl'
   val_data_y: 'data/val_features/val_y.pkl'
 
-train: 
+train:
+  select_features: True
+  tune_hyperparams: True
   cv: 3
   estimator_name: cat
   max_features: 40
-  metric: rmse
+  tuning_metric: balanced_accuracy_score
+  testing_metrics: 
+    accuracy
+    balanced_accuracy
+    precision
+    recall
+    f1
+    roc_auc
+  fit_params:
+    use_best_model: True
+    early_stopping_rounds: 100
   estimators:
     rfc: #sklearn.ensemble.RandomForestClassifier
       importance_metric: shap
@@ -67,6 +79,13 @@ train:
     cat: 
       importance_metric: shap
       param_grid:
+        iterations: 500
+        max_depth: 5
+        learning_rate: 0.05
+        subsample: 0.5
+        colsample_bylevel: 0.5
+        min_data_in_leaf: 50
+        logging_level: Silent
     logreg:
       importance_metric: shap
       use_class_weights: True

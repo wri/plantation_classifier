@@ -1,36 +1,22 @@
-
 import statsmodels.api as sm
 import pandas as pd
 import numpy as np
-from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, balanced_accuracy_score, precision_score, recall_score, f1_score
 import shap
 
-from catboost import CatBoostRegressor, Pool
 
 
-
-def build_model(df, target):
-    """
-    Given the dataframe and target, build and return the model
-    """
-    # Set up target
-    y = df[target]
-    # Set up train-test split
-    X = df.drop(columns=[target])
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.2, random_state=1066)
-    # Identify the categorical features
-    categorical_features = X_train.select_dtypes(exclude=[np.number])
-    # Create training and test pools for catboost
-    train_pool = Pool(X_train, y_train, categorical_features)
-    test_pool = Pool(X_test, y_test, categorical_features)
-    # Fit the model and calculate RMSE
-    model = CatBoostRegressor(iterations=500, max_depth=5, learning_rate=0.05, random_seed=1066, logging_level='Silent')
-    model.fit(X_train, y_train, eval_set=test_pool, cat_features=categorical_features, use_best_model=True, early_stopping_rounds=10)
+def build_model(X_train, X_test, y_train, y_test, estimator,
+    model_params_dict, fit_params_dict):
+    estimators = get_supported_estimator()
+    if estimator_name not in estimators.keys():
+        raise UnsupportedClassifier(estimator_name)
+    estimator = estimators[estimator_name]()
+    # Fit the model and calculate metric
+    model = estimator(**model_params_dict)
+    model.fit(X_train, y_train, **fit_params_dict)
     rmse = np.sqrt(mean_squared_error(y_test, model.predict(X_test)))
     return rmse, model, X_test
-
-
 
 def get_dropped_feature(model, X_test):
     explainer = shap.Explainer(model)
@@ -45,7 +31,7 @@ def get_dropped_feature(model, X_test):
 
 def backward_selection(df, target, max_features=None):
     """
-    This function uses the SHAP importance from a catboost model
+    This function uses the SHAP importance from a model
     to incrementally remove features from the training set until the RMSE no longer improves.
     This function returns the dataframe with the features that give the best RMSE.
     Return at most max_features.
