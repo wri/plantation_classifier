@@ -1,0 +1,46 @@
+schema: '2.0'
+stages:
+  data_load:
+    cmd: python src/stage_data_load.py --config=params.yaml
+    deps:
+    - path: src/data/clean_ceo_summary.py
+      hash: md5
+      md5: dad2c4de32840272ce372069ef17a23a
+      size: 1804
+    - path: src/data/s3_download_sso.py
+      hash: md5
+      md5: 47066bc755314e22cd6fa4e7a6c25f95
+      size: 1471
+    - path: src/stage_data_load.py
+      hash: md5
+      md5: 03150babeb96e8b082482065bcfd89cc
+      size: 1065
+    params:
+      params.yaml:
+        base:
+          log_level: INFO
+          random_state: 121
+        data_load:
+          download_data: false
+          sso_profile_name: rognstad-dev
+          bucket_name: restoration-monitoring
+          folder_prefix: plantation-mapping/data/train/
+          local_prefix: data/train/
+          summary_filename: data/Training_Data.xlsx
+          summary_sheetname: CEO_Surveys
+          survey_id_column_name: CEO Survey
+          ceo_survey_directory: data/ceo-surveys
+          data_prefix_list:
+          - slope
+          - s1
+          - s2
+          - dem
+          - features-ckpt-2023-02-09
+          - labels
+          ceo_json: src/report/ceo_list.json
+          report_output_dir: /report/
+    outs:
+    - path: src/report/ceo_list.json
+      hash: md5
+      md5: 3647c2fd24928b026e1f38bbfa0b7391
+      size: 28

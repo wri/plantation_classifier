@@ -33,6 +33,10 @@ data_condition:
     Not plantation: 0
     Unknown: 255
   scale_features: True
+  train_data_x: 'data/train_features/train_X.pkl'
+  train_data_y: 'data/train_features/train_y.pkl'
+  test_data_x: 'data/test_features/test_X.pkl'
+  test_data_y: 'data/test_features/test_y.pkl'
 
 train: 
   cv: 3

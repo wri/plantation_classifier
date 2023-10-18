@@ -10,3 +10,18 @@ stages:
     - data_load
     outs:
     - src/report/ceo_list.json
+  featureize:
+    cmd: python src/stage_featureize.py --config=params.yaml
+    deps:
+    - src/features/prepare_data.py
+    - src/report/ceo_list.json
+    - src/stage_featureize.py
+    params:
+    - base
+    - data_condition
+    - data_load
+    outs:
+    - data/test_features/test_X.pkl
+    - data/test_features/test_y.pkl
+    - data/train_features/train_X.pkl
+    - data/train_features/train_y.pkl

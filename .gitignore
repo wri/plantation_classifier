@@ -16,4 +16,3 @@ __pycache__/
 .ipynb_checkpoints
 notebooks/catboost_info/*
 notebooks/conclusions.ipynb
-/data
