@@ -47,7 +47,7 @@ train:
   tune_hyperparams: False
   cv: 3
   estimator_name: catb
-  max_features: 50
+  max_features: 90
   tuning_metric: balanced_accuracy
   testing_metrics: 
     accuracy
