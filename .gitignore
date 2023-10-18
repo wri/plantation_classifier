@@ -6,6 +6,7 @@ models/*
 plantations-packageslist.txt
 src/fil-result/*
 fil-result/*
+catboost_info/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

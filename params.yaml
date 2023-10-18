@@ -46,9 +46,9 @@ train:
   select_features: True
   tune_hyperparams: True
   cv: 3
-  estimator_name: cat
+  estimator_name: catb
   max_features: 40
-  tuning_metric: balanced_accuracy_score
+  tuning_metric: balanced_accuracy
   testing_metrics: 
     accuracy
     balanced_accuracy
@@ -57,7 +57,7 @@ train:
     f1
     roc_auc
   fit_params:
-    use_best_model: True
+    use_best_model: False
     early_stopping_rounds: 100
   estimators:
     rfc: #sklearn.ensemble.RandomForestClassifier
@@ -76,7 +76,7 @@ train:
       importance_metric: shap 
       use_class_weights: True
       param_grid:
-    cat: 
+    catb: 
       importance_metric: shap
       param_grid:
         iterations: 500

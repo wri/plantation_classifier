@@ -27,7 +27,25 @@ def train(config_path: Text) -> None:
     
     if config['train']['select_features']:
         logger.info("Starting feature selection")
-          
+        estimator_name = config['train']['estimator_name']
+        select_X_train, select_X_test = fsl.backward_selection(X_train, X_test, 
+                                                y_train, y_test, 
+                                                config['train']['estimator_name'], 
+                                                config['train']['tuning_metric'],
+                                                config['train']['estimators'][estimator_name]['param_grid'], 
+                                                config['train']['fit_params'], 
+                                                logger, 
+                                                config['train']['max_features'])
+        logger.info(f"Feature selection completed with {select_X_train.shape[1]} features")
+        X_train = select_X_train
+        X_test = select_X_test
+    else:
+        logger.info("Using all features")
+    if config['train']['tune_hyperparams']:
+        logger.info("Starting hyperparameter tuning")
+    else:
+        logger.info("Using default hyperparameters")
+
 if __name__ == '__main__':
     args_parser = argparse.ArgumentParser()
     args_parser.add_argument('--config', dest='config', required=True)
