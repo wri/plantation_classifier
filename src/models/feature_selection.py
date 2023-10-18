@@ -62,7 +62,7 @@ def backward_selection(X_train, X_test, y_train, y_test, estimator_name, metric_
         logger.info(f"{metric} with {tmp_X_train.shape[1]} features")
         if (num_features < max_features) and (metric < last_metric):
             # metric decreased, return last dataframe
-            return select_X_train
+            return select_X_train, select_X_test
         else:
             # metric improved, continue dropping features
             last_metric = metric

@@ -7,7 +7,7 @@ from utils.logs import get_logger
 import models.feature_selection as fsl
 import models.train as trn
 
-def train(config_path: Text) -> None:
+def train_model(config_path: Text) -> None:
     with open(config_path) as conf_file:
         config = yaml.safe_load(conf_file)
     logger = get_logger('TRAIN', log_level=config['base']['log_level'])
@@ -65,4 +65,4 @@ if __name__ == '__main__':
     args_parser = argparse.ArgumentParser()
     args_parser.add_argument('--config', dest='config', required=True)
     args = args_parser.parse_args()
-    train(config_path=args.config)
+    train_model(config_path=args.config)
