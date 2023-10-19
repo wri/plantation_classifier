@@ -22,6 +22,7 @@ from skimage.util import img_as_ubyte
 import gc
 import copy
 import subprocess
+from rasterio.plot import reshape_as_raster, reshape_as_image
 
 ## import other scripts
 import sys
@@ -349,20 +350,32 @@ def reshape_and_scale(v_train_data: str, unseen: np.array, verbose: bool = False
 
     return unseen_reshaped
 
-def predict_classification(arr: np.array, pretrained_model: str, sample_dims: tuple, model_type: str):
+def predict_classification(arr: np.array, pretrained_model: str, sample_dims: tuple):
 
+    '''
+    Import pretrained model and run predictions on arr.
+    Reshape array to permit writing to tif.
+    '''
+
+    preds = pretrained_model.predict(arr)
+    preds = preds.reshape(sample_dims[0], sample_dims[1])
+
+    return preds
+
+def predict_regression(arr: np.array, pretrained_model: str, sample_dims: tuple):
     '''
     Import pretrained model and run predictions on arr.
     If using a regression model, multiply results by 100
     to get probability 0-100. Reshape array to permit writing to tif.
-    '''
 
-    if model_type == 'regressor':
-        preds = pretrained_model.predict(arr, prediction_type='Probability') # shape is (379452, 2)
-        preds = preds.reshape(sample_dims[0], sample_dims[1], preds.shape[-1]) # reshaped to (618, 614, 2)
-    else:
-        preds = pretrained_model.predict(arr)
-        preds = preds.reshape(sample_dims[0], sample_dims[1])
+    model.predict() outputs a 2D array with shape (379452, 2). This can
+    only be reshaped to (618, 614, 2). But there are 3 classes, so how
+    to get the model to predict probability for each class?
+    '''
+        
+    preds = pretrained_model.predict(arr, prediction_type='Probability') 
+    preds = preds * 100
+    preds = preds.reshape((sample_dims[0], sample_dims[1], 2))
 
     return preds
 
@@ -394,7 +407,7 @@ def remove_small_patches(arr, thresh):
 def post_process_tile(arr: np.array, feature_select: list, no_data_flag: np.array, no_tree_flag: np.array):
 
     '''
-    Applies the no data and no tree flag *if* TTC tree cover predictions are used
+    Applies the no data and no tree flag if TTC tree cover predictions are used
     in feature selection. The NN produces a float32 continuous prediction.
 
     Performs a connected component analysis to remove positive predictions 
@@ -440,8 +453,6 @@ def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, model_t
     arr = arr.astype(np.uint8)
 
     # create the file based on the size of the array
-
-
     print("Writing", file)
     if model_type == 'classifier':
         transform = rs.transform.from_bounds(west = west, south = south,
@@ -460,10 +471,9 @@ def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, model_t
         new_dataset.write(arr, 1)
         new_dataset.close()
     
-    # switch order type from (618, 614, band) to (band, 614, 618,)
-    elif model_type == 'regressor':
-        arr = np.moveaxis(arr, [0, 1, 2], [2, 1, 0])
-        print(arr.shape)
+    # switch (618, 614, band) to (band, 614, 618)
+    else:
+        arr = reshape_as_raster(arr)
         transform = rs.transform.from_bounds(west = west, south = south,
                                             east = east, north = north,
                                             width = arr.shape[1],
@@ -478,10 +488,10 @@ def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, model_t
                             compress = 'lzw',
                             crs = '+proj=longlat +datum=WGS84 +no_defs',
                             transform=transform)
-        new_dataset.write(arr)
+        new_dataset.write(arr) # adding count here throws error
         new_dataset.close()
 
-    #del arr, new_dataset
+    del arr, new_dataset
 
     return None
 
@@ -504,16 +514,13 @@ def remove_folder(tile_idx: tuple, local_dir: str):
         
     return None
 
-def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, feature_select: list):
+def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, feature_select: list, model_type: str):
 
     ''' 
     will need to update
     '''
-
     print(f'Processing tile: {tile_idx}')
     successful = download_ard(tile_idx, location[0], aak, ask)
-    model_type = 'regressor'
-    print(f'Model type is {model_type}.')
 
     if successful:
         x = tile_idx[0]
@@ -528,14 +535,17 @@ def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, feat
         #sample_ss = reshape_and_scale('v20', sample, verbose)
         
         validate.model_inputs(sample_ss)
-        preds = predict_classification(sample_ss, model, sample_dims, model_type)
-        preds_final = post_process_tile(preds, feature_select, no_data_flag, no_tree_flag)
-        #validate.model_outputs(preds, model_type)
+        if model_type == 'classifier':
+            preds = predict_classification(sample_ss, model, sample_dims)
+            preds_final = post_process_tile(preds, feature_select, no_data_flag, no_tree_flag)
+            validate.model_outputs(preds, model_type)
+        else:
+            preds_final = predict_regression(sample_ss, model, sample_dims)
 
         write_tif(preds_final, bbx, tile_idx, location[0], model_type, 'preds')
         #remove_folder(tile_idx, local_dir)
 
-        del ard, feats, no_data_flag, no_tree_flag, sample, sample_ss, preds, preds_final
+        del ard, feats, no_data_flag, no_tree_flag, sample, sample_ss, preds_final
     
     else:
         print(f'Raw data for {tile_idx} could not be downloaded or does not exist on s3.')
@@ -554,11 +564,12 @@ if __name__ == '__main__':
     parser.add_argument('--model', dest='model', type=str)
     parser.add_argument('--verbose', dest='verbose', default=False, type=bool) 
     parser.add_argument('--fs', dest='feature_select', nargs='*', type=int) 
+    parser.add_argument('--shape', dest='shapefile', type=str)
 
     args = parser.parse_args()
     
     # specify tiles HERE
-    tiles_to_process = download_tile_ids(args.location, aak, ask)[:2]
+    tiles_to_process = download_tile_ids(args.location, aak, ask)
     tile_count = len(tiles_to_process)
     counter = 0
 
@@ -569,15 +580,18 @@ if __name__ == '__main__':
     print('............................................')
     print(f'Processing {tile_count} tiles for {args.location[1], args.location[0]}.')
     print('............................................')
+    
+    model = 'regressor'
+    print(f'Model type is {model}.')
 
     for tile_idx in tiles_to_process:
         counter += 1
-        execute_per_tile(tile_idx, location=args.location, model=loaded_model, verbose=args.verbose, feature_select=args.feature_select)
+        execute_per_tile(tile_idx, location=args.location, model=loaded_model, verbose=args.verbose, feature_select=args.feature_select, model_type=model)
 
         if counter % 2 == 0:
             print(f'{counter}/{tile_count} tiles processed...')
     
-    # for now mosaic and upload to s3 bucket
     mosaic.mosaic_tif(args.location, args.model, compile_from='csv')
-    #mosaic.upload_mosaic(args.location, args.model, aak, ask)
+    # mosaic.clip_it(args.location, args.model, args.shapefile)
+    # mosaic.upload_mosaic(args.location, args.model, aak, ask)
     
