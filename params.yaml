@@ -4,14 +4,14 @@ base:
 
 data_load:
   download_data: False
-  sso_profile_name: 'rognstad-dev'
-  bucket_name: 'restoration-monitoring'
-  folder_prefix: 'plantation-mapping/data/train/'
-  local_prefix: 'data/train/'
-  summary_filename: 'data/Training_Data.xlsx'
-  summary_sheetname: 'CEO_Surveys'
-  survey_id_column_name: 'CEO Survey'
-  ceo_survey_directory: 'data/ceo-surveys'
+  sso_profile_name: "rognstad-dev"
+  bucket_name: "restoration-monitoring"
+  folder_prefix: "plantation-mapping/data/train/"
+  local_prefix: "data/train/"
+  summary_filename: "data/Training_Data.xlsx"
+  summary_sheetname: "CEO_Surveys"
+  survey_id_column_name: "CEO Survey"
+  ceo_survey_directory: "data/ceo-surveys"
   data_prefix_list:
     - slope
     - s1
@@ -19,13 +19,13 @@ data_load:
     - dem
     - features-ckpt-2023-02-09
     - labels
-  ceo_json: 'src/report/ceo_list.json'
+  ceo_json: "src/report/ceo_list.json"
   report_output_dir: /report/
-  
+
 data_condition:
   train_filter_features:
-#    Country: ghana
-    Use?: 'yes'
+    #    Country: ghana
+    Use?: "yes"
     Classes: multi
   label_cats:
     Monoculture: 1
@@ -35,12 +35,12 @@ data_condition:
   scale_features: True
   test_split: 20
   val_split: 25
-  train_data_x: 'data/train_features/train_X.pkl'
-  train_data_y: 'data/train_features/train_y.pkl'
-  test_data_x: 'data/test_features/test_X.pkl'
-  test_data_y: 'data/test_features/test_y.pkl'
-  val_data_x: 'data/val_features/val_X.pkl'
-  val_data_y: 'data/val_features/val_y.pkl'
+  train_data_x: "data/train_features/train_X.pkl"
+  train_data_y: "data/train_features/train_y.pkl"
+  test_data_x: "data/test_features/test_X.pkl"
+  test_data_y: "data/test_features/test_y.pkl"
+  val_data_x: "data/val_features/val_X.pkl"
+  val_data_y: "data/val_features/val_y.pkl"
 
 train:
   select_features: True
@@ -49,8 +49,7 @@ train:
   estimator_name: catb
   max_features: 90
   tuning_metric: balanced_accuracy
-  testing_metrics: 
-    accuracy
+  testing_metrics: accuracy
     balanced_accuracy
     precision
     recall
@@ -70,13 +69,13 @@ train:
       param_grid:
     lgbm:
       importance_metric: shap
-      use_class_weights: True 
-      param_grid:
-    xgb:
-      importance_metric: shap 
       use_class_weights: True
       param_grid:
-    catb: 
+    xgb:
+      importance_metric: shap
+      use_class_weights: True
+      param_grid:
+    catb:
       importance_metric: shap
       param_grid:
         iterations: 500
@@ -91,4 +90,3 @@ train:
       use_class_weights: True
       param_grid:
   model_path: models/model.joblib
-
