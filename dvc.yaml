@@ -25,3 +25,19 @@ stages:
     - data/test_features/test_y.pkl
     - data/train_features/train_X.pkl
     - data/train_features/train_y.pkl
+  train:
+    cmd: python src/stage_train.py --config=params.yaml
+    deps:
+    - data/test_features/test_X.pkl
+    - data/test_features/test_y.pkl
+    - data/train_features/train_X.pkl
+    - data/train_features/train_y.pkl
+    - src/models/feature_selection.py
+    - src/models/train.py
+    - src/stage_train.py
+    params:
+    - base
+    - data_condition
+    - train
+    outs:
+    - models/model.joblib

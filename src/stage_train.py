@@ -24,7 +24,7 @@ def train_model(config_path: Text) -> None:
         X_val = pickle.load(fp)
     with open(config["data_condition"]["val_data_y"], "rb") as fp:
         y_val = pickle.load(fp)
-    logger.info("Training, testing, and validation data loaded")
+    logger.info("Training and testing data loaded")
 
     if config["train"]["select_features"]:
         logger.info("Starting feature selection")

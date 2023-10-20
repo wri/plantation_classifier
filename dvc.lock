@@ -5,16 +5,16 @@ stages:
     deps:
     - path: src/data/clean_ceo_summary.py
       hash: md5
-      md5: dad2c4de32840272ce372069ef17a23a
-      size: 1804
+      md5: b6b44371ed34fe72f2a4f8d44153b3b2
+      size: 1864
     - path: src/data/s3_download_sso.py
       hash: md5
-      md5: 47066bc755314e22cd6fa4e7a6c25f95
-      size: 1471
+      md5: 11837c1b9a2116042e8e7e311b4da8a5
+      size: 1547
     - path: src/stage_data_load.py
       hash: md5
-      md5: 1f64f345cc1e5b9ff3e0a837132f237a
-      size: 1051
+      md5: aa72ab84cb440be951ed47bee59d7d55
+      size: 1040
     params:
       params.yaml:
         base:
@@ -42,18 +42,18 @@ stages:
     outs:
     - path: src/report/ceo_list.json
       hash: md5
-      md5: 9b001395c1665f95968e2750912e33a5
+      md5: dc3af1d65dc98727da27911bf88005da
       size: 28
   featureize:
     cmd: python src/stage_featureize.py --config=params.yaml
     deps:
     - path: src/features/prepare_data.py
       hash: md5
-      md5: 7c982a94d361a9ad3b9a116a11e6bdbc
-      size: 18902
+      md5: 2af84f821e4b8cc69309c48006253a66
+      size: 19015
     - path: src/report/ceo_list.json
       hash: md5
-      md5: 9b001395c1665f95968e2750912e33a5
+      md5: dc3af1d65dc98727da27911bf88005da
       size: 28
     - path: src/stage_featureize.py
       hash: md5
@@ -118,3 +118,105 @@ stages:
       hash: md5
       md5: 0ac642db2b433ca7495d3f793f3c39ea
       size: 500352
+  train:
+    cmd: python src/stage_train.py --config=params.yaml
+    deps:
+    - path: data/test_features/test_X.pkl
+      hash: md5
+      md5: 468a228ffa89b47218e11aecd131215b
+      size: 12675874
+    - path: data/test_features/test_y.pkl
+      hash: md5
+      md5: 07fbf57540b6bd1adca2cfa4b8b23a4b
+      size: 135008
+    - path: data/train_features/train_X.pkl
+      hash: md5
+      md5: 17df25d487005de96e094b9c4074a697
+      size: 47018210
+    - path: data/train_features/train_y.pkl
+      hash: md5
+      md5: 0ac642db2b433ca7495d3f793f3c39ea
+      size: 500352
+    - path: src/models/feature_selection.py
+      hash: md5
+      md5: 44413948f21ff14b33b35ed447a6f970
+      size: 2863
+    - path: src/models/train.py
+      hash: md5
+      md5: 4981572ed2d5801ba9111d0dbaf7013b
+      size: 2360
+    - path: src/stage_train.py
+      hash: md5
+      md5: 0256b85b51e7f3ecd3987ac0460e0d89
+      size: 2732
+    params:
+      params.yaml:
+        base:
+          log_level: INFO
+          random_state: 121
+        data_condition:
+          train_filter_features:
+            Use?: yes
+            Classes: multi
+          label_cats:
+            Monoculture: 1
+            Agroforestry: 2
+            Not plantation: 0
+            Unknown: 255
+          scale_features: true
+          test_split: 20
+          val_split: 25
+          train_data_x: data/train_features/train_X.pkl
+          train_data_y: data/train_features/train_y.pkl
+          test_data_x: data/test_features/test_X.pkl
+          test_data_y: data/test_features/test_y.pkl
+          val_data_x: data/val_features/val_X.pkl
+          val_data_y: data/val_features/val_y.pkl
+        train:
+          select_features: true
+          tune_hyperparams: false
+          cv: 3
+          estimator_name: catb
+          max_features: 90
+          tuning_metric: balanced_accuracy
+          testing_metrics: accuracy balanced_accuracy precision recall f1 roc_auc
+          fit_params:
+            use_best_model: false
+            early_stopping_rounds: 100
+          estimators:
+            rfc:
+              importance_metric: shap
+              use_class_weights: true
+              param_grid:
+            svm:
+              importance_metric: shap
+              use_class_weights: true
+              param_grid:
+            lgbm:
+              importance_metric: shap
+              use_class_weights: true
+              param_grid:
+            xgb:
+              importance_metric: shap
+              use_class_weights: true
+              param_grid:
+            catb:
+              importance_metric: shap
+              param_grid:
+                iterations: 500
+                max_depth: 5
+                learning_rate: 0.05
+                subsample: 0.5
+                colsample_bylevel: 0.5
+                min_data_in_leaf: 50
+                logging_level: Silent
+            logreg:
+              importance_metric: shap
+              use_class_weights: true
+              param_grid:
+          model_path: models/model.joblib
+    outs:
+    - path: models/model.joblib
+      hash: md5
+      md5: b64d7851153d35d084faa6ecf643854e
+      size: 298584
