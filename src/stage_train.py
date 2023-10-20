@@ -55,8 +55,7 @@ def train_model(config_path: Text) -> None:
                                       estimator_name,
                                       config['train']['tuning_metric'], 
                                       config['train']['estimators'][estimator_name]['param_grid'], 
-                                      config['train']['fit_params'], 
-                                      config['train']['max_features'])
+                                      config['train']['fit_params'])
     logger.info('Saving model')
     model_path = config['train']['model_path']
     joblib.dump(model, model_path)
