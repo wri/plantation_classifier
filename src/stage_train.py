@@ -20,10 +20,6 @@ def train_model(config_path: Text) -> None:
         X_test = pickle.load(fp)
     with open(config["data_condition"]["test_data_y"], "rb") as fp:
         y_test = pickle.load(fp)
-    with open(config["data_condition"]["val_data_x"], "rb") as fp:
-        X_val = pickle.load(fp)
-    with open(config["data_condition"]["val_data_y"], "rb") as fp:
-        y_val = pickle.load(fp)
     logger.info("Training and testing data loaded")
 
     if config["train"]["select_features"]:

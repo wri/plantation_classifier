@@ -8,7 +8,7 @@ src/fil-result/*
 fil-result/*
 catboost_info/*
 .vscode/*
-
+*.code-workspace
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

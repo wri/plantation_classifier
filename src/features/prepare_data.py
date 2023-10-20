@@ -20,6 +20,7 @@ def get_ceo_plot_ids(v_train_data, config_path, label_type=["binary"]):
     """
     with open(config_path) as conf_file:
         config = yaml.safe_load(conf_file)
+    logger = get_logger("GET PLOT IDS", log_level=config["base"]["log_level"])
     # use CEO csv to gather plot id numbers
     plot_ids = []
 
@@ -46,12 +47,12 @@ def get_ceo_plot_ids(v_train_data, config_path, label_type=["binary"]):
             # if assertion fails, will print count of points
             unknowns = df[df.PLANTATION_MULTI == 255]
             for plot in set(list(unknowns.PLOT_ID)):
-                assert (
-                    len(unknowns[unknowns.PLOT_ID == plot]) == 196
-                ), f"{plot} has {len(unknowns[unknowns.PLOT_ID == plot])}/196 points labeled unknown."
+                assert len(unknowns[unknowns.PLOT_ID == plot]) == 196, logger.info(
+                    f"{plot} has {len(unknowns[unknowns.PLOT_ID == plot])}/196 points labeled unknown."
+                )
             # drop unknown samples
             df_new = df.drop(df[df.PLANTATION_MULTI == 255].index)
-            print(
+            logger.info(
                 f"{(len(df) - len(df_new)) / 196} plots labeled unknown were dropped from {i}."
             )
 
@@ -60,13 +61,13 @@ def get_ceo_plot_ids(v_train_data, config_path, label_type=["binary"]):
             # assert unknown labels are always a full 14x14 (196 points) of unknowns
             unknowns = df[df.PLANTATION == 255]
             for plot in set(list(unknowns.PLOT_ID)):
-                assert (
-                    len(unknowns[unknowns.PLOT_ID == plot]) == 196
-                ), f"{plot} has {len(unknowns[unknowns.PLOT_ID == plot])}/196 points labeled unknown."
+                assert len(unknowns[unknowns.PLOT_ID == plot]) == 196, logger.info(
+                    f"{plot} has {len(unknowns[unknowns.PLOT_ID == plot])}/196 points labeled unknown."
+                )
 
             # drop unknowns and add to full list
             df_new = df.drop(df[df.PLANTATION == 255].index)
-            print(
+            logger.info(
                 f"{int((len(df) - len(df_new)) / 196)} plots labeled unknown were dropped from {i}."
             )
         plot_ids += df_new.PLOT_FNAME.drop_duplicates().tolist()
@@ -79,7 +80,9 @@ def get_ceo_plot_ids(v_train_data, config_path, label_type=["binary"]):
     for plot in plot_ids[:]:
         local_path = config["data_load"]["local_prefix"]
         if not os.path.exists(f"{local_path}/train-s2/{plot}.hkl".strip()):
-            print(f"Plot id {plot} has no cloud free imagery and will be removed.")
+            logger.info(
+                f"Plot id {plot} has no cloud free imagery and will be removed."
+            )
             plot_ids.remove(plot)
     return plot_ids
 
@@ -348,9 +351,7 @@ def convert_to_db(x: np.ndarray, min_db: int) -> np.ndarray:
     return x
 
 
-def create_xy(
-    v_train_data, classes, drop_feats, config_path, feature_select=[], verbose=False
-):
+def create_xy(v_train_data, classes, drop_feats, config_path, feature_select=[]):
     """
     Gathers training data plots from collect earth surveys (v1, v2, v3, etc)
     and loads data to create a sample for each plot. Removes ids where there is no
@@ -368,6 +369,7 @@ def create_xy(
     """
     with open(config_path) as conf_file:
         config = yaml.safe_load(conf_file)
+    logger = get_logger("CREATE XY", log_level=config["base"]["log_level"])
     # need to be able to create xy for 1) binary only 2) multiclass only 3) binary and multi
     plot_ids = get_ceo_plot_ids(v_train_data, config_path, classes)
     print(f"Training data includes {len(plot_ids)} plots.")
@@ -409,23 +411,22 @@ def create_xy(
             x_all[num] = X
             y_all[num] = y
 
-            # clean up memory
-            del slope, s1, s2, ttc, txt, X, y
-
-        if verbose:
-            print(f"Sample: {num}")
-            print(f"Features: {X.shape}, Labels: {y.shape}")
+        logger.info(f"Sample: {num}")
+        logger.info(f"Features: {X.shape}, Labels: {y.shape}")
+        # clean up memory
+        del slope, s1, s2, ttc, txt, X, y
 
     # check class balance
     labels, counts = np.unique(y_all, return_counts=True)
-    print(f"Class count {dict(zip(labels, counts))}")
+    logger.info(f"Class count {dict(zip(labels, counts))}")
 
     return x_all, y_all
 
 
-def reshape_training_data(X, y, config_path, scale, verbose=False):
+def reshape_training_data(X, y, config_path, scale):
     with open(config_path) as conf_file:
         config = yaml.safe_load(conf_file)
+    logger = get_logger("RESHAPE TRAINING DATA", log_level=config["base"]["log_level"])
     if scale:
         # standardize data
         min_all = []
@@ -454,17 +455,10 @@ def reshape_training_data(X, y, config_path, scale, verbose=False):
         test_size=((config["data_condition"]["test_split"] / 100)),
         random_state=config["base"]["random_state"],
     )
-    X_train, X_val, y_train, y_val = train_test_split(
-        X,
-        y,
-        test_size=((config["data_condition"]["val_split"] / 100)),
-        random_state=config["base"]["random_state"],
-    )
     start_min, start_max = X_train.min(), X_train.max()
-    if verbose:
-        print(
-            f"X_train: {X_train.shape}, X_test: {X_test.shape}, X_val: {X_val.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}, y_val: {y_val.shape}"
-        )
+    logger.info(
+        f"X_train: {X_train.shape}, X_test: {X_test.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}"
+    )
     if scale:
         # standardize data
         min_all = []
@@ -476,17 +470,14 @@ def reshape_training_data(X, y, config_path, scale, verbose=False):
                 # clip values in each band based on min/max of training dataset
                 X_train[..., band] = np.clip(X_train[..., band], mins, maxs)
                 X_test[..., band] = np.clip(X_test[..., band], mins, maxs)
-                X_val[..., band] = np.clip(X_val[..., band], mins, maxs)
                 # calculate standardized data
                 midrange = (maxs + mins) / 2
                 rng = maxs - mins
                 X_train_std = (X_train[..., band] - midrange) / (rng / 2)
                 X_test_std = (X_test[..., band] - midrange) / (rng / 2)
-                X_val_std = (X_val[..., band] - midrange) / (rng / 2)
                 # update each band in X to hold standardized data
                 X_train[..., band] = X_train_std
                 X_test[..., band] = X_test_std
-                X_val[..., band] = X_val_std
                 end_min, end_max = X_train.min(), X_train.max()
                 min_all.append(mins)
                 max_all.append(maxs)
@@ -496,15 +487,12 @@ def reshape_training_data(X, y, config_path, scale, verbose=False):
     #  TODO: make this a function
     X_train_ss = np.reshape(X_train, (np.prod(X_train.shape[:-1]), X_train.shape[-1]))
     X_test_ss = np.reshape(X_test, (np.prod(X_test.shape[:-1]), X_test.shape[-1]))
-    X_val_ss = np.reshape(X_val, (np.prod(X_val.shape[:-1]), X_val.shape[-1]))
     y_train = np.reshape(y_train, (np.prod(y_train.shape[:])))
     y_test = np.reshape(y_test, (np.prod(y_test.shape[:])))
-    y_val = np.reshape(y_val, (np.prod(y_val.shape[:])))
-    if verbose:
-        print(
-            f"Reshaped X_train: {X_train_ss.shape} X_test: {X_test_ss.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}"
-        )
-        print(
-            f"The data was scaled to: Min {start_min} -> {end_min}, Max {start_max} -> {end_max}"
-        )
-    return X_train_ss, X_test_ss, X_val_ss, y_train, y_test, y_val
+    logger.info(
+        f"Reshaped X_train: {X_train_ss.shape} X_test: {X_test_ss.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}"
+    )
+    logger.info(
+        f"The data was scaled to: Min {start_min} -> {end_min}, Max {start_max} -> {end_max}"
+    )
+    return X_train_ss, X_test_ss, y_train, y_test
