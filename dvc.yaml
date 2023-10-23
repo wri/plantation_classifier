@@ -41,3 +41,24 @@ stages:
     - train
     outs:
     - models/model.joblib
+  evaluate:
+    cmd: python src/stage_evaluate.py --config=params.yaml
+    deps:
+    - data/test_features/test_X.pkl
+    - data/test_features/test_y.pkl
+    - models/model.joblib
+    - src/report/visualize.py
+    params:
+    - base
+    - data_condition
+    - evaluate
+    - train
+    metrics:
+    - reports/metrics.json
+      cache: false
+    plots:
+    - reports/confusion_matrix.png
+    - reports/confusion_matrix_data.csv:
+        template: confusion
+        x: predicted
+        y: y_true

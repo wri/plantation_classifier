@@ -93,5 +93,7 @@ evaluate:
   reports_dir: reports
   metrics_file: "metrics.json"
   confusion_matrix_image: "confusion_matrix.png"
-  confusion_matrix_data: "confusion_matrix.csv"
+  confusion_matrix_data: "confusion_matrix_data.csv"
   eval_map_name: "eval_map.png"
+  tile_id_loc: data
+  tile_s3_bucket: "tof-output"

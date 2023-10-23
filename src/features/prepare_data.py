@@ -12,7 +12,7 @@ import features.fast_glcm as fast_txt
 import features.validate_io as validate
 
 
-def get_ceo_plot_ids(v_train_data, config_path, label_type=["binary"]):
+def get_ceo_plot_ids(v_train_data, config_path):
     """
     Creates a list of plot ids to process from collect earth surveys
     with binary class labels (0, 1). Drops all plots w/o s2 imagery.

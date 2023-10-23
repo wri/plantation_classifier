@@ -10,6 +10,7 @@ from utils.logs import get_logger
 def data_download(config_path: Text) -> None:
     with open(config_path) as conf_file:
         config = yaml.safe_load(conf_file)
+    logger = get_logger("S3_DOWNLOAD", log_level=config["base"]["log_level"])
     #   TODO: add check for connection errors
     #   TODO: add logic to compare local filedates for remote filedates
     boto3.setup_default_session(profile_name=config["data_load"]["sso_profile_name"])
