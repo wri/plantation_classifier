@@ -78,12 +78,12 @@ def train(
     metrics = get_supported_metrics()
     if metric_name not in metrics.keys():
         raise UnsupportedMetric(metric_name)
-    if use_class_weights:
-        classes = np.unique(y_train)
-        weights = compute_class_weight(
-            class_weight="balanced", classes=classes, y=y_train
-        )
-        fit_params_dict[class_weights] = weights
+    #   if use_class_weights:
+    #       classes = np.unique(y_train)
+    #       weights = compute_class_weight(
+    #           class_weight="balanced", classes=classes, y=y_train
+    #       )
+    #       fit_params_dict["class_weights"] = weights
     metric_fun = metrics[metric_name]
     model = estimator(**model_params_dict)
     model.fit(X_train, y_train, **fit_params_dict)

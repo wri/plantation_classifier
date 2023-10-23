@@ -9,8 +9,8 @@ stages:
       size: 1864
     - path: src/data/s3_download_sso.py
       hash: md5
-      md5: 11837c1b9a2116042e8e7e311b4da8a5
-      size: 1547
+      md5: 85eca9542f2b552f9c6c5a31079d04ea
+      size: 1625
     - path: src/stage_data_load.py
       hash: md5
       md5: aa72ab84cb440be951ed47bee59d7d55
@@ -42,23 +42,23 @@ stages:
     outs:
     - path: src/report/ceo_list.json
       hash: md5
-      md5: dc3af1d65dc98727da27911bf88005da
+      md5: 9b001395c1665f95968e2750912e33a5
       size: 28
   featureize:
     cmd: python src/stage_featureize.py --config=params.yaml
     deps:
     - path: src/features/prepare_data.py
       hash: md5
-      md5: 482a59ad0f9cd787b8dbbe6f18bdb54c
-      size: 18635
+      md5: c7b5d28a399e481b39de5ac5084da4c9
+      size: 18638
     - path: src/report/ceo_list.json
       hash: md5
-      md5: dc3af1d65dc98727da27911bf88005da
+      md5: 9b001395c1665f95968e2750912e33a5
       size: 28
     - path: src/stage_featureize.py
       hash: md5
-      md5: 8373232c7df95641a22c3e5ddd3b6f95
-      size: 1626
+      md5: 924942861f5c0048fe2e365db8ef8973
+      size: 1613
     params:
       params.yaml:
         base:
@@ -137,12 +137,12 @@ stages:
       size: 533282
     - path: src/models/feature_selection.py
       hash: md5
-      md5: 44413948f21ff14b33b35ed447a6f970
-      size: 2863
+      md5: 74b2f594fc17569d52445822cc3e488d
+      size: 2865
     - path: src/models/train.py
       hash: md5
-      md5: 4981572ed2d5801ba9111d0dbaf7013b
-      size: 2360
+      md5: a690a40f1e0c2987e544c4c676848d5b
+      size: 2499
     - path: src/stage_train.py
       hash: md5
       md5: d0588a6fe251e669c2c70766e5ccf9d0
@@ -214,5 +214,109 @@ stages:
     outs:
     - path: models/model.joblib
       hash: md5
-      md5: da2b2811ad9fe704b9e4c0ae8f226625
-      size: 298560
+      md5: 7e7c06f5e962b9dc8a269854f7fabe24
+      size: 298836
+  evaluate:
+    cmd: python src/stage_evaluate.py --config=params.yaml
+    deps:
+    - path: data/test_features/test_X.pkl
+      hash: md5
+      md5: 8a8b87816ded6d329c4b1dfdeaa8ad68
+      size: 12675874
+    - path: data/test_features/test_y.pkl
+      hash: md5
+      md5: 07fbf57540b6bd1adca2cfa4b8b23a4b
+      size: 135008
+    - path: models/model.joblib
+      hash: md5
+      md5: 7e7c06f5e962b9dc8a269854f7fabe24
+      size: 298836
+    - path: src/report/visualize.py
+      hash: md5
+      md5: 7bf4c7af7c94a1b21a84da301f9b64e3
+      size: 2947
+    params:
+      params.yaml:
+        base:
+          log_level: INFO
+          random_state: 121
+        data_condition:
+          train_filter_features:
+            Use?: yes
+            Classes: multi
+          label_cats:
+            Monoculture: 1
+            Agroforestry: 2
+            Not plantation: 0
+            Unknown: 255
+          scale_features: true
+          test_split: 20
+          val_split: 25
+          train_data_x: data/train_features/train_X.pkl
+          train_data_y: data/train_features/train_y.pkl
+          test_data_x: data/test_features/test_X.pkl
+          test_data_y: data/test_features/test_y.pkl
+        evaluate:
+          reports_dir: reports
+          metrics_file: metrics.json
+          confusion_matrix_image: confusion_matrix.png
+          confusion_matrix_data: confusion_matrix_data.csv
+          eval_map_name: eval_map.png
+          tile_id_loc: data
+          tile_s3_bucket: tof-output
+        train:
+          select_features: true
+          tune_hyperparams: false
+          cv: 3
+          estimator_name: catb
+          max_features: 90
+          tuning_metric: balanced_accuracy
+          testing_metrics: accuracy balanced_accuracy precision recall f1 roc_auc
+          fit_params:
+            use_best_model: false
+            early_stopping_rounds: 100
+          estimators:
+            rfc:
+              importance_metric: shap
+              use_class_weights: true
+              param_grid:
+            svm:
+              importance_metric: shap
+              use_class_weights: true
+              param_grid:
+            lgbm:
+              importance_metric: shap
+              use_class_weights: true
+              param_grid:
+            xgb:
+              importance_metric: shap
+              use_class_weights: true
+              param_grid:
+            catb:
+              importance_metric: shap
+              param_grid:
+                iterations: 500
+                max_depth: 5
+                learning_rate: 0.05
+                subsample: 0.5
+                colsample_bylevel: 0.5
+                min_data_in_leaf: 50
+                logging_level: Silent
+            logreg:
+              importance_metric: shap
+              use_class_weights: true
+              param_grid:
+          model_path: models/model.joblib
+    outs:
+    - path: reports/confusion_matrix.png
+      hash: md5
+      md5: 78ead0c91aaba65975b325cda7b34040
+      size: 23441
+    - path: reports/confusion_matrix_data.csv
+      hash: md5
+      md5: a86cfb2a7d4a6c936485f18e6eb6a898
+      size: 67441
+    - path: reports/metrics.json
+      hash: md5
+      md5: 7fa2c5da291acb0cc4786b12ca05bab2
+      size: 193

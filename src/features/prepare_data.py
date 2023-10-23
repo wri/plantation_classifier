@@ -12,7 +12,7 @@ import features.fast_glcm as fast_txt
 import features.validate_io as validate
 
 
-def get_ceo_plot_ids(v_train_data, config_path):
+def get_ceo_plot_ids(v_train_data, config_path, classes):
     """
     Creates a list of plot ids to process from collect earth surveys
     with binary class labels (0, 1). Drops all plots w/o s2 imagery.
@@ -80,9 +80,9 @@ def get_ceo_plot_ids(v_train_data, config_path):
     for plot in plot_ids[:]:
         local_path = config["data_load"]["local_prefix"]
         if not os.path.exists(f"{local_path}/train-s2/{plot}.hkl".strip()):
-            logger.info(
-                f"Plot id {plot} has no cloud free imagery and will be removed."
-            )
+            #           logger.info(
+            #               f"Plot id {plot} has no cloud free imagery and will be removed."
+            #           )
             plot_ids.remove(plot)
     return plot_ids
 
@@ -372,7 +372,7 @@ def create_xy(v_train_data, classes, drop_feats, config_path, feature_select=[])
     logger = get_logger("CREATE XY", log_level=config["base"]["log_level"])
     # need to be able to create xy for 1) binary only 2) multiclass only 3) binary and multi
     plot_ids = get_ceo_plot_ids(v_train_data, config_path, classes)
-    print(f"Training data includes {len(plot_ids)} plots.")
+    #  print(f"Training data includes {len(plot_ids)} plots.")
 
     # create empty x and y array based on number of plots (dropping TML probability changes dimensions from 78 -> 77)
     sample_shape = (14, 14)
@@ -411,8 +411,8 @@ def create_xy(v_train_data, classes, drop_feats, config_path, feature_select=[])
             x_all[num] = X
             y_all[num] = y
 
-        logger.info(f"Sample: {num}")
-        logger.info(f"Features: {X.shape}, Labels: {y.shape}")
+        #      logger.info(f"Sample: {num}")
+        #      logger.info(f"Features: {X.shape}, Labels: {y.shape}")
         # clean up memory
         del slope, s1, s2, ttc, txt, X, y
 

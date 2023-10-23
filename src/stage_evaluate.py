@@ -99,7 +99,6 @@ def evaluate_model(config_path: Text) -> None:
     logger.info("Save confusion matrix")
     labels = list(set(y_test))
     labels = [int(fl) for fl in labels]
-    logger.info(labels)
     # save confusion_matrix.png
     plt = plot_confusion_matrix(cm=report["cm"], target_names=labels, normalize=False)
     confusion_matrix_png_path = (

@@ -2,63 +2,62 @@ stages:
   data_load:
     cmd: python src/stage_data_load.py --config=params.yaml
     deps:
-    - src/data/clean_ceo_summary.py
-    - src/data/s3_download_sso.py
-    - src/stage_data_load.py
+      - src/data/clean_ceo_summary.py
+      - src/data/s3_download_sso.py
+      - src/stage_data_load.py
     params:
-    - base
-    - data_load
+      - base
+      - data_load
     outs:
-    - src/report/ceo_list.json
+      - src/report/ceo_list.json
   featureize:
     cmd: python src/stage_featureize.py --config=params.yaml
     deps:
-    - src/features/prepare_data.py
-    - src/report/ceo_list.json
-    - src/stage_featureize.py
+      - src/features/prepare_data.py
+      - src/report/ceo_list.json
+      - src/stage_featureize.py
     params:
-    - base
-    - data_condition
-    - data_load
+      - base
+      - data_condition
+      - data_load
     outs:
-    - data/test_features/test_X.pkl
-    - data/test_features/test_y.pkl
-    - data/train_features/train_X.pkl
-    - data/train_features/train_y.pkl
+      - data/test_features/test_X.pkl
+      - data/test_features/test_y.pkl
+      - data/train_features/train_X.pkl
+      - data/train_features/train_y.pkl
   train:
     cmd: python src/stage_train.py --config=params.yaml
     deps:
-    - data/test_features/test_X.pkl
-    - data/test_features/test_y.pkl
-    - data/train_features/train_X.pkl
-    - data/train_features/train_y.pkl
-    - src/models/feature_selection.py
-    - src/models/train.py
-    - src/stage_train.py
+      - data/test_features/test_X.pkl
+      - data/test_features/test_y.pkl
+      - data/train_features/train_X.pkl
+      - data/train_features/train_y.pkl
+      - src/models/feature_selection.py
+      - src/models/train.py
+      - src/stage_train.py
     params:
-    - base
-    - data_condition
-    - train
+      - base
+      - data_condition
+      - train
     outs:
-    - models/model.joblib
+      - models/model.joblib
   evaluate:
     cmd: python src/stage_evaluate.py --config=params.yaml
     deps:
-    - data/test_features/test_X.pkl
-    - data/test_features/test_y.pkl
-    - models/model.joblib
-    - src/report/visualize.py
+      - data/test_features/test_X.pkl
+      - data/test_features/test_y.pkl
+      - models/model.joblib
+      - src/report/visualize.py
     params:
-    - base
-    - data_condition
-    - evaluate
-    - train
+      - base
+      - data_condition
+      - evaluate
+      - train
     metrics:
-    - reports/metrics.json
-      cache: false
+      - reports/metrics.json
     plots:
-    - reports/confusion_matrix.png
-    - reports/confusion_matrix_data.csv:
-        template: confusion
-        x: predicted
-        y: y_true
+      - reports/confusion_matrix.png
+      - reports/confusion_matrix_data.csv:
+          template: confusion
+          x: predicted
+          y: y_true
