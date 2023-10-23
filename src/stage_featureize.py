@@ -1,8 +1,8 @@
 import argparse
 from typing import Text
-import yaml
 import json
 import pickle
+import yaml
 from utils.logs import get_logger
 import features.prepare_data as prep
 
@@ -22,7 +22,7 @@ def featureize(config_path: Text) -> None:
         X, y, config_path, config["data_condition"]["scale_features"]
     )
     scale_data = config["data_condition"]["scale_features"]
-    logger.info(f"Train, test, and validation set generated, scaled data: {scale_data}")
+    logger.info(f"Train and test set generated, scaled data: {scale_data}")
     with open(config["data_condition"]["train_data_x"], "wb") as fp:
         pickle.dump(X_train, fp)
     with open(config["data_condition"]["train_data_y"], "wb") as fp:

@@ -1,24 +1,20 @@
+from typing import Dict, Text
+import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import cross_val_score
 from sklearn.metrics import (
     accuracy_score,
     balanced_accuracy_score,
     precision_score,
     recall_score,
     f1_score,
-    make_scorer,
     roc_auc_score,
 )
+from sklearn.svm import SVC
+from sklearn.utils.class_weight import compute_class_weight
 from lightgbm import LGBMClassifier
 from xgboost import XGBClassifier
-from sklearn.svm import SVC
 from catboost import CatBoostClassifier
-from sklearn.utils.class_weight import compute_class_weight
-from datetime import datetime
-import rasterio as rs
-import features.validate_io as validate
-from typing import Dict, Text
 
 
 class UnsupportedClassifier(Exception):
@@ -72,6 +68,7 @@ def train(
     metric_name,
     model_params_dict,
     fit_params_dict,
+    use_class_weights=False,
 ):
     estimators = get_supported_estimator()
     if estimator_name not in estimators.keys():
@@ -81,6 +78,12 @@ def train(
     metrics = get_supported_metrics()
     if metric_name not in metrics.keys():
         raise UnsupportedMetric(metric_name)
+    if use_class_weights:
+        classes = np.unique(y_train)
+        weights = compute_class_weight(
+            class_weight="balanced", classes=classes, y=y_train
+        )
+        fit_params_dict[class_weights] = weights
     metric_fun = metrics[metric_name]
     model = estimator(**model_params_dict)
     model.fit(X_train, y_train, **fit_params_dict)

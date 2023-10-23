@@ -34,6 +34,7 @@ def backward_selection(
     model_params_dict,
     fit_params_dict,
     logger,
+    use_class_weights,
     max_features=None,
 ):
     """
@@ -55,6 +56,7 @@ def backward_selection(
         metric_name,
         model_params_dict,
         fit_params_dict,
+        use_class_weights,
     )
     logger.info(f"{metric} with {select_X_train.shape[1]} features")
     last_metric = metric
