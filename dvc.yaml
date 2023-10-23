@@ -54,7 +54,9 @@ stages:
       - evaluate
       - train
     metrics:
-      - reports/metrics.json
+      - reports/metrics.json:
+          cache: false
+
     plots:
       - reports/confusion_matrix.png
       - reports/confusion_matrix_data.csv:
