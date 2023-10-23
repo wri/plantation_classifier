@@ -372,7 +372,7 @@ def create_xy(v_train_data, classes, drop_feats, config_path, feature_select=[])
     logger = get_logger("CREATE XY", log_level=config["base"]["log_level"])
     # need to be able to create xy for 1) binary only 2) multiclass only 3) binary and multi
     plot_ids = get_ceo_plot_ids(v_train_data, config_path, classes)
-    #  print(f"Training data includes {len(plot_ids)} plots.")
+    logger.info(f"Training data includes {len(plot_ids)} plots.")
 
     # create empty x and y array based on number of plots (dropping TML probability changes dimensions from 78 -> 77)
     sample_shape = (14, 14)

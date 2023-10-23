@@ -42,8 +42,8 @@ stages:
     outs:
     - path: src/report/ceo_list.json
       hash: md5
-      md5: f82470a820ce4d5c69dc3bdc9c6b1332
-      size: 28
+      md5: d751713988987e9331980363e24189ce
+      size: 2
   featureize:
     cmd: python src/stage_featureize.py --config=params.yaml
     deps:
@@ -173,7 +173,7 @@ stages:
           tune_hyperparams: false
           cv: 3
           estimator_name: catb
-          max_features: 90
+          max_features: 50
           tuning_metric: balanced_accuracy
           testing_metrics: accuracy balanced_accuracy precision recall f1 roc_auc
           fit_params:
@@ -214,7 +214,7 @@ stages:
     outs:
     - path: models/model.joblib
       hash: md5
-      md5: 69ac99895c26a6eb745dfdaa4e108c8d
+      md5: 0cccf69ade9de6cd1032899daf9d9d09
       size: 298836
   evaluate:
     cmd: python src/stage_evaluate.py --config=params.yaml
@@ -229,7 +229,7 @@ stages:
       size: 135008
     - path: models/model.joblib
       hash: md5
-      md5: 69ac99895c26a6eb745dfdaa4e108c8d
+      md5: 0cccf69ade9de6cd1032899daf9d9d09
       size: 298836
     - path: src/report/visualize.py
       hash: md5
@@ -269,7 +269,7 @@ stages:
           tune_hyperparams: false
           cv: 3
           estimator_name: catb
-          max_features: 90
+          max_features: 50
           tuning_metric: balanced_accuracy
           testing_metrics: accuracy balanced_accuracy precision recall f1 roc_auc
           fit_params:

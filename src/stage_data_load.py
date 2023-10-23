@@ -15,8 +15,9 @@ def data_load(config_path: Text) -> None:
         data_download(config_path)
     else:
         logger.info("No new imagery data downloaded")
-    ceo_summary = import_ceo_summary(config_path)
+    ceo_summary = import_ceo_summary(config_path, logger)
     ceo_batch_list = id_ceo_batches(config_path, ceo_summary)
+    logger.debug(ceo_batch_list)
     with open(config["data_load"]["ceo_json"], "w") as fp:
         json.dump(ceo_batch_list, fp)
     logger.info("CEO survey targets identified")

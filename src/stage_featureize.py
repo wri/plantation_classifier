@@ -14,6 +14,7 @@ def featureize(config_path: Text) -> None:
     with open(config["data_load"]["ceo_json"], "r") as fp:
         ceo_batch_list = json.load(fp)
         logger.info("CEO survey targets loaded")
+        logger.info(ceo_batch_list)
     X, y = prep.create_xy(
         ceo_batch_list, classes="multi", drop_feats=False, config_path=config_path
     )

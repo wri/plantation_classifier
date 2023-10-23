@@ -4,10 +4,9 @@ import yaml
 from utils.logs import get_logger
 
 
-def import_ceo_summary(config_path):
+def import_ceo_summary(config_path, logger):
     with open(config_path) as conf_file:
         config = yaml.safe_load(conf_file)
-    logger = get_logger("DATA_LOAD", log_level=config["base"]["log_level"])
     ceo_summary = pd.read_excel(
         config["data_load"]["summary_filename"],
         sheet_name=config["data_load"]["summary_sheetname"],
