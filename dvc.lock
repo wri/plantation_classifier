@@ -5,20 +5,20 @@ stages:
     deps:
     - path: src/data/clean_ceo_summary.py
       hash: md5
-      md5: b6b44371ed34fe72f2a4f8d44153b3b2
-      size: 1864
+      md5: 5850588b16958cfe2724445cdaedfc52
+      size: 1796
     - path: src/data/s3_download_sso.py
       hash: md5
       md5: 85eca9542f2b552f9c6c5a31079d04ea
       size: 1625
     - path: src/stage_data_load.py
       hash: md5
-      md5: aa72ab84cb440be951ed47bee59d7d55
-      size: 1040
+      md5: 70ab06e9bf12b6a3b4cf72d1e26178f7
+      size: 1081
     params:
       params.yaml:
         base:
-          log_level: INFO
+          log_level: DEBUG
           random_state: 121
         data_load:
           download_data: false
@@ -42,27 +42,27 @@ stages:
     outs:
     - path: src/report/ceo_list.json
       hash: md5
-      md5: d751713988987e9331980363e24189ce
-      size: 2
+      md5: 078c1c0698aa52acfb7ee7c53303d46f
+      size: 35
   featureize:
     cmd: python src/stage_featureize.py --config=params.yaml
     deps:
     - path: src/features/prepare_data.py
       hash: md5
-      md5: 869562bbd6dce46e90ceaaf0a6768c50
-      size: 18674
+      md5: 649cd7e2134c71e4c3f43c2c7bcef141
+      size: 18555
     - path: src/report/ceo_list.json
       hash: md5
-      md5: f82470a820ce4d5c69dc3bdc9c6b1332
-      size: 28
+      md5: 078c1c0698aa52acfb7ee7c53303d46f
+      size: 35
     - path: src/stage_featureize.py
       hash: md5
-      md5: 924942861f5c0048fe2e365db8ef8973
-      size: 1613
+      md5: 0faee53194ae3a136c358bc664a7a551
+      size: 1698
     params:
       params.yaml:
         base:
-          log_level: INFO
+          log_level: DEBUG
           random_state: 121
         data_condition:
           train_filter_features:
@@ -150,7 +150,7 @@ stages:
     params:
       params.yaml:
         base:
-          log_level: INFO
+          log_level: DEBUG
           random_state: 121
         data_condition:
           train_filter_features:
@@ -214,7 +214,7 @@ stages:
     outs:
     - path: models/model.joblib
       hash: md5
-      md5: 0cccf69ade9de6cd1032899daf9d9d09
+      md5: c779579360551c80c12131530214bb78
       size: 298836
   evaluate:
     cmd: python src/stage_evaluate.py --config=params.yaml
@@ -229,7 +229,7 @@ stages:
       size: 135008
     - path: models/model.joblib
       hash: md5
-      md5: 0cccf69ade9de6cd1032899daf9d9d09
+      md5: c779579360551c80c12131530214bb78
       size: 298836
     - path: src/report/visualize.py
       hash: md5
@@ -238,7 +238,7 @@ stages:
     params:
       params.yaml:
         base:
-          log_level: INFO
+          log_level: DEBUG
           random_state: 121
         data_condition:
           train_filter_features:

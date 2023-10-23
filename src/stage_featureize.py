@@ -14,13 +14,17 @@ def featureize(config_path: Text) -> None:
     with open(config["data_load"]["ceo_json"], "r") as fp:
         ceo_batch_list = json.load(fp)
         logger.info("CEO survey targets loaded")
-        logger.info(ceo_batch_list)
+        logger.debug(ceo_batch_list)
     X, y = prep.create_xy(
-        ceo_batch_list, classes="multi", drop_feats=False, config_path=config_path
+        ceo_batch_list,
+        classes="multi",
+        drop_feats=False,
+        config_path=config_path,
+        logger=logger,
     )
     logger.info("X,y features loaded")
     X_train, X_test, y_train, y_test = prep.reshape_training_data(
-        X, y, config_path, config["data_condition"]["scale_features"]
+        X, y, config_path, config["data_condition"]["scale_features"], logger
     )
     scale_data = config["data_condition"]["scale_features"]
     logger.info(f"Train and test set generated, scaled data: {scale_data}")

@@ -12,7 +12,7 @@ import features.fast_glcm as fast_txt
 import features.validate_io as validate
 
 
-def get_ceo_plot_ids(v_train_data, config_path, classes):
+def get_ceo_plot_ids(v_train_data, config_path, classes, logger):
     """
     Creates a list of plot ids to process from collect earth surveys
     with binary class labels (0, 1). Drops all plots w/o s2 imagery.
@@ -20,14 +20,14 @@ def get_ceo_plot_ids(v_train_data, config_path, classes):
     """
     with open(config_path) as conf_file:
         config = yaml.safe_load(conf_file)
-    logger = get_logger("GET PLOT IDS", log_level=config["base"]["log_level"])
+
     # use CEO csv to gather plot id numbers
     plot_ids = []
 
     for i in v_train_data:
         ceo_path = config["data_load"]["ceo_survey_directory"]
         df = pd.read_csv(f"{ceo_path}/ceo-plantations-train-{i}.csv")
-        ceo_summary = cc.import_ceo_summary(config_path)
+        ceo_summary = cc.import_ceo_summary(config_path, logger)
         multiclass_batches = cc.get_batch_numbers(
             cc.ceo_filter(ceo_summary, "Classes", "multi")
         )
@@ -351,7 +351,9 @@ def convert_to_db(x: np.ndarray, min_db: int) -> np.ndarray:
     return x
 
 
-def create_xy(v_train_data, classes, drop_feats, config_path, feature_select=[]):
+def create_xy(
+    v_train_data, classes, drop_feats, config_path, logger, feature_select=[]
+):
     """
     Gathers training data plots from collect earth surveys (v1, v2, v3, etc)
     and loads data to create a sample for each plot. Removes ids where there is no
@@ -369,9 +371,8 @@ def create_xy(v_train_data, classes, drop_feats, config_path, feature_select=[])
     """
     with open(config_path) as conf_file:
         config = yaml.safe_load(conf_file)
-    logger = get_logger("CREATE XY", log_level=config["base"]["log_level"])
     # need to be able to create xy for 1) binary only 2) multiclass only 3) binary and multi
-    plot_ids = get_ceo_plot_ids(v_train_data, config_path, classes)
+    plot_ids = get_ceo_plot_ids(v_train_data, config_path, classes, logger)
     logger.info(f"Training data includes {len(plot_ids)} plots.")
 
     # create empty x and y array based on number of plots (dropping TML probability changes dimensions from 78 -> 77)
@@ -411,8 +412,8 @@ def create_xy(v_train_data, classes, drop_feats, config_path, feature_select=[])
             x_all[num] = X
             y_all[num] = y
 
-        #      logger.info(f"Sample: {num}")
-        #      logger.info(f"Features: {X.shape}, Labels: {y.shape}")
+        logger.debug(f"Sample: {num}")
+        logger.debug(f"Features: {X.shape}, Labels: {y.shape}")
         # clean up memory
         del slope, s1, s2, ttc, txt, X, y
 
@@ -423,10 +424,9 @@ def create_xy(v_train_data, classes, drop_feats, config_path, feature_select=[])
     return x_all, y_all
 
 
-def reshape_training_data(X, y, config_path, scale):
+def reshape_training_data(X, y, config_path, scale, logger):
     with open(config_path) as conf_file:
         config = yaml.safe_load(conf_file)
-    logger = get_logger("RESHAPE TRAINING DATA", log_level=config["base"]["log_level"])
     if scale:
         # standardize data
         min_all = []
