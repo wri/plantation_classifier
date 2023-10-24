@@ -6,6 +6,7 @@ from sklearn.metrics import (
     recall_score,
     f1_score,
 )
+import json
 import shap
 import models.train as trn
 from utils.logs import get_logger
@@ -94,4 +95,6 @@ def backward_selection(
             last_metric = metric
             select_X_train = tmp_X_train
             select_X_test = tmp_X_test
+        with open(config["data_load"]["ceo_json"], "w") as fp:
+            json.dump(select_X_test.columns, fp)
     return select_X_train, select_X_test

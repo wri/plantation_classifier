@@ -33,7 +33,7 @@ data_condition:
     Not plantation: 0
     Unknown: 255
   scale_features: true
-  subset_fraction: 0.20 #used mostly for pipeline testing, set to 1.0 for all data
+  subset_fraction: 0.30 #used mostly for pipeline testing, set to 1.0 for all data
   test_split: 20
   val_split: 25
   train_data_x: data/train_features/train_X.pkl
@@ -43,10 +43,13 @@ data_condition:
 
 train:
   select_features: true
+  selected_train_data_x: data/train_features/selected_train_X.pkl
+  selected_test_data_x: data/test_features/selected_test_X.pkl
+  selected_feature_indicies: reports/selected_feature_indicies.json
   tune_hyperparams: false
   cv: 3
   estimator_name: catb
-  max_features: 90
+  max_features: 70
   tuning_metric: balanced_accuracy
   testing_metrics: accuracy balanced_accuracy precision recall f1 roc_auc
   fit_params:

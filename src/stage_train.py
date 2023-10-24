@@ -46,9 +46,17 @@ def train_model(config_path: Text) -> None:
         logger.info(
             f"Feature selection completed with {select_X_train.shape[1]} features"
         )
+        with open(config["train"]["selected_train_data_x"], "wb") as fp:
+            pickle.dump(select_X_train, fp)
+        with open(config["train"]["selected_test_data_x"], "wb") as fp:
+            pickle.dump(select_X_test, fp)
         X_train = select_X_train
         X_test = select_X_test
     else:
+        with open(config["train"]["selected_train_data_X"], "wb") as fp:
+            pickle.dump(X_train, fp)
+        with open(config["train"]["selected_test_data_X"], "wb") as fp:
+            pickle.dump(X_test, fp)
         logger.info("Using all features")
     if config["train"]["tune_hyperparams"]:
         logger.info("Starting hyperparameter tuning")

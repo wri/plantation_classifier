@@ -51,7 +51,7 @@ def evaluate_model(config_path: Text) -> None:
     model = joblib.load(model_path)
 
     logger.info("Load test dataset")
-    with open(config["data_condition"]["test_data_x"], "rb") as fp:
+    with open(config["train"]["selected_test_data_x"], "rb") as fp:
         X_test = pickle.load(fp)
     with open(config["data_condition"]["test_data_y"], "rb") as fp:
         y_test = pickle.load(fp)
@@ -77,7 +77,7 @@ def evaluate_model(config_path: Text) -> None:
         "actual": y_test,
         "predicted": prediction,
     }
-
+    logger.debug(report)
     logger.info("Save metrics")
     # save f1 metrics file
     reports_folder = Path(config["evaluate"]["reports_dir"])

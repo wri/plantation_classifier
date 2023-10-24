@@ -41,10 +41,12 @@ stages:
       - train
     outs:
       - models/model.joblib
+      - data/train_features/selected_train_X.pkl
+      - data/test_features/selected_test_X.pkl
   evaluate:
     cmd: python src/stage_evaluate.py --config=params.yaml
     deps:
-      - data/test_features/test_X.pkl
+      - data/test_features/selected_test_X.pkl
       - data/test_features/test_y.pkl
       - models/model.joblib
       - src/report/visualize.py

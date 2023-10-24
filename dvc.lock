@@ -74,7 +74,7 @@ stages:
             Not plantation: 0
             Unknown: 255
           scale_features: true
-          subset_fraction: 0.2
+          subset_fraction: 0.3
           test_split: 20
           val_split: 25
           train_data_x: data/train_features/train_X.pkl
@@ -103,51 +103,51 @@ stages:
     outs:
     - path: data/test_features/test_X.pkl
       hash: md5
-      md5: 014c23dd26427b24d3fbe78990eae777
-      size: 7222370
+      md5: b1573d198c1db68af2bf9da329be3a64
+      size: 10907170
     - path: data/test_features/test_y.pkl
       hash: md5
-      md5: b0e361d4fd62f3c16d6bb11ad25fa506
-      size: 76992
+      md5: 3b570545589328a95bd903e1ea604612
+      size: 116192
     - path: data/train_features/train_X.pkl
       hash: md5
-      md5: 6b8b7816dda812f4193755445c87745e
-      size: 28888994
+      md5: e6256073a1c70e4ff8513433a548506b
+      size: 43186018
     - path: data/train_features/train_y.pkl
       hash: md5
-      md5: a1e25750c9deba4a8e37e13031f962ee
-      size: 307488
+      md5: 6b6bfb2d63672a856952900044bd8071
+      size: 459584
   train:
     cmd: python src/stage_train.py --config=params.yaml
     deps:
     - path: data/test_features/test_X.pkl
       hash: md5
-      md5: 014c23dd26427b24d3fbe78990eae777
-      size: 7222370
+      md5: b1573d198c1db68af2bf9da329be3a64
+      size: 10907170
     - path: data/test_features/test_y.pkl
       hash: md5
-      md5: b0e361d4fd62f3c16d6bb11ad25fa506
-      size: 76992
+      md5: 3b570545589328a95bd903e1ea604612
+      size: 116192
     - path: data/train_features/train_X.pkl
       hash: md5
-      md5: 6b8b7816dda812f4193755445c87745e
-      size: 28888994
+      md5: e6256073a1c70e4ff8513433a548506b
+      size: 43186018
     - path: data/train_features/train_y.pkl
       hash: md5
-      md5: a1e25750c9deba4a8e37e13031f962ee
-      size: 307488
+      md5: 6b6bfb2d63672a856952900044bd8071
+      size: 459584
     - path: src/models/feature_selection.py
       hash: md5
-      md5: d330e926a4eb6d9943c9501e5e6a2d94
-      size: 3115
+      md5: ef281e0fdf1e94f6d5e5e250e11379f3
+      size: 3239
     - path: src/models/train.py
       hash: md5
       md5: a690a40f1e0c2987e544c4c676848d5b
       size: 2499
     - path: src/stage_train.py
       hash: md5
-      md5: 6d8d1e8f2ab906376e8e2a7b83134c6d
-      size: 2806
+      md5: 80812704e880b403f5d60fed91e5687d
+      size: 3256
     params:
       params.yaml:
         base:
@@ -163,7 +163,7 @@ stages:
             Not plantation: 0
             Unknown: 255
           scale_features: true
-          subset_fraction: 0.2
+          subset_fraction: 0.3
           test_split: 20
           val_split: 25
           train_data_x: data/train_features/train_X.pkl
@@ -172,10 +172,13 @@ stages:
           test_data_y: data/test_features/test_y.pkl
         train:
           select_features: true
+          selected_train_data_x: data/train_features/selected_train_X.pkl
+          selected_test_data_x: data/test_features/selected_test_X.pkl
+          selected_feature_indicies: reports/selected_feature_indicies.json
           tune_hyperparams: false
           cv: 3
           estimator_name: catb
-          max_features: 90
+          max_features: 70
           tuning_metric: balanced_accuracy
           testing_metrics: accuracy balanced_accuracy precision recall f1 roc_auc
           fit_params:
@@ -213,25 +216,33 @@ stages:
               param_grid:
           model_path: models/model.joblib
     outs:
+    - path: data/test_features/selected_test_X.pkl
+      hash: md5
+      md5: d512e2d2a7071190d2ce786629c7dca3
+      size: 8123464
+    - path: data/train_features/selected_train_X.pkl
+      hash: md5
+      md5: 8ceee04cfa27db2e73bebc2b634ca6a8
+      size: 32160904
     - path: models/model.joblib
       hash: md5
-      md5: bd98aa641824b905775d65fc0a4ce30a
-      size: 555017
+      md5: 5ea16c49362dea0d37e1238c36d4fe3b
+      size: 553965
   evaluate:
     cmd: python src/stage_evaluate.py --config=params.yaml
     deps:
-    - path: data/test_features/test_X.pkl
+    - path: data/test_features/selected_test_X.pkl
       hash: md5
-      md5: 014c23dd26427b24d3fbe78990eae777
-      size: 7222370
+      md5: d512e2d2a7071190d2ce786629c7dca3
+      size: 8123464
     - path: data/test_features/test_y.pkl
       hash: md5
-      md5: b0e361d4fd62f3c16d6bb11ad25fa506
-      size: 76992
+      md5: 3b570545589328a95bd903e1ea604612
+      size: 116192
     - path: models/model.joblib
       hash: md5
-      md5: bd98aa641824b905775d65fc0a4ce30a
-      size: 555017
+      md5: 5ea16c49362dea0d37e1238c36d4fe3b
+      size: 553965
     - path: src/report/visualize.py
       hash: md5
       md5: 7bf4c7af7c94a1b21a84da301f9b64e3
@@ -251,7 +262,7 @@ stages:
             Not plantation: 0
             Unknown: 255
           scale_features: true
-          subset_fraction: 0.2
+          subset_fraction: 0.3
           test_split: 20
           val_split: 25
           train_data_x: data/train_features/train_X.pkl
@@ -268,10 +279,13 @@ stages:
           tile_s3_bucket: tof-output
         train:
           select_features: true
+          selected_train_data_x: data/train_features/selected_train_X.pkl
+          selected_test_data_x: data/test_features/selected_test_X.pkl
+          selected_feature_indicies: reports/selected_feature_indicies.json
           tune_hyperparams: false
           cv: 3
           estimator_name: catb
-          max_features: 90
+          max_features: 70
           tuning_metric: balanced_accuracy
           testing_metrics: accuracy balanced_accuracy precision recall f1 roc_auc
           fit_params:
@@ -311,13 +325,13 @@ stages:
     outs:
     - path: reports/confusion_matrix.png
       hash: md5
-      md5: 7b520d364579cd51aa2b7d6f9c3d672b
-      size: 22509
+      md5: 888d5b4a6cc68fa879572119655aa3b2
+      size: 23084
     - path: reports/confusion_matrix_data.csv
       hash: md5
-      md5: f6f6ae000c252a5908600206c9e3ebf9
-      size: 38433
+      md5: 610718a845335954b6e03a6d7e31de00
+      size: 58033
     - path: reports/metrics.json
       hash: md5
-      md5: 749601025bcb1723b6e99742f326302b
-      size: 193
+      md5: 3427b6be060c8619448b7281e9ef7c9c
+      size: 192
