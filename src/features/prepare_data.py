@@ -23,11 +23,13 @@ def get_ceo_plot_ids(v_train_data, config_path, classes, logger):
 
     # use CEO csv to gather plot id numbers
     plot_ids = []
-
+    logger.debug("Getting CEO data")
     for i in v_train_data:
+        logger.debug(i)
         ceo_path = config["data_load"]["ceo_survey_directory"]
         df = pd.read_csv(f"{ceo_path}/ceo-plantations-train-{i}.csv")
         ceo_summary = cc.import_ceo_summary(config_path, logger)
+        logger.debug(set(df["PLANTATION"]))
         multiclass_batches = cc.get_batch_numbers(
             cc.ceo_filter(ceo_summary, "Classes", "multi")
         )
@@ -47,12 +49,12 @@ def get_ceo_plot_ids(v_train_data, config_path, classes, logger):
             # if assertion fails, will print count of points
             unknowns = df[df.PLANTATION_MULTI == 255]
             for plot in set(list(unknowns.PLOT_ID)):
-                assert len(unknowns[unknowns.PLOT_ID == plot]) == 196, logger.info(
+                assert len(unknowns[unknowns.PLOT_ID == plot]) == 196, logger.debug(
                     f"{plot} has {len(unknowns[unknowns.PLOT_ID == plot])}/196 points labeled unknown."
                 )
             # drop unknown samples
             df_new = df.drop(df[df.PLANTATION_MULTI == 255].index)
-            logger.info(
+            logger.debug(
                 f"{(len(df) - len(df_new)) / 196} plots labeled unknown were dropped from {i}."
             )
 
@@ -61,13 +63,13 @@ def get_ceo_plot_ids(v_train_data, config_path, classes, logger):
             # assert unknown labels are always a full 14x14 (196 points) of unknowns
             unknowns = df[df.PLANTATION == 255]
             for plot in set(list(unknowns.PLOT_ID)):
-                assert len(unknowns[unknowns.PLOT_ID == plot]) == 196, logger.info(
+                assert len(unknowns[unknowns.PLOT_ID == plot]) == 196, logger.debug(
                     f"{plot} has {len(unknowns[unknowns.PLOT_ID == plot])}/196 points labeled unknown."
                 )
 
             # drop unknowns and add to full list
             df_new = df.drop(df[df.PLANTATION == 255].index)
-            logger.info(
+            logger.debug(
                 f"{int((len(df) - len(df_new)) / 196)} plots labeled unknown were dropped from {i}."
             )
         plot_ids += df_new.PLOT_FNAME.drop_duplicates().tolist()
@@ -409,11 +411,12 @@ def create_xy(
             validate.train_output_range_dtype(slope, s1, s2, ttc, feature_select)
             X = make_sample(sample_shape, slope, s1, s2, txt, ttc, feature_select)
             y = load_label(plot, classes, local_data_path)
+            logger.debug(np.unique(y))
             x_all[num] = X
             y_all[num] = y
 
-        logger.debug(f"Sample: {num}")
-        logger.debug(f"Features: {X.shape}, Labels: {y.shape}")
+        # logger.debug(f"Sample: {num}")
+        # logger.debug(f"Features: {X.shape}, Labels: {y.shape}")
         # clean up memory
         del slope, s1, s2, ttc, txt, X, y
 

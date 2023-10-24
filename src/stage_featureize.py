@@ -22,6 +22,7 @@ def featureize(config_path: Text) -> None:
         config_path=config_path,
         logger=logger,
     )
+    logger.debug(y)
     logger.info("X,y features loaded")
     X_train, X_test, y_train, y_test = prep.reshape_training_data(
         X, y, config_path, config["data_condition"]["scale_features"], logger

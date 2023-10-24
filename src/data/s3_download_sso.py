@@ -4,6 +4,7 @@
 from typing import Text
 import yaml
 import os
+import boto3
 from utils.logs import get_logger
 
 
@@ -24,10 +25,15 @@ def data_download(config_path: Text) -> None:
         prefix_string = f"{folder_prefix}train-{prefix}/"
         outpath = f"{local_prefix}/train-{prefix}/"
         file_list = []
-        for object in conn.list_objects_v2(Bucket=bucket_name, Prefix=prefix_string)[
-            "Contents"
-        ]:
-            file_list.append(object["Key"])
+        paginator = conn.get_paginator("list_objects_v2")
+        page_iterator = paginator.paginate(Bucket=bucket_name, Prefix=prefix_string)
+        for page in page_iterator:
+            obj_dict = page["Contents"]
+            for obj in obj_dict:
+                # for object in conn.list_objects_v2(Bucket=bucket_name, Prefix=prefix_string)[
+                #   "Contents"
+                # ]:
+                file_list.append(obj["Key"])
         for file in file_list:
             conn.download_file(
                 Bucket=bucket_name,

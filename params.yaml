@@ -3,7 +3,7 @@ base:
   random_state: 121
 
 data_load:
-  download_data: false
+  download_data: true
   sso_profile_name: rognstad-dev
   bucket_name: restoration-monitoring
   folder_prefix: plantation-mapping/data/train/
