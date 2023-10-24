@@ -13,7 +13,9 @@ from utils.logs import get_logger
 
 def get_dropped_feature(model, X_test, logger):
     explainer = shap.Explainer(model)
+    logger.debug("SHAP explainer calculated")
     shap_values = explainer(X_test)
+    logger.debug("SHAP values calculated")
     logger.debug(shap_values.shape)
     feature_importance = shap_values.abs.mean(0).mean(1).values
     logger.debug(X_test.columns)

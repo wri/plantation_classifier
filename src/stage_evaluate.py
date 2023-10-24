@@ -59,11 +59,11 @@ def evaluate_model(config_path: Text) -> None:
     logger.info("Evaluate (build report)")
 
     prediction = model.predict(X_test)
-    f1 = f1_score(y_true=y_test, y_pred=prediction, average="macro")
+    f1 = f1_score(y_true=y_test, y_pred=prediction, average="weighted")
     accuracy = accuracy_score(y_true=y_test, y_pred=prediction)
     balanced_accuracy = balanced_accuracy_score(y_true=y_test, y_pred=prediction)
-    precision = precision_score(y_true=y_test, y_pred=prediction)
-    recall = recall_score(y_true=y_test, y_pred=prediction)
+    precision = precision_score(y_true=y_test, y_pred=prediction, average="weighted")
+    recall = recall_score(y_true=y_test, y_pred=prediction, average="weighted")
 
     cm = confusion_matrix(y_test, prediction)
 

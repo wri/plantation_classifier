@@ -3,6 +3,7 @@ from typing import Text
 import json
 import pickle
 import yaml
+import numpy as np
 from utils.logs import get_logger
 import features.prepare_data as prep
 
@@ -23,6 +24,17 @@ def featureize(config_path: Text) -> None:
         logger=logger,
     )
     logger.info("X,y features loaded")
+    if config["data_condition"]["subset_fraction"] < 1.0:
+        np.random.seed(config["base"]["random_state"])
+        subset_idx = np.random.choice(
+            X.shape[0],
+            size=(int(X.shape[0] * config["data_condition"]["subset_fraction"])),
+            replace=False,
+        )
+        X = X[subset_idx]
+        y = y[subset_idx]
+        logger.debug(f"X data subsetted with final dimensions: {X.shape}")
+        logger.debug(f"y data subsetted with final dimensions: {y.shape}")
     X_train, X_test, y_train, y_test = prep.reshape_training_data(
         X, y, config_path, config["data_condition"]["scale_features"], logger
     )
