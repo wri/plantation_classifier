@@ -14,13 +14,19 @@ def train_model(config_path: Text) -> None:
     logger = get_logger("TRAIN", log_level=config["base"]["log_level"])
     with open(config["data_condition"]["train_data_x"], "rb") as fp:
         X_train = pickle.load(fp)
+    logger.debug(f"X_train shape: {X_train.shape}")
     with open(config["data_condition"]["train_data_y"], "rb") as fp:
         y_train = pickle.load(fp)
+    logger.debug(f"y_train shape: {y_train.shape}")
     with open(config["data_condition"]["test_data_x"], "rb") as fp:
         X_test = pickle.load(fp)
+    logger.debug(f"X_test shape: {X_test.shape}")
     with open(config["data_condition"]["test_data_y"], "rb") as fp:
         y_test = pickle.load(fp)
+    logger.debug(f"y_test shape: {y_test.shape}")
     logger.info("Training and testing data loaded")
+    max_features = config["train"]["max_features"]
+    logger.info(f"Max features: {max_features}")
 
     if config["train"]["select_features"]:
         logger.info("Starting feature selection")
@@ -35,7 +41,7 @@ def train_model(config_path: Text) -> None:
             config["train"]["estimators"][estimator_name]["param_grid"],
             config["train"]["fit_params"],
             logger,
-            config["train"]["max_features"],
+            max_features,
         )
         logger.info(
             f"Feature selection completed with {select_X_train.shape[1]} features"

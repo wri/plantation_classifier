@@ -11,10 +11,12 @@ import models.train as trn
 from utils.logs import get_logger
 
 
-def get_dropped_feature(model, X_test):
+def get_dropped_feature(model, X_test, logger):
     explainer = shap.Explainer(model)
     shap_values = explainer(X_test)
-    feature_importance = shap_values.abs.mean(0).values
+    logger.debug(shap_values.shape)
+    feature_importance = shap_values.abs.mean(0).mean(1).values
+    logger.debug(X_test.columns)
     importance_df = pd.DataFrame(
         {"features": X_test.columns, "importance": feature_importance}
     )
@@ -32,7 +34,6 @@ def backward_selection(
     model_params_dict,
     fit_params_dict,
     logger,
-    use_class_weights,
     max_features=None,
 ):
     """
@@ -54,8 +55,8 @@ def backward_selection(
         metric_name,
         model_params_dict,
         fit_params_dict,
-        use_class_weights,
     )
+    logger.debug(f"X_test shape: {X_test.shape}")
     logger.info(f"{metric} with {select_X_train.shape[1]} features")
     last_metric = metric
 
@@ -65,7 +66,8 @@ def backward_selection(
 
     for num_features in range(total_features - 1, 1, -1):
         # Trim features
-        dropped_feature = get_dropped_feature(model, select_X_test)
+        logger.debug(f"select X test shape: {select_X_test.shape}")
+        dropped_feature = get_dropped_feature(model, select_X_test, logger)
         logger.info(f"Removing feature {dropped_feature}")
         tmp_X_train = select_X_train.drop(columns=[dropped_feature])
         tmp_X_test = select_X_test.drop(columns=[dropped_feature])

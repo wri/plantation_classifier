@@ -34,6 +34,7 @@ def get_ceo_plot_ids(v_train_data, config_path, classes, logger):
             cc.ceo_filter(ceo_summary, "Classes", "multi")
         )
         if i in multiclass_batches:
+            logger.debug("entering multiclass loop")
             # map label categories to ints
             # this step might not be needed but leaving for now.
             df["PLANTATION_MULTI"] = df["PLANTATION"].map(
@@ -47,13 +48,17 @@ def get_ceo_plot_ids(v_train_data, config_path, classes, logger):
 
             # confirm that unknown labels are always a full 14x14 (196 points) of unknowns
             # if assertion fails, will print count of points
-            unknowns = df[df.PLANTATION_MULTI == 255]
+            logger.debug(set(df["PLANTATION"]))
+            unknowns = df[df.PLANTATION == 255]
+            logger.debug(
+                f"multiclass length unknowns: {len(set(list(unknowns.PLOT_ID)))}"
+            )
             for plot in set(list(unknowns.PLOT_ID)):
                 assert len(unknowns[unknowns.PLOT_ID == plot]) == 196, logger.debug(
                     f"{plot} has {len(unknowns[unknowns.PLOT_ID == plot])}/196 points labeled unknown."
                 )
             # drop unknown samples
-            df_new = df.drop(df[df.PLANTATION_MULTI == 255].index)
+            df_new = df.drop(df[df.PLANTATION == 255].index)
             logger.debug(
                 f"{(len(df) - len(df_new)) / 196} plots labeled unknown were dropped from {i}."
             )
@@ -61,7 +66,11 @@ def get_ceo_plot_ids(v_train_data, config_path, classes, logger):
             plot_ids = plot_ids + df_new.PLOT_FNAME.drop_duplicates().tolist()
         else:
             # assert unknown labels are always a full 14x14 (196 points) of unknowns
+            logger.debug("entering non-multiclass loop")
             unknowns = df[df.PLANTATION == 255]
+            logger.debug(
+                f"non-multiclass length unknowns: {len(set(list(unknowns.PLOT_ID)))}"
+            )
             for plot in set(list(unknowns.PLOT_ID)):
                 assert len(unknowns[unknowns.PLOT_ID == plot]) == 196, logger.debug(
                     f"{plot} has {len(unknowns[unknowns.PLOT_ID == plot])}/196 points labeled unknown."
@@ -411,7 +420,7 @@ def create_xy(
             validate.train_output_range_dtype(slope, s1, s2, ttc, feature_select)
             X = make_sample(sample_shape, slope, s1, s2, txt, ttc, feature_select)
             y = load_label(plot, classes, local_data_path)
-            logger.debug(np.unique(y))
+            # logger.debug(np.unique(y))
             x_all[num] = X
             y_all[num] = y
 

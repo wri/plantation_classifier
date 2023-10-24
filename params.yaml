@@ -3,7 +3,7 @@ base:
   random_state: 121
 
 data_load:
-  download_data: true
+  download_data: false
   sso_profile_name: rognstad-dev
   bucket_name: restoration-monitoring
   folder_prefix: plantation-mapping/data/train/
@@ -45,7 +45,7 @@ train:
   tune_hyperparams: false
   cv: 3
   estimator_name: catb
-  max_features: 50
+  max_features: 90
   tuning_metric: balanced_accuracy
   testing_metrics: accuracy balanced_accuracy precision recall f1 roc_auc
   fit_params:
@@ -74,7 +74,6 @@ train:
         iterations: 500
         max_depth: 5
         learning_rate: 0.05
-        subsample: 0.5
         colsample_bylevel: 0.5
         min_data_in_leaf: 50
         logging_level: Silent
