@@ -9,12 +9,12 @@ stages:
       - base
       - data_load
     outs:
-      - src/report/ceo_list.json
+      - reports/ceo_list.json
   featureize:
     cmd: python src/stage_featureize.py --config=params.yaml
     deps:
       - src/features/prepare_data.py
-      - src/report/ceo_list.json
+      - reports/ceo_list.json
       - src/stage_featureize.py
     params:
       - base
@@ -43,6 +43,7 @@ stages:
       - models/model.joblib
       - data/train_features/selected_train_X.pkl
       - data/test_features/selected_test_X.pkl
+      - reports/selected_feature_indicies.json
   evaluate:
     cmd: python src/stage_evaluate.py --config=params.yaml
     deps:
@@ -61,6 +62,6 @@ stages:
     plots:
       - reports/confusion_matrix.png
       - reports/confusion_matrix_data.csv:
-          template: confusion
+          template: confusion_normalized
           x: predicted
           y: y_true

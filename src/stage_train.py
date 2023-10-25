@@ -3,6 +3,7 @@ from typing import Text
 import yaml
 import joblib
 import pickle
+import json
 from utils.logs import get_logger
 import models.feature_selection as fsl
 import models.train as trn
@@ -58,6 +59,11 @@ def train_model(config_path: Text) -> None:
         with open(config["train"]["selected_test_data_X"], "wb") as fp:
             pickle.dump(X_test, fp)
         logger.info("Using all features")
+    with open(config["train"]["selected_feature_indicies"], "w") as fp:
+        json.dump(obj={"feature_column_indicies": list(X_test.columns)}, fp=fp)
+    logger.info(
+        f'Writing feature indicies to {config["train"]["selected_feature_indicies"]}'
+    )
     if config["train"]["tune_hyperparams"]:
         logger.info("Starting hyperparameter tuning")
     #       TODO: implement hyperparameter tuning

@@ -13,7 +13,7 @@ def featureize(config_path: Text) -> None:
         config = yaml.safe_load(conf_file)
     logger = get_logger("FEATURIZE", log_level=config["base"]["log_level"])
     with open(config["data_load"]["ceo_json"], "r") as fp:
-        ceo_batch_list = json.load(fp)
+        ceo_batch_list = json.load(fp)["CEO_survey_list"]
         logger.info("CEO survey targets loaded")
         logger.debug(ceo_batch_list)
     X, y = prep.create_xy(

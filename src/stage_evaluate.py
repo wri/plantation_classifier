@@ -85,7 +85,7 @@ def evaluate_model(config_path: Text) -> None:
 
     json.dump(
         obj={
-            "f1_score": report["f1"],
+            "f1_score": f1,
             "accuracy_score": accuracy,
             "balanced_accuracy_socre": balanced_accuracy,
             "precision_score": precision,

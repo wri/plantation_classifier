@@ -19,7 +19,7 @@ data_load:
     - dem
     - features-ckpt-2023-02-09
     - labels
-  ceo_json: src/report/ceo_list.json
+  ceo_json: reports/ceo_list.json
   report_output_dir: /report/
 
 data_condition:
@@ -33,7 +33,7 @@ data_condition:
     Not plantation: 0
     Unknown: 255
   scale_features: true
-  subset_fraction: 0.30 #used mostly for pipeline testing, set to 1.0 for all data
+  subset_fraction: 0.30 #used for pipeline testing, set to 1.0 for all data
   test_split: 20
   val_split: 25
   train_data_x: data/train_features/train_X.pkl
@@ -49,7 +49,7 @@ train:
   tune_hyperparams: false
   cv: 3
   estimator_name: catb
-  max_features: 70
+  max_features: 90
   tuning_metric: balanced_accuracy
   testing_metrics: accuracy balanced_accuracy precision recall f1 roc_auc
   fit_params:
