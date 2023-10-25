@@ -146,8 +146,8 @@ stages:
       size: 2499
     - path: src/stage_train.py
       hash: md5
-      md5: b6dc3d17d9e82de4a70316f9b6945cdd
-      size: 3529
+      md5: f35c9963d0d65364c2007a0e1c890b77
+      size: 3652
     params:
       params.yaml:
         base:
@@ -226,12 +226,12 @@ stages:
       size: 40890112
     - path: models/model.joblib
       hash: md5
-      md5: 69cb89144afb3fd90333c76828080397
+      md5: 5fbe8e4f6a868bc3bb3cf4f53a2a26cc
       size: 555014
     - path: reports/selected_feature_indicies.json
       hash: md5
-      md5: fac44c7d2b74fcb90a680b5769a3f8cb
-      size: 375
+      md5: 333bc8a686ed06a0738d250c912173d3
+      size: 393
   evaluate:
     cmd: python src/stage_evaluate.py --config=params.yaml
     deps:
@@ -245,7 +245,7 @@ stages:
       size: 116192
     - path: models/model.joblib
       hash: md5
-      md5: 69cb89144afb3fd90333c76828080397
+      md5: 5fbe8e4f6a868bc3bb3cf4f53a2a26cc
       size: 555014
     - path: src/report/visualize.py
       hash: md5

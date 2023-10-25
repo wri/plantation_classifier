@@ -27,6 +27,9 @@ def get_dropped_feature(model, X_test, logger):
     return importance_df["features"].iloc[-1]
 
 
+# TODO: implement returning importance values so can save final table/plot
+
+
 def backward_selection(
     X_train,
     X_test,
