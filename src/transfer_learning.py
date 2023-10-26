@@ -373,9 +373,12 @@ def predict_regression(arr: np.array, pretrained_model: str, sample_dims: tuple)
     to get the model to predict probability for each class?
     '''
         
-    preds = pretrained_model.predict(arr, prediction_type='Probability') 
+    #preds = pretrained_model.predict(arr, prediction_type='Probability') 
+    preds = pretrained_model.predict_proba(arr)
     preds = preds * 100
-    preds = preds.reshape((sample_dims[0], sample_dims[1], 2))
+    print(f'original shape: {preds.shape}')
+    preds = preds.reshape((sample_dims[0], sample_dims[1], 3))
+    print(f'reshaped: {preds.shape}')
 
     return preds
 
@@ -452,17 +455,17 @@ def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, model_t
     
     arr = arr.astype(np.uint8)
 
-    # create the file based on the size of the array
+    # create the file based on the size of the array (618, 614, 1)
     print("Writing", file)
     if model_type == 'classifier':
         transform = rs.transform.from_bounds(west = west, south = south,
                                             east = east, north = north,
-                                            width = arr.shape[1],
-                                            height = arr.shape[0])
+                                            width = arr.shape[1],  #614
+                                            height = arr.shape[0]) #618
         new_dataset = rs.open(file, 'w', 
                                 driver = 'GTiff',
-                                height = arr.shape[0], 
                                 width = arr.shape[1], 
+                                height = arr.shape[0], 
                                 count = 1,
                                 dtype = "uint8",
                                 compress = 'lzw',
@@ -471,18 +474,19 @@ def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, model_t
         new_dataset.write(arr, 1)
         new_dataset.close()
     
-    # switch (618, 614, band) to (band, 614, 618)
+    # switch (618, 614, band) to (band, 618, 614)
     else:
         arr = reshape_as_raster(arr)
+        print(f'reshaped #2: {arr.shape}') 
         transform = rs.transform.from_bounds(west = west, south = south,
                                             east = east, north = north,
-                                            width = arr.shape[1],
-                                            height = arr.shape[2])
+                                            width = arr.shape[2], 
+                                            height = arr.shape[1])
         
         new_dataset = rs.open(file,'w',
                             driver='GTiff',
-                            height=arr.shape[2],
-                            width=arr.shape[1],
+                            width=arr.shape[2],
+                            height=arr.shape[1],
                             count=arr.shape[0],
                             dtype = "uint8",
                             compress = 'lzw',
@@ -569,7 +573,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     # specify tiles HERE
-    tiles_to_process = download_tile_ids(args.location, aak, ask)
+    tiles_to_process = download_tile_ids(args.location, aak, ask)[:10]
     tile_count = len(tiles_to_process)
     counter = 0
 
