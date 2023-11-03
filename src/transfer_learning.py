@@ -95,10 +95,12 @@ def download_tile_ids(location: list, aws_access_key: str, aws_secret_key: str):
 
     return tiles
 
-def download_ard(tile_idx: tuple, country: str, aws_access_key: str, aws_secret_key: str):
+def download_ard(tile_idx: tuple, country: str, aws_access_key: str, aws_secret_key: str, overwrite: bool):
     ''' 
     If ARD folder or the feats folder are not present locally,
     Download contents from s3 into local for specified tile
+    If overwrite is set to True, the ARD and feats dir (txt and ttc feats) will be 
+    redownloaded regardless of whether the file is present locally.
     '''
     x = tile_idx[0]
     y = tile_idx[1]
@@ -117,7 +119,7 @@ def download_ard(tile_idx: tuple, country: str, aws_access_key: str, aws_secret_
                     aws_secret_access_key=aws_secret_key)
     bucket = s3.Bucket('tof-output')
 
-    if not local_ard:
+    if local_ard == False or overwrite == True:
         print(f"Downloading ARD for {(x, y)}")
         if not os.path.exists(local_path + 'ard/'):
             os.makedirs(local_path + 'ard/')
@@ -129,7 +131,7 @@ def download_ard(tile_idx: tuple, country: str, aws_access_key: str, aws_secret_
                 if e.response['Error']['Code'] == "404":
                     return False
         
-    if not local_feats:
+    if local_feats == False or overwrite == True:
         print(f"Downloading feats for {(x, y)}")
 
         for obj in bucket.objects.filter(Prefix=s3_path_feats):
@@ -524,7 +526,7 @@ def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, feat
     will need to update
     '''
     print(f'Processing tile: {tile_idx}')
-    successful = download_ard(tile_idx, location[0], aak, ask)
+    successful = download_ard(tile_idx, location[0], aak, ask, overwrite=True)
 
     if successful:
         x = tile_idx[0]
@@ -573,7 +575,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     # specify tiles HERE
-    tiles_to_process = download_tile_ids(args.location, aak, ask)[:10]
+    tiles_to_process = download_tile_ids(args.location, aak, ask)
     tile_count = len(tiles_to_process)
     counter = 0
 
@@ -585,7 +587,7 @@ if __name__ == '__main__':
     print(f'Processing {tile_count} tiles for {args.location[1], args.location[0]}.')
     print('............................................')
     
-    model = 'regressor'
+    model = 'classifier'
     print(f'Model type is {model}.')
 
     for tile_idx in tiles_to_process:
