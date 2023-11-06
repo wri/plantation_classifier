@@ -138,6 +138,30 @@ def load_s2(idx, directory = '../data/train-s2/'):
 
     return s2
 
+def load_ard(idx, directory = '../data/train-ard/'):
+    '''
+    Analysis ready data is stored as (12, 28, 28, 17)
+    Get the median for the year, cut out border information
+    and drop spectral indices
+    (28, 28, 17)
+    (28, 28, 13)
+    (14, 14, 13)
+    '''
+    ard = np.load(directory + str(idx) + '.npy')
+
+    # convert monthly images to annual median
+    if len(ard.shape) == 4:
+        ard = np.median(ard, axis = 0, overwrite_input=True)
+
+    ard = ard[..., :13]
+    
+    # slice out border information
+    border_x = (ard.shape[0] - 14) // 2
+    border_y = (ard.shape[1] - 14) // 2
+    ard = ard[border_x:-border_x, border_y:-border_y].astype(np.float32)
+
+    return ard
+
 
 def load_ttc(idx, directory = '../data/train-features-ckpt-2023-02-09/'):
     '''
@@ -163,7 +187,7 @@ def load_ttc(idx, directory = '../data/train-features-ckpt-2023-02-09/'):
     return feats
 
 
-def load_label(idx, classes, directory = '../data/train-labels/'):
+def load_label(idx, binary, directory = '../data/train-labels/'):
     '''
     The labels are stored as a binary 14 x 14 float64 array.
     Unless they are stored as (196,) and need to be reshaped.
@@ -176,7 +200,7 @@ def load_label(idx, classes, directory = '../data/train-labels/'):
 
     # makes sure that a binary classification exercise updates
     # any multiclass labels (this is just converting AF label (2) to 1)
-    if classes == 'binary':
+    if binary:
         labels = labels_raw.copy()
         labels[labels_raw == 2] = 1
         labels = labels.astype(np.float32)
@@ -187,7 +211,7 @@ def load_label(idx, classes, directory = '../data/train-labels/'):
     return labels
 
 
-def load_txt(idx, directory = '../data/train-s2/'):
+def load_txt(idx, directory = '../data/train-ard/'):
     
     '''
     Loads raw s2 data and preprocesses
@@ -195,23 +219,30 @@ def load_txt(idx, directory = '../data/train-s2/'):
     bands. Outputs the texture analysis as a (14, 14, 16) 
     array as a float32 array.
     '''
-    if os.path.exists(f'../data/train-texture/{idx}.npy'):
-        output = np.load(f'../data/train-texture/{idx}.npy')
+    if os.path.exists(f'../data/train-texture/{idx}_ard.npy'):
+        output = np.load(f'../data/train-texture/{idx}_ard.npy')
     
     else: 
-        #print('Calculating GLCM texture features...')
-        s2 = hkl.load(directory + str(idx) + '.hkl')
+        # #print('Calculating GLCM texture features...')
+        # s2 = hkl.load(directory + str(idx) + '.hkl')
         
-        # remove date of imagery (last axis)
-        if s2.shape[-1] == 11:
-            s2 = np.delete(s2, -1, -1)
+        # # remove date of imagery (last axis)
+        # if s2.shape[-1] == 11:
+        #     s2 = np.delete(s2, -1, -1)
 
-        # convert monthly images to annual median
-        if len(s2.shape) == 4:
-            s2 = np.median(s2, axis = 0, overwrite_input=True)
+        # # convert monthly images to annual median
+        # if len(s2.shape) == 4:
+        #     s2 = np.median(s2, axis = 0, overwrite_input=True)
 
         # this has to be done after median
         # doesnt work if just calling .astype(np.uint8)
+        #s2 = ((s2.astype(np.float32) / 65535) * 255).astype(np.uint8)
+
+        # prepare s2 from ard without removing border info
+        ard = np.load(directory + str(idx) + '.npy')
+        if len(ard.shape) == 4:
+            ard = np.median(ard, axis = 0, overwrite_input=True)
+        s2 = ard[..., 0:10]
         s2 = ((s2.astype(np.float32) / 65535) * 255).astype(np.uint8)
         
         blue = s2[..., 0]
@@ -226,49 +257,12 @@ def load_txt(idx, directory = '../data/train-s2/'):
         output[..., 12:16] = slow_txt.extract_texture(nir)
 
         # save the output
-        np.save(f'../data/train-texture/{idx}.npy', output)
+        np.save(f'../data/train-texture/{idx}_ard.npy', output)
     
     return output.astype(np.float32)
 
-def load_feats_fastglcm(idx, import_txt, directory = '../data/train-features/'):
-    print('WARNING: check train-feats path')
-    if os.path.exists(f'../data/train-texture/{idx}_fast.npy'):
-        txt = np.load(f'../data/train-texture/{idx}_fast.npy')
-    
-    else: 
-        print(f'Calculating texture properties for {idx}')
-        # prepare s2
-        s2 = hkl.load('../data/train-s2/' + str(idx) + '.hkl')
-            
-        # remove date of imagery (last axis)
-        if s2.shape[-1] == 11:
-            s2 = np.delete(s2, -1, -1)
 
-        # convert monthly images to annual median
-        if len(s2.shape) == 4:
-            s2 = np.median(s2, axis = 0, overwrite_input=True)
-
-        # this has to be done after median - doesnt work if just calling .astype(np.uint8)
-        s2 = ((s2.astype(np.float32) / 65535) * 255).astype(np.uint8)
-
-        validate.fast_glcm_input(s2)
-        txt = fast_txt.fast_glcm_train(s2)
-        validate.fast_glcm_output(txt)
-        np.save(f'../data/train-texture/{idx}_fast.npy', txt)
-    
-    ttc = hkl.load(directory + str(idx) + '.hkl')
-    ttc[..., 1:] = np.clip(ttc[..., 1:], a_min=-32.768, a_max=32.767)
-
-    n_feats = ttc.shape[-1] + txt.shape[-1]
-
-    comb_feats = np.zeros((14, 14, n_feats), dtype=np.float32)
-    comb_feats[..., 0:ttc.shape[-1]] = ttc
-    comb_feats[..., ttc.shape[-1]:] = txt
-
-    return comb_feats.astype(np.float32)
-
-
-def make_sample(sample_shape, slope, s1, s2, txt, ttc, feature_select):
+def make_sample_OLDDONTUSE(sample_shape, slope, s1, s2, txt, ttc, feature_select):
     
     ''' 
     Defines dimensions and then combines slope, s1, s2, TML features and 
@@ -277,7 +271,7 @@ def make_sample(sample_shape, slope, s1, s2, txt, ttc, feature_select):
     '''
     # now filter to select features if arg provided
     # squeeze extra axis that is added (14,14,1,15) -> (14,14,15)
-    feats = np.zeros((14, 14, ttc.shape[-1] + txt.shape[-1]), dtype=np.float32)
+    feats = np.zeros((sample_shape[0], sample_shape[1], ttc.shape[-1] + txt.shape[-1]), dtype=np.float32)
     feats[..., :65] = ttc
     feats[..., 65:] = txt
     if len(feature_select) > 0:
@@ -286,7 +280,7 @@ def make_sample(sample_shape, slope, s1, s2, txt, ttc, feature_select):
     # define the last dimension of the array
     n_feats = 1 + s1.shape[-1] + s2.shape[-1] + feats.shape[-1] 
 
-    sample = np.empty((sample_shape[1], sample_shape[-1], n_feats))
+    sample = np.empty((sample_shape[0], sample_shape[1], n_feats))
 
     # populate empty array with each feature
     sample[..., 0] = slope
@@ -296,93 +290,37 @@ def make_sample(sample_shape, slope, s1, s2, txt, ttc, feature_select):
 
     return sample
 
-def make_sample_nofeats(sample_shape, slope, s1, s2):
-    
-    ''' 
-    Defines dimensions and then combines slope, s1 and s2 features from a plot
-    into a sample with shape (14, 14, 13). 
-    '''
-    # validate that the inputs are correct -- TODO adapt to do no feats
-    # validate.train_output_range_dtype(slope, s1, s2)
 
-    # define the last dimension of the array
-    n_feats = 1 + s1.shape[-1] + s2.shape[-1] 
+def make_sample(sample_shape, ard, txt, ttc, feature_select):
 
-    sample = np.empty((sample_shape[1], sample_shape[-1], n_feats))
-    
+    # prepare the feats (this is dont first bc of feature selection)
+    # squeeze extra axis that is added (14,14,1,15) -> (14,14,15)
+    feats = np.zeros((sample_shape[0], sample_shape[1], ttc.shape[-1] + txt.shape[-1]), dtype=np.float32)
+    feats[..., :ttc.shape[-1]] = ttc
+    feats[..., ttc.shape[-1]:] = txt
+    if len(feature_select) > 0:
+        feats = np.squeeze(feats[:, :, [feature_select]])
+
+    # create empty sample array
+    n_feats = ard.shape[-1] + feats.shape[-1] 
+    sample = np.zeros((ard.shape[0], ard.shape[1], n_feats), dtype=np.float32)
+
     # populate empty array with each feature
-    sample[..., 0] = slope
-    sample[..., 1:3] = s1
-    sample[..., 3:13] = s2
-    
+    # order: s2, dem, s1, ttc, txt
+    sample[..., 0:10] = ard[..., 0:10]
+    sample[..., 10:11] = ard[..., 10:11]
+    sample[..., 11:13] = ard[..., 11:13]
+    sample[..., 13:] = feats
+
     return sample
 
 
-def binary_ceo(v_train_data):
-    '''
-    Creates a list of plot ids to process from collect earth surveys 
-    with binary class labels (0, 1). Drops all plots w/o s2 imagery. 
-    Returns list of plot_ids.
-    '''
-    
-    # use CEO csv to gather plot id numbers
-    plot_ids = []
-
-    for i in v_train_data:
-        
-        df = pd.read_csv(f'../data/ceo-plantations-train-{i}.csv')
-        
-        # for multiclass surveys, change labels
-        multiclass = ['v08', 'v14', 'v15']
-        if i in multiclass:
-        
-            # map label categories to ints
-            # this step might not be needed but leaving for now.
-            df['PLANTATION_MULTI'] = df['PLANTATION'].map({'Monoculture': 1,
-                                                        'Agroforestry': 2,
-                                                        'Not plantation': 0,
-                                                        'Unknown': 255})
-
-            # confirm that unknown labels are always a full 14x14 (196 points) of unknowns
-            # if assertion fails, will print count of points
-            unknowns = df[df.PLANTATION_MULTI == 255]
-            for plot in set(list(unknowns.PLOT_ID)):
-                assert len(unknowns[unknowns.PLOT_ID == plot]) == 196, f'{plot} has {len(unknowns[unknowns.PLOT_ID == plot])}/196 points labeled unknown.'
-
-            # drop unknown samples
-            df_new = df.drop(df[df.PLANTATION_MULTI == 255].index)
-            print(f'{(len(df) - len(df_new)) / 196} plots labeled unknown were dropped from {i}.')
-            
-            plot_ids = plot_ids + df_new.PLOT_FNAME.drop_duplicates().tolist()
-
-        # for binary surveys add to list
-        else:
-            plot_ids = plot_ids + df.PLOT_FNAME.drop_duplicates().tolist()
-
-    # if the plot_ids do not have 5 digits, change to str and add leading 0
-    plot_ids = [str(item).zfill(5) if len(str(item)) < 5 else str(item) for item in plot_ids]
-
-    # check and remove any plot ids where there are no cloud free images (no s2 hkl file)
-    print('warning needs to be updated')
-    for plot in plot_ids[:]:            
-        if not os.path.exists(f'../data/train-s2/{plot}.hkl'.strip()):
-            print(f'Plot id {plot} has no cloud free imagery and will be removed.')
-            plot_ids.remove(plot)
-    
-    # # cannot figure out why some plots persist
-    # if '04008' in plot_ids: plot_ids.remove('04008')
-    # if '08182' in plot_ids: plot_ids.remove('08182')
-    # if '09168' in plot_ids: plot_ids.remove('09168')
-    # if '09224' in plot_ids: plot_ids.remove('09224')
-    
-    return plot_ids
-
-
-def multiclass_ceo(v_train_data):
+def gather_plot_ids(v_train_data):
     '''
     Creates a list of plot ids to process from collect earth surveys 
     with multi-class labels (0, 1, 2, 255). Drops all plots with 
     "unknown" labels and plots w/o s2 imagery. Returns list of plot_ids.
+    TODO: how will cloudfree images be identified with ARD?
     '''
 
     # use CEO csv to gather plot id numbers
@@ -397,30 +335,32 @@ def multiclass_ceo(v_train_data):
         # assert unknown labels are always a full 14x14 (196 points) of unknowns
         unknowns = df[df.PLANTATION == 255]
         no_labels.extend(sorted(list(set(unknowns.PLOT_FNAME))))
-
         for plot in set(list(unknowns.PLOT_ID)):
             assert len(unknowns[unknowns.PLOT_ID == plot]) == 196,\
             f'{plot} has {len(unknowns[unknowns.PLOT_ID == plot])}/196 points labeled unknown.'
 
         # drop unknowns and add to full list
         df_new = df.drop(df[df.PLANTATION == 255].index)
-        #print(f'{int((len(df) - len(df_new)) / 196)} plots labeled unknown were dropped from {i}.')
         plot_ids += df_new.PLOT_FNAME.drop_duplicates().tolist()
 
     # add leading 0 to plot_ids that do not have 5 digits
     plot_ids = [str(item).zfill(5) if len(str(item)) < 5 else str(item) for item in plot_ids]
         
     # remove any plot ids where there are no cloud free images (no s2 hkl file)
-    final_plots = [plot for plot in plot_ids if os.path.exists(f'../data/train-s2/{plot}.hkl')]
-    no_cloudfree = [plot for plot in plot_ids if plot not in final_plots]
-    #print(f'{len(plot_ids) - len(final_plots)} plots had no cloud free imagery and will be removed.')
+    #final_plots = [plot for plot in plot_ids if os.path.exists(f'../data/train-s2/{plot}.hkl')]
+    #no_cloudfree = [plot for plot in plot_ids if plot not in final_plots]
+
+    ### TO BE CONFIRMED for ARD
+    final_plots = [plot for plot in plot_ids if os.path.exists(f'../data/train-ard/{plot}.npy')]
 
     print(f'{len(no_labels)} plots labeled "unknown" were dropped: {no_labels}')
-    print(f'{len(no_cloudfree)} plots had no cloud free imagery: {no_cloudfree}')
+    #print(f'{len(no_cloudfree)} plots had no cloud free imagery: {no_cloudfree}')
+    print(f'Training data includes {len(final_plots)} plots.')
 
     return final_plots
 
-def create_xy(v_train_data, classes, drop_feats, feature_select, verbose=False):
+
+def create_xy_OLDDONTUSE(v_train_data, binary, drop_feats, feature_select, verbose=False):
     '''
     Gathers training data plots from collect earth surveys (v1, v2, v3, etc)
     and loads data to create a sample for each plot. Removes ids where there is no
@@ -437,12 +377,8 @@ def create_xy(v_train_data, classes, drop_feats, feature_select, verbose=False):
     
     '''
     
-    # need to be able to create xy for 1) binary only 2) multiclass only 3) binary and multi
-    if classes == 'binary':
-        plot_ids = binary_ceo(v_train_data)
-    elif classes == 'multi':
-        plot_ids = multiclass_ceo(v_train_data)
-    
+
+    plot_ids = gather_plot_ids(v_train_data)
     print(f'Training data includes {len(plot_ids)} plots.')
 
     # create empty x and y array based on number of plots (dropping TML probability changes dimensions from 78 -> 77)
@@ -464,7 +400,7 @@ def create_xy(v_train_data, classes, drop_feats, feature_select, verbose=False):
             s1 = load_s1(plot)
             s2 = load_s2(plot)
             X = make_sample_nofeats(sample_shape, slope, s1, s2)
-            y = load_label(plot, classes)
+            y = load_label(plot, binary)
             x_all[num] = X
             y_all[num] = y
 
@@ -476,7 +412,7 @@ def create_xy(v_train_data, classes, drop_feats, feature_select, verbose=False):
             txt = load_txt(plot)
             validate.train_output_range_dtype(slope, s1, s2, ttc, feature_select)
             X = make_sample(sample_shape, slope, s1, s2, txt, ttc, feature_select)
-            y = load_label(plot, classes)
+            y = load_label(plot, binary)
             x_all[num] = X
             y_all[num] = y
 
@@ -486,6 +422,55 @@ def create_xy(v_train_data, classes, drop_feats, feature_select, verbose=False):
         if verbose:
             print(f'Sample: {num}')
             print(f'Features: {X.shape}, Labels: {y.shape}')
+        
+    # check class balance 
+    labels, counts = np.unique(y_all, return_counts=True)
+    print(f'Class count {dict(zip(labels, counts))}')
+
+    return x_all, y_all
+
+
+def create_xy(v_train_data, binary, feature_select, sample_shape=(14, 14), verbose=False):
+    '''
+    Gathers training data plots from collect earth surveys (v1, v2, v3, etc)
+    and loads data to create a sample for each plot. Removes ids where there is no
+    cloud-free imagery or "unknown" labels. Option to process binary or multiclass
+    labels.
+    Combines samples as X and loads labels as y for input to the model. 
+    Returns baseline accuracy score?
+
+    TODO: finish documentation
+    '''
+    
+    plot_ids = gather_plot_ids(v_train_data)
+    
+    if len(feature_select) > 0:
+        n_feats = 13 + len(feature_select)
+    else:
+        n_feats = 94
+        
+    # create empty x and y array based on number of plots 
+    # x.shape is (plots, 14, 14, n_feats) y.shape is (plots, 14, 14)
+    n_samples = len(plot_ids)
+    y_all = np.zeros(shape=(n_samples, sample_shape[0], sample_shape[1]))
+    x_all = np.zeros(shape=(n_samples, sample_shape[0], sample_shape[1], n_feats))
+
+    for num, plot in enumerate(tqdm(plot_ids)):
+        ard = load_ard(plot)
+        ttc = load_ttc(plot)
+        txt = load_txt(plot) 
+        validate.train_output_range_dtype(ard[...,10], ard[...,11:13], ard[...,0:10], ttc, feature_select) 
+        X = make_sample(sample_shape, ard, txt, ttc, feature_select)
+        y = load_label(plot, binary)
+        x_all[num] = X
+        y_all[num] = y
+
+        # clean up memory
+        del ard, ttc, txt, X, y
+
+    if verbose:
+        print(f'Sample: {num}')
+        print(f'Features: {X.shape}, Labels: {y.shape}')
         
     # check class balance 
     labels, counts = np.unique(y_all, return_counts=True)
