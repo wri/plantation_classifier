@@ -11,11 +11,11 @@ src/*
 *.pem
 *.ipynb
 *.tif
+*.md
 
 !models/cat_v20_tuned.pkl
-!data/urbanmask.tif
 !src/transfer_learning.py 
-!src/slow_glcm.py 
 !src/mosaic.py 
 !src/validate_io.py 
+!src/texture_analysis.py
 !src/__init__.py 
