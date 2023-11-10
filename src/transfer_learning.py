@@ -12,7 +12,6 @@ import botocore
 import rasterio as rs
 import yaml
 from osgeo import gdal
-from scipy.ndimage import median_filter
 from skimage.transform import resize
 from glob import glob
 import functools
@@ -23,6 +22,7 @@ from skimage.util import img_as_ubyte
 import gc
 import copy
 import subprocess
+from rasterio.plot import reshape_as_raster, reshape_as_image
 
 ## import other scripts
 import sys
@@ -30,8 +30,7 @@ sys.path.append('src/')
 
 import mosaic
 import validate_io as validate
-import slow_glcm as slow_txt
-#import fast_glcm as fast_txt
+
 
 with open("config.yaml", 'r') as stream:
     document = (yaml.safe_load(stream))
@@ -96,62 +95,48 @@ def download_tile_ids(location: list, aws_access_key: str, aws_secret_key: str):
 
     return tiles
 
-def download_ard(tile_idx: tuple, country: str, aws_access_key: str, aws_secret_key: str):
+def download_ard(tile_idx: tuple, country: str, aws_access_key: str, aws_secret_key: str, overwrite: bool):
     ''' 
-    If ARD folder is not present locally,
-    Download contents from s3 folder into local folder
-    for specified tile
+    If ARD folder or the feats folder are not present locally,
+    Download contents from s3 into local for specified tile
+    If overwrite is set to True, the ARD and feats dir (txt and ttc feats) will be 
+    redownloaded regardless of whether the file is present locally.
     '''
-
-    # set x/y to the tile IDs
     x = tile_idx[0]
     y = tile_idx[1]
 
-    s3_path = f'2020/ard/{str(x)}/{str(y)}/'
+    s3_path_ard = f'2020/ard/{str(x)}/{str(y)}/{str(x)}X{str(y)}Y_ard.hkl'
     s3_path_feats = f'2020/raw/{str(x)}/{str(y)}/raw/feats/'
+
+    # check if present locally
+    # for ARD checks for single file, for feats checks for folder
     local_path = f'tmp/{country}/{str(x)}/{str(y)}/'
+    local_ard = os.path.exists(f'{local_path}ard/{str(x)}X{str(y)}Y_ard.hkl')
+    local_feats = os.path.exists(local_path + 'raw/feats/')
 
-    # check if ARD folder has been downloaded
-    ard_check = os.path.exists(local_path + 'ard/')
-    feats_check = os.path.exists(local_path + 'raw/feats/')
+    s3 = boto3.resource('s3',
+                    aws_access_key_id=aws_access_key, 
+                    aws_secret_access_key=aws_secret_key)
+    bucket = s3.Bucket('tof-output')
 
-    if not ard_check:
+    if local_ard == False or overwrite == True:
         print(f"Downloading ARD for {(x, y)}")
+        if not os.path.exists(local_path + 'ard/'):
+            os.makedirs(local_path + 'ard/')
+    
+        try:
+            bucket.download_file(s3_path_ard, f'{local_path}ard/{str(x)}X{str(y)}Y_ard.hkl')
 
-        s3 = boto3.resource('s3',
-                            aws_access_key_id=aws_access_key, 
-                            aws_secret_access_key=aws_secret_key)
-        bucket = s3.Bucket('tof-output')
-
-        # this will download whatever is in the ard folder 
-        for obj in bucket.objects.filter(Prefix=s3_path):
-
-            ard_target = os.path.join(local_path + 'ard/', os.path.relpath(obj.key, s3_path))
-            print(f'target download path: {ard_target}')
-
-            if not os.path.exists(os.path.dirname(ard_target)):
-                os.makedirs(os.path.dirname(ard_target))
-            if obj.key[-1] == '/':
-                continue
-            try:
-                bucket.download_file(obj.key, ard_target)
-
-            # if the tiles do not exist on s3, catch the error and return False
-            except botocore.exceptions.ClientError as e:
+        except botocore.exceptions.ClientError as e:
                 if e.response['Error']['Code'] == "404":
                     return False
         
-    if not feats_check:
+    if local_feats == False or overwrite == True:
         print(f"Downloading feats for {(x, y)}")
-        s3 = boto3.resource('s3',
-                            aws_access_key_id=aws_access_key, 
-                            aws_secret_access_key=aws_secret_key)
-        bucket = s3.Bucket('tof-output')
 
         for obj in bucket.objects.filter(Prefix=s3_path_feats):
 
             feats_target = os.path.join(local_path + 'raw/feats/', os.path.relpath(obj.key, s3_path_feats))
-            print(f'target download path: {feats_target}')
 
             if not os.path.exists(os.path.dirname(feats_target)):
                 os.makedirs(os.path.dirname(feats_target))
@@ -164,9 +149,7 @@ def download_ard(tile_idx: tuple, country: str, aws_access_key: str, aws_secret_
             except botocore.exceptions.ClientError as e:
                 if e.response['Error']['Code'] == "404":
                     return False
-    
-    ard = hkl.load(f'{local_path}ard/{str(x)}X{str(y)}_ard.hkl')
-    return ard, True
+    return True
 
 def make_bbox(country: str, tile_idx: tuple, expansion: int = 10) -> list:
     """
@@ -224,22 +207,22 @@ def process_feats_slow(tile_idx: tuple, country: str, feature_select:list) -> np
         - swap high and low level feats to match training pipeline
         - filter to selected feats if feature_select param > 0
         - creates no data and no tree flags for masking predictions
+    Combines TTC feats with texture properties and returns array filtered
+    to selected feats
+
     '''
     
     # prepare inputs
     x = tile_idx[0]
     y = tile_idx[1]
-    folder = f'tmp/{country}/{str(x)}/{str(y)}/'
+    folder = f'tmp/{country}/{str(x)}/{str(y)}/raw/feats/'
     tile_str = f'{str(x)}X{str(y)}Y'
-    ard = hkl.load(f'{folder}ard/{str(x)}X{str(y)}_ard.hkl') # note this file name is missing y
-    s2 = ard[..., 0:10]
-    feats_file = f'{folder}raw/feats/{tile_str}_feats.hkl'
-    feats_raw = hkl.load(feats_file).astype(np.float32)
+    feats_raw = hkl.load(f'{folder}{tile_str}_feats.hkl').astype(np.float32)
+    txt = np.load(f'{folder}{tile_str}_txt.npy')
 
-    # prepare outputs
-    # output shape will match s2 array ttc feats and 5 txt feats
-    n_feats = len(feature_select) + 16 + 65
-    output = np.zeros((s2.shape[0], s2.shape[1], n_feats), dtype=np.float32)
+    # prepare outputs 
+    n_feats = 65 + 16
+    output = np.zeros((txt.shape[0], txt.shape[1], n_feats), dtype=np.float32)
 
     # adjust TML predictions feats[0] to match training data (0-1)
     # adjust shape by rolling axis 2x (65, 614, 618) ->  (618, 614, 65) 
@@ -262,56 +245,20 @@ def process_feats_slow(tile_idx: tuple, country: str, feature_select:list) -> np
     # where TML probability is 255 or 0, pass along to preds
     # note that the feats shape is (x, x, 65)
     no_data_flag = ttc[...,0] == 255.
-    no_tree_flag = ttc[...,0] == 0.
+    no_tree_flag = ttc[...,0] <= 0.1
 
-    # apply feature selection to ttc feats 
-    if len(feature_select) > 0:
-        ttc = np.squeeze(ttc[:, :, [feature_select]])
-
-    # import txt features if available, otherwise calc them
-    if os.path.exists(f'{folder}raw/feats/{tile_str}_txt_lgr.npy'):
-        print('Importing texture features.')
-        txt = np.load(f'{folder}raw/feats/{tile_str}_txt_lgr.npy')
-
-    else:
-        s2 = img_as_ubyte(s2)
-        assert s2.dtype == np.uint8, print(s2.dtype)
-        
-        # developed to suit the v20 model
-        txt = np.zeros((s2.shape[0], s2.shape[1], 16), dtype=np.float32)
-        # green = s2[..., 1]
-        # red = s2[..., 2]
-        # nir = s2[..., 3]
-        # print('Calculating select GLCM textures for green band...')
-        # txt[..., 0:1] = slow_txt.deply_extract_texture(green, ['contrast'])
-        # print('Calculating select GLCM textures for red band...')
-        # txt[..., 1:2] = slow_txt.deply_extract_texture(red, ['contrast'])
-        # print('Calculating select GLCM textures for nir band...')
-        # txt[..., 2:] = slow_txt.deply_extract_texture(nir, ['dissimilarity', 'correlation', 'homogeneity','contrast'])
-        blue = s2[..., 0]
-        green = s2[..., 1]
-        red = s2[..., 2]
-        nir = s2[..., 3]
-        print('Calculating select GLCM textures for blue band...')
-        txt[..., 0:4] = slow_txt.deply_extract_texture(blue, ['dissimilarity', 'correlation', 'homogeneity','contrast'])
-        print('Calculating select GLCM textures for green band...')
-        txt[..., 4:8] = slow_txt.deply_extract_texture(green, ['dissimilarity', 'correlation', 'homogeneity','contrast'])
-        print('Calculating select GLCM textures for red band...')
-        txt[..., 8:12] = slow_txt.deply_extract_texture(red, ['dissimilarity', 'correlation', 'homogeneity','contrast'])
-        print('Calculating select GLCM textures for nir band...')
-        txt[..., 12:16] = slow_txt.deply_extract_texture(nir, ['dissimilarity', 'correlation', 'homogeneity','contrast'])
-
-        # save glcm texture properties in case
-        np.save(f'{folder}raw/feats/{tile_str}_txt_lgr.npy', txt)
-
+    # combine ttc feats and txt into a single array
     output[..., :ttc.shape[-1]] = ttc
     output[..., ttc.shape[-1]:] = txt
+
+    # apply feature selection
+    if len(feature_select) > 0:
+        output = np.squeeze(output[:, :, [feature_select]])
 
     del feats_raw, feats_rolled, high_feats, low_feats, ttc
 
     return output, no_data_flag, no_tree_flag
 
-# This will need updating based on how ARD is stored
 def make_sample(tile_idx: tuple, country: str, feats: np.array):
     
     ''' 
@@ -324,21 +271,17 @@ def make_sample(tile_idx: tuple, country: str, feats: np.array):
     # prepare inputs
     x = tile_idx[0]
     y = tile_idx[1]
+    ard = hkl.load(f'tmp/{country}/{str(x)}/{str(y)}/ard/{str(x)}X{str(y)}Y_ard.hkl')
 
-    ard = hkl.load(f'tmp/{country}/{str(x)}/{str(y)}/ard/{str(x)}X{str(y)}_ard.hkl')
-
-    # define number of features in the sample
+    # define number of features and create sample array
     n_feats = ard.shape[-1] + feats.shape[-1] 
-
-    # Create the empty array using shape of inputs
     sample = np.zeros((ard.shape[0], ard.shape[1], n_feats), dtype=np.float32)
     
     # populate empty array with each feature
-    # order has to be swapped to match the plantations_classifier pipeline
-    # populate empty array with each feature
-    sample[..., 0] = ard[..., 10]
-    sample[..., 1:3] = ard[..., 11:13]
-    sample[..., 3:13] = ard[..., 0:10]
+    # order: s2, dem, s1, ttc, txt
+    sample[..., 0:10] = ard[..., 0:10]
+    sample[..., 10:11] = ard[..., 10]
+    sample[..., 11:13] = ard[..., 11:13]
     sample[..., 13:] = feats
 
     # save dims for future use
@@ -412,16 +355,33 @@ def predict_classification(arr: np.array, pretrained_model: str, sample_dims: tu
 
     '''
     Import pretrained model and run predictions on arr.
+    Reshape array to permit writing to tif.
+    '''
+
+    preds = pretrained_model.predict(arr)
+    preds = preds.reshape(sample_dims[0], sample_dims[1])
+
+    return preds
+
+def predict_regression(arr: np.array, pretrained_model: str, sample_dims: tuple):
+    '''
+    Import pretrained model and run predictions on arr.
     If using a regression model, multiply results by 100
     to get probability 0-100. Reshape array to permit writing to tif.
+
+    model.predict() outputs a 2D array with shape (379452, 2). This can
+    only be reshaped to (618, 614, 2). But there are 3 classes, so how
+    to get the model to predict probability for each class?
     '''
-    
-    preds = pretrained_model.predict(arr)
+        
+    #preds = pretrained_model.predict(arr, prediction_type='Probability') 
+    preds = pretrained_model.predict_proba(arr)
+    preds = preds * 100
+    print(f'original shape: {preds.shape}')
+    preds = preds.reshape((sample_dims[0], sample_dims[1], 3))
+    print(f'reshaped: {preds.shape}')
 
-    # TODO: update pipeline for regression
-    #preds = preds * 100
-
-    return preds.reshape(sample_dims[0], sample_dims[1])
+    return preds
 
 def remove_small_patches(arr, thresh):
     
@@ -451,7 +411,7 @@ def remove_small_patches(arr, thresh):
 def post_process_tile(arr: np.array, feature_select: list, no_data_flag: np.array, no_tree_flag: np.array):
 
     '''
-    Applies the no data and no tree flag *if* TTC tree cover predictions are used
+    Applies the no data and no tree flag if TTC tree cover predictions are used
     in feature selection. The NN produces a float32 continuous prediction.
 
     Performs a connected component analysis to remove positive predictions 
@@ -463,19 +423,19 @@ def post_process_tile(arr: np.array, feature_select: list, no_data_flag: np.arra
         arr[no_data_flag] = 255.
         arr[no_tree_flag] = 0.
 
-    # postprocess_mono = remove_small_patches(arr == 1, thresh = 20)
-    # postprocess_af = remove_small_patches(arr == 2, thresh = 15)
+    postprocess_mono = remove_small_patches(arr == 1, thresh = 20)
+    postprocess_af = remove_small_patches(arr == 2, thresh = 15)
     
     # multiplying by boolean will turn every False into 0 
     # and keep every True as the original label
-    # arr[arr == 1] *= postprocess_mono[arr == 1]
-    # arr[arr == 2] *= postprocess_af[arr == 2]
+    arr[arr == 1] *= postprocess_mono[arr == 1]
+    arr[arr == 2] *= postprocess_af[arr == 2]
   
-    # del postprocess_af, postprocess_mono
+    del postprocess_af, postprocess_mono
 
     return arr
 
-def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, suffix = "preds") -> str:
+def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, model_type: str, suffix = "preds") -> str:
     '''
     Write predictions to a geotiff, using the same bounding box 
     to determine north, south, east, west corners of the tile
@@ -496,23 +456,46 @@ def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, suffix 
     
     arr = arr.astype(np.uint8)
 
-    # create the file based on the size of the array
-    transform = rs.transform.from_bounds(west = west, south = south,
-                                         east = east, north = north,
-                                         width = arr.shape[1],
-                                         height = arr.shape[0])
-
+    # create the file based on the size of the array (618, 614, 1)
     print("Writing", file)
-    new_dataset = rs.open(file, 'w', 
-                            driver = 'GTiff',
-                            height = arr.shape[0], width = arr.shape[1], count = 1,
+    if model_type == 'classifier':
+        transform = rs.transform.from_bounds(west = west, south = south,
+                                            east = east, north = north,
+                                            width = arr.shape[1],  #614
+                                            height = arr.shape[0]) #618
+        new_dataset = rs.open(file, 'w', 
+                                driver = 'GTiff',
+                                width = arr.shape[1], 
+                                height = arr.shape[0], 
+                                count = 1,
+                                dtype = "uint8",
+                                compress = 'lzw',
+                                crs = '+proj=longlat +datum=WGS84 +no_defs',
+                                transform=transform)
+        new_dataset.write(arr, 1)
+        new_dataset.close()
+    
+    # switch (618, 614, band) to (band, 618, 614)
+    else:
+        arr = reshape_as_raster(arr)
+        print(f'reshaped #2: {arr.shape}') 
+        transform = rs.transform.from_bounds(west = west, south = south,
+                                            east = east, north = north,
+                                            width = arr.shape[2], 
+                                            height = arr.shape[1])
+        
+        new_dataset = rs.open(file,'w',
+                            driver='GTiff',
+                            width=arr.shape[2],
+                            height=arr.shape[1],
+                            count=arr.shape[0],
                             dtype = "uint8",
                             compress = 'lzw',
                             crs = '+proj=longlat +datum=WGS84 +no_defs',
                             transform=transform)
-    new_dataset.write(arr, 1)
-    new_dataset.close()
-    
+        new_dataset.write(arr) # adding count here throws error
+        new_dataset.close()
+
     del arr, new_dataset
 
     return None
@@ -536,12 +519,18 @@ def remove_folder(tile_idx: tuple, local_dir: str):
         
     return None
 
-def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, feature_select: list):
-    
+def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, feature_select: list, model_type: str):
+
+    ''' 
+    will need to update
+    '''
     print(f'Processing tile: {tile_idx}')
-    ard, successful = download_ard(tile_idx, location[0], aak, ask)
+    successful = download_ard(tile_idx, location[0], aak, ask, overwrite=True)
 
     if successful:
+        x = tile_idx[0]
+        y = tile_idx[1]
+        ard = hkl.load(f'tmp/{location[0]}/{str(x)}/{str(y)}/ard/{str(x)}X{str(y)}Y_ard.hkl')
         bbx = make_bbox(location[1], tile_idx)
         validate.output_dtype_and_dimensions(ard[..., 11:13], ard[..., 0:10], ard[..., 10])
         validate.feats_range(tile_idx, location[0])
@@ -551,18 +540,21 @@ def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, feat
         #sample_ss = reshape_and_scale('v20', sample, verbose)
         
         validate.model_inputs(sample_ss)
-        preds = predict_classification(sample_ss, model, sample_dims)
-        preds_final = post_process_tile(preds, feature_select, no_data_flag, no_tree_flag)
-        validate.model_outputs(preds, 'regressor')
+        if model_type == 'classifier':
+            preds = predict_classification(sample_ss, model, sample_dims)
+            preds_final = post_process_tile(preds, feature_select, no_data_flag, no_tree_flag)
+            validate.model_outputs(preds, model_type)
+        else:
+            preds_final = predict_regression(sample_ss, model, sample_dims)
 
-        write_tif(preds_final, bbx, tile_idx, location[0], 'preds')
+        write_tif(preds_final, bbx, tile_idx, location[0], model_type, 'preds')
         #remove_folder(tile_idx, local_dir)
 
-        # clean up memory
-        del ard, feats, no_data_flag, no_tree_flag, sample, sample_ss, preds, preds_final
+        del ard, feats, no_data_flag, no_tree_flag, sample, sample_ss, preds_final
     
     else:
-        print(f'Raw data for {tile_idx} does not exist on s3.')
+        print(f'Raw data for {tile_idx} could not be downloaded or does not exist on s3.')
+        return None
 
     return None
 
@@ -577,6 +569,7 @@ if __name__ == '__main__':
     parser.add_argument('--model', dest='model', type=str)
     parser.add_argument('--verbose', dest='verbose', default=False, type=bool) 
     parser.add_argument('--fs', dest='feature_select', nargs='*', type=int) 
+    parser.add_argument('--shape', dest='shapefile', type=str)
 
     args = parser.parse_args()
     
@@ -592,15 +585,18 @@ if __name__ == '__main__':
     print('............................................')
     print(f'Processing {tile_count} tiles for {args.location[1], args.location[0]}.')
     print('............................................')
+    
+    model = 'classifier'
+    print(f'Model type is {model}.')
 
     for tile_idx in tiles_to_process:
         counter += 1
-        execute_per_tile(tile_idx, location=args.location, model=loaded_model, verbose=args.verbose, feature_select=args.feature_select)
+        execute_per_tile(tile_idx, location=args.location, model=loaded_model, verbose=args.verbose, feature_select=args.feature_select, model_type=model)
 
         if counter % 2 == 0:
             print(f'{counter}/{tile_count} tiles processed...')
     
-    # for now mosaic and upload to s3 bucket
     mosaic.mosaic_tif(args.location, args.model, compile_from='csv')
-    #mosaic.upload_mosaic(args.location, args.model, aak, ask)
+    # mosaic.clip_it(args.location, args.model, args.shapefile)
+    # mosaic.upload_mosaic(args.location, args.model, aak, ask)
     

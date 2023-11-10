@@ -26,13 +26,18 @@ RUN apt-get update && apt-get install -y software-properties-common &&\
  	export C_INCLUDE_PATH=/usr/include/gdal &&\
  	pip install GDAL==$(gdal-config --version | awk -F'[.]' '{print $1"."$2}') --global-option=build_ext --global-option="-I/usr/include/gdal"
 
-# copy over the appropriate scripts/data
-COPY src/ /app/src/
-COPY data/urbanmask.tif /app/data/urbanmask.tif
-COPY models/cat_v20_tuned.pkl /app/models/cat_v20_tuned.pkl
+# transfer learning reqs - make sure to check dockerignore!
+# COPY src/ /app/src/
+# COPY data/urbanmask.tif /app/data/urbanmask.tif
+# COPY models/cat_v20_tuned.pkl /app/models/cat_v20_tuned.pkl
+# COPY config.yaml /app/config.yaml
+
+# texture reqs
+COPY src/texture_analysis.py /app/src/texture_analysis.py
+COPY src/validate_io.py /app/src/validate_io.py
 COPY config.yaml /app/config.yaml
 
 EXPOSE 8080
 
 # list of commands - supply args with docker run?
-ENTRYPOINT ["conda", "run","--no-capture-output", "-n", "plantations5", "python3", "src/transfer_learning.py"]
+ENTRYPOINT ["conda", "run","--no-capture-output", "-n", "plantations5", "python3", "src/texture_analysis.py"]

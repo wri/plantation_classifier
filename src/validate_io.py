@@ -2,13 +2,12 @@
 
 import numpy as np
 import hickle as hkl
-from numpy.testing import assert_almost_equal
 import gc
 
 ### TRAINING ###
 # these tests happen after preprocessing the raw training data
 
-def glcm_input(img):
+def fast_glcm_input(img):
     '''
     check that the input band meets the following criteria
     s2 should be shape (28, 28, 10) and dtype uint8
@@ -20,7 +19,7 @@ def glcm_input(img):
     assert np.logical_and(img.min() >= 0, img.max() <= 255)
 
 
-def glcm_output(txt):
+def fast_glcm_output(txt):
     '''
     check that the output of fast_glcm contains 4 texture
     properties for 4 bands (16 total) and is dtype float32
@@ -39,12 +38,11 @@ def train_output_range_dtype(dem, s1, s2, feats, feature_select):
 
     assert s1.dtype == np.float32
     assert s2.dtype == np.float32
-    assert feats.dtype == np.float32
     assert dem.dtype == np.float32
+    assert feats.dtype == np.float32
 
     assert np.logical_and(s1.min() >= 0, s1.max() <= 1)
     assert np.logical_and(s2.min() >= 0, s2.max() <= 1)
-
 
     # if there is no feature selection, assert feats meet logic
     # this only checks ttc feats and not txt feats
@@ -54,7 +52,23 @@ def train_output_range_dtype(dem, s1, s2, feats, feature_select):
    
     # TODO: enable validation when feature selection used
 
+def train_output_range_dtype2(ard, feats, feature_select):
 
+    assert ard.dtype == np.float32
+    dem = ard[..., 0]
+    s1 = ard[..., 1:3]
+    s2 = ard[..., 3:13]
+
+    assert np.logical_and(s1.min() >= 0, s1.max() <= 1)
+    assert np.logical_and(s2.min() >= 0, s2.max() <= 1)
+
+    if len(feature_select) < 1:
+        assert np.logical_and(feats[..., 1:65].min() >= -32.768, feats[..., 1:65].max() <= 32.768), print(feats[..., 1:65].min(), feats[..., 1:65].max())
+        assert np.logical_and(feats[..., 0].min() >= 0, feats[..., 0].max() <= 1), print(feats[..., 0].min(), feats[..., 0].max())
+
+    # TODO: enable validation when feature selection used
+
+    
 ### DEPLOYMENT ###
 # these tests happen after data is downloaded from s3
 
@@ -108,8 +122,6 @@ def input_ard(tile_idx, country):
     assert ard.shape[3] == 13
 
     del ard
-
-
 
 
 def feats_range(tile_idx, country):
@@ -213,7 +225,39 @@ def model_outputs(arr, type):
         assert arr.all() != 1
 
     elif type == 'regressor':
-        assert np.logical_and(arr >= 0, arr <= 100).all() or np.any(arr == 255)
+        assert np.logical_and(arr >= 0, arr <= 100).all() or np.any(arr == 255), print(np.unique(arr))
         assert np.all(arr != 100)
 
     
+## validate texture array 
+
+def texture_output_dims(arr):
+    '''
+    Confirm texture arr shape, dtype and count of properties
+
+    '''
+    assert len(arr.shape) == 3
+    assert arr.shape[-1] == 16
+    assert arr.dtype == np.float32
+
+def texture_output_range(arr, prop):
+    '''
+    Then check texture calculations fall within appropriate ranges
+    
+    Correlation Range = -1 to 1
+    Homogeneity Range = 0 to 1
+    Dissimilarity Range = min >= 0
+    Contrast Range = min >= 0
+    '''
+
+    if prop == 'dissimilarity':
+        assert arr.min() >= 0.0, print(arr.min())
+    
+    elif prop == 'correlation':
+        assert arr.min() >= -1.0 and arr.max() <= 1.0, print(arr.min(), arr.max())
+    
+    elif prop == 'homogeneity':
+        assert arr.min() >= 0.0 and arr.max() <= 1.0, print(arr.min(), arr.max())
+
+    elif prop == 'contrast':
+        assert arr.min() >= 0.0, print(arr.min())

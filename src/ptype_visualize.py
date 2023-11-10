@@ -4,9 +4,14 @@ from sklearn.model_selection import learning_curve
 from sklearn.metrics import roc_curve, roc_auc_score, precision_recall_curve, confusion_matrix, ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
 import seaborn as sns
+import rasterio as rs
 import pickle
+import os
 import numpy as np
-
+import pandas as pd
+import copy
+from pyproj import Proj, transform
+import math
 
 def cm_roc_pr(model, y_test, pred, probs_pos):
 
@@ -113,10 +118,14 @@ def roc_curve_comp(X_test, y_test, model_names):
     return None
 
 
-def learning_curve_comp(model_names, X_train, y_train):
+def learning_curve_comp(model_names, X_train, y_train, x_max):
 
     '''
-    Plots a learning curve for all listed models.
+    Plots a learning curve to visualize the performance of given machine
+    learning models by comparing their training and testing scores as the amount of training
+    data increases. It uses k-fold cross-validation to estimate the model performance.
+    This also allows for model comparison.
+
     '''
 
     plt.figure(figsize = (13,6))
@@ -148,7 +157,7 @@ def learning_curve_comp(model_names, X_train, y_train):
         plt.plot(train_sizes, train_scores_mean, "x-", color=x, label=f"{i[0:4]} Train")
         plt.plot(train_sizes, test_scores_mean, ".-", color=x, label=f"{i[0:4]} Test")
     
-    plt.xlim([1000, 80000])
+    plt.xlim([1000, x_max])
     plt.ylim([0.0, 1.2])
     plt.title(f'Learning Curve Comparison for {len(model_names)} Models')
     plt.xlabel('Training Samples')
@@ -171,8 +180,136 @@ def visualize_plotpreds(model_name, v_train_data, X_test):
 
     return None
 
+def make_bbox(country: str, tile_idx: tuple, expansion: int = 10) -> list:
+    """
+    Makes a (min_x, min_y, max_x, max_y) bounding box that
+    is 2 * expansion 300 x 300 meter ESA LULC pixels. 
 
-## in progress
+       Parameters:
+            initial_bbx (list): [min_x, min_y, max_x, max_y]
+            expansion (int): 1/2 number of 300m pixels to expand
+
+       Returns:
+            bbx (list): expanded [min_x, min_y, max_x, max_y]
+    """
+    bbx_df = pd.read_csv(f"data/{country}.csv", engine="pyarrow")
+
+    # set x/y to the tile IDs
+    x = tile_idx[0]
+    y = tile_idx[1]
+    
+    # extract the XY of interest as a dataframe
+    bbx_df = bbx_df[bbx_df['X_tile'] == int(x)]
+    bbx_df = bbx_df[bbx_df['Y_tile'] == int(y)]
+    bbx_df = bbx_df.reset_index(drop = True)
+
+    # creates a point [min x, min y, max x, max y] (min and max will be the same)
+    initial_bbx = [bbx_df['X'][0], bbx_df['Y'][0], bbx_df['X'][0], bbx_df['Y'][0]]
+    
+    # starting at a centroid, want to create a 6x6km box
+    # pixels match up with ESA area adjusted/locally sized pixels 
+    # 10*300m pixels to the left (~6km) and to the right (~6km)
+    
+    multiplier = 1/360 # Sentinel-2 pixel size in decimal degrees
+    bbx = copy.deepcopy(initial_bbx)
+    bbx[0] -= expansion * multiplier
+    bbx[1] -= expansion * multiplier
+    bbx[2] += expansion * multiplier
+    bbx[3] += expansion * multiplier
+    
+    # return the dataframe and the array
+    return bbx
+
+
+# def calc_bbx_of_size(coord: tuple[float, float], size) -> (tuple[float, float], 'CRS'):
+#     ''' 
+#     Calculates the four corners of a bounding box
+#     [bottom left, top right] as well as the UTM EPSG using Pyproj
+
+#     Note: The input for this function is (x, y), not (lat, long)
+#     '''
+#     expansion = 10
+    
+#     inproj = Proj('epsg:4326')
+#     outproj_code = calculate_epsg(coord)
+#     outproj = Proj('epsg:' + str(outproj_code))
+
+#     coord_utm = transform(inproj, outproj, coord[1], coord[0])
+#     coord_utm_bottom_left = (coord_utm[0] - size // 2, coord_utm[1] - size // 2)
+
+#     coord_utm_top_right = (coord_utm[0] + size // 2, expansion, coord_utm[1] + size // 2)
+#     coord_bottom_left = transform(outproj, inproj, coord_utm_bottom_left[1], coord_utm_bottom_left[0])
+#     coord_top_right = transform(outproj, inproj, coord_utm_top_right[1], coord_utm_top_right[0])
+    
+#     return (coord_bottom_left, coord_top_right)
+
+
+# def calculate_epsg(points: Tuple[float, float]) -> int:
+#     """ 
+#     Calculates the UTM EPSG of an input WGS 84 lon, lat
+
+#         Parameters:
+#          points (tuple): input longitiude, latitude tuple
+
+#         Returns:
+#          epsg_code (int): integer form of associated UTM EPSG
+#     """
+#     lon, lat = points[0], points[1]
+#     utm_band = str((math.floor((lon + 180) / 6) % 60) + 1)
+    
+#     if len(utm_band) == 1:
+#         utm_band = '0' + utm_band
+    
+#     if lat >= 0:
+#         epsg_code = '326' + utm_band
+    
+#     else:
+#         epsg_code = '327' + utm_band
+    
+#     return int(epsg_code)
+
+def save_training_preds(arr: np.ndarray, tile_idx: tuple, country: str, suffix = "preds") -> str:
+    '''
+    Write predictions to a geotiff, using the same bounding box 
+    to determine north, south, east, west corners of the tile
+    '''
+    
+     # set x/y to the tile IDs
+    x = tile_idx[0]
+    y = tile_idx[1]
+    out_folder = f'tmp/{country}/preds/'
+    file = out_folder + f"{str(x)}X{str(y)}Y_{suffix}.tif"
+
+    if not os.path.exists(out_folder):
+        os.makedirs(out_folder)
+
+    bbx = make_bbox(country, tile_idx)
+    west, east = bbx[0], bbx[2]
+    north, south = bbx[3], bbx[1]
+    
+    arr = arr.astype(np.uint8)
+
+    # create the file based on the size of the array
+    transform = rs.transform.from_bounds(west = west, south = south,
+                                         east = east, north = north,
+                                         width = arr.shape[1],
+                                         height = arr.shape[0])
+
+    print("Writing", file)
+    new_dataset = rs.open(file, 'w', 
+                            driver = 'GTiff',
+                            height = arr.shape[0], width = arr.shape[1], count = 1,
+                            dtype = "uint8",
+                            compress = 'lzw',
+                            crs = '+proj=longlat +datum=WGS84 +no_defs',
+                            transform=transform)
+    new_dataset.write(arr, 1)
+    new_dataset.close()
+    
+    return None
+
+
+## in progres
 def make_gpro_friendly(raster_filepath):
     '''
     transforms a raster into format that can be imported into

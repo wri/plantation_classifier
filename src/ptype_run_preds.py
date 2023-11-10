@@ -30,6 +30,9 @@ def fit_eval_regressor(X_train, X_test, y_train, y_test, model_name, v_train_dat
     '''
     Based on arguments provided, fits and evaluates a regression model
     saving the model to a pkl file and saving score in a csv.
+    
+    use Softmax- weights each class and returns a probability for each given class, 
+    then you just pick the one with the max probability and that will be your predicted class
     '''
 
     # Get the count of features used
@@ -40,7 +43,7 @@ def fit_eval_regressor(X_train, X_test, y_train, y_test, model_name, v_train_dat
         model.fit(X_train, y_train)
 
     elif model_name == 'catr':
-        model = CatBoostRegressor(random_state=22, loss_function='MultiRMSE')
+        model = CatBoostRegressor(random_state=22, loss_function='MultiRMSE', silent=True)
         model.fit(X_train, y_train)
 
     # save trained model
@@ -52,6 +55,7 @@ def fit_eval_regressor(X_train, X_test, y_train, y_test, model_name, v_train_dat
     cv = cross_val_score(model, X_train, y_train, cv=3).mean()
     train_score = model.score(X_train, y_train)
     test_score = model.score(X_test, y_test)
+    pred = model.predict(X_test)
 
      # add new scores
     scores = {'model': f'{model_name}_{v_train_data}', 
@@ -73,7 +77,7 @@ def fit_eval_regressor(X_train, X_test, y_train, y_test, model_name, v_train_dat
         f.write('\n')
     eval_df.to_csv('../models/mvp_scores.csv', mode='a', index=False, header=False)
 
-    return eval_df
+    return pred
 
 def fit_eval_classifier(X_train, X_test, y_train, y_test, model_name, v_train_data):
     
@@ -158,7 +162,8 @@ def fit_eval_classifier(X_train, X_test, y_train, y_test, model_name, v_train_da
     
     return y_test, pred, probs, probs_pos
 
-def fit_eval_multiclassifier(X_train, X_test, y_train, y_test, model_name, v_train_data, depth=10, l2_leaf=11, itera=1200, learn_rate=0.03):
+
+def fit_eval_multiclassifier(X_train, X_test, y_train, y_test, model_name, v_train_data):
     
     '''
     Fits and evaluates a CatBoost multi-classification (3 class) model
@@ -167,6 +172,11 @@ def fit_eval_multiclassifier(X_train, X_test, y_train, y_test, model_name, v_tra
     cat_v19: {'depth': 8, 'l2_leaf_reg': 11, 'iterations': 1100, 'learning_rate': 0.03}
     cat_v20: {'depth': 10, 'l2_leaf_reg': 11, 'iterations': 1200, 'learning_rate': 0.03}
     '''
+    depth=10
+    l2_leaf=11
+    itera=1200
+    learn_rate=0.03
+
     # Get the count of features used
     feat_count = X_train.shape[1] - 13
 
@@ -308,45 +318,7 @@ def fit_eval_catboost(X_train, X_test, y_train, y_test, v_train_data, depth=8, l
     return y_test, pred, probs, probs_pos
 
 
-## TBD
-def write_train_test_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, suffix = "preds") -> str:
-    '''
-    Write predictions to a geotiff, using the same bounding box 
-    to determine north, south, east, west corners of the tile
-    '''
-    
-     # set x/y to the tile IDs
-    x = tile_idx[0]
-    y = tile_idx[1]
-    out_folder = f'tmp/{country}/preds/'
-    file = out_folder + f"{str(x)}X{str(y)}Y_{suffix}.tif"
 
-    if not os.path.exists(out_folder):
-        os.makedirs(out_folder)
 
-    # uses bbx to figure out the corners
-    west, east = bbx[0], bbx[2]
-    north, south = bbx[3], bbx[1]
-    
-    arr = arr.astype(np.uint8)
-
-    # create the file based on the size of the array
-    transform = rs.transform.from_bounds(west = west, south = south,
-                                         east = east, north = north,
-                                         width = arr.shape[1],
-                                         height = arr.shape[0])
-
-    print("Writing", file)
-    new_dataset = rs.open(file, 'w', 
-                            driver = 'GTiff',
-                            height = arr.shape[0], width = arr.shape[1], count = 1,
-                            dtype = "uint8",
-                            compress = 'lzw',
-                            crs = '+proj=longlat +datum=WGS84 +no_defs',
-                            transform=transform)
-    new_dataset.write(arr, 1)
-    new_dataset.close()
-    
-    return None
 
 
