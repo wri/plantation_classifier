@@ -278,11 +278,10 @@ def make_sample(tile_idx: tuple, country: str, feats: np.array):
     sample = np.zeros((ard.shape[0], ard.shape[1], n_feats), dtype=np.float32)
     
     # populate empty array with each feature
-    # order has to be swapped to match the plantations_classifier pipeline
-    # populate empty array with each feature
-    sample[..., 0] = ard[..., 10]
-    sample[..., 1:3] = ard[..., 11:13]
-    sample[..., 3:13] = ard[..., 0:10]
+    # order: s2, dem, s1, ttc, txt
+    sample[..., 0:10] = ard[..., 0:10]
+    sample[..., 10:11] = ard[..., 10]
+    sample[..., 11:13] = ard[..., 11:13]
     sample[..., 13:] = feats
 
     # save dims for future use

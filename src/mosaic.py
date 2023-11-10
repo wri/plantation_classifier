@@ -32,7 +32,7 @@ def mosaic_tif(location: list, model: str, compile_from: str):
         tiles = database[['X_tile', 'Y_tile']].to_records(index=False)
 
         # specify here if there's a specific set of tiles to merge
-        for tile_idx in tiles[:2]:
+        for tile_idx in tiles:
             x = tile_idx[0]
             y = tile_idx[1]
             filename = f'{str(x)}X{str(y)}Y_preds.tif'
