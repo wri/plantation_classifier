@@ -38,12 +38,11 @@ def train_output_range_dtype(dem, s1, s2, feats, feature_select):
 
     assert s1.dtype == np.float32
     assert s2.dtype == np.float32
-    assert feats.dtype == np.float32
     assert dem.dtype == np.float32
+    assert feats.dtype == np.float32
 
     assert np.logical_and(s1.min() >= 0, s1.max() <= 1)
     assert np.logical_and(s2.min() >= 0, s2.max() <= 1)
-
 
     # if there is no feature selection, assert feats meet logic
     # this only checks ttc feats and not txt feats
@@ -53,7 +52,23 @@ def train_output_range_dtype(dem, s1, s2, feats, feature_select):
    
     # TODO: enable validation when feature selection used
 
+def train_output_range_dtype2(ard, feats, feature_select):
 
+    assert ard.dtype == np.float32
+    dem = ard[..., 0]
+    s1 = ard[..., 1:3]
+    s2 = ard[..., 3:13]
+
+    assert np.logical_and(s1.min() >= 0, s1.max() <= 1)
+    assert np.logical_and(s2.min() >= 0, s2.max() <= 1)
+
+    if len(feature_select) < 1:
+        assert np.logical_and(feats[..., 1:65].min() >= -32.768, feats[..., 1:65].max() <= 32.768), print(feats[..., 1:65].min(), feats[..., 1:65].max())
+        assert np.logical_and(feats[..., 0].min() >= 0, feats[..., 0].max() <= 1), print(feats[..., 0].min(), feats[..., 0].max())
+
+    # TODO: enable validation when feature selection used
+
+    
 ### DEPLOYMENT ###
 # these tests happen after data is downloaded from s3
 
@@ -210,7 +225,7 @@ def model_outputs(arr, type):
         assert arr.all() != 1
 
     elif type == 'regressor':
-        assert np.logical_and(arr >= 0, arr <= 100).all() or np.any(arr == 255)
+        assert np.logical_and(arr >= 0, arr <= 100).all() or np.any(arr == 255), print(np.unique(arr))
         assert np.all(arr != 100)
 
     
@@ -236,7 +251,7 @@ def texture_output_range(arr, prop):
     '''
 
     if prop == 'dissimilarity':
-        assert arr.min() <= 0.0, print(arr.min())
+        assert arr.min() >= 0.0, print(arr.min())
     
     elif prop == 'correlation':
         assert arr.min() >= -1.0 and arr.max() <= 1.0, print(arr.min(), arr.max())
@@ -245,4 +260,4 @@ def texture_output_range(arr, prop):
         assert arr.min() >= 0.0 and arr.max() <= 1.0, print(arr.min(), arr.max())
 
     elif prop == 'contrast':
-        assert arr.min() <= 0.0, print(arr.min())
+        assert arr.min() >= 0.0, print(arr.min())
