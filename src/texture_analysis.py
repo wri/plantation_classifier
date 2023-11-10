@@ -299,3 +299,5 @@ if __name__ == '__main__':
                 counter += 1
                 if counter % 2 == 0:
                     print(f'{counter}/{tile_count} tiles processed...')
+        else: # still add one if exists
+            counter += 1
