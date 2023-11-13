@@ -439,6 +439,8 @@ def create_xy(v_train_data, binary, feature_select, sample_shape=(14, 14), verbo
     Combines samples as X and loads labels as y for input to the model. 
     Returns baseline accuracy score?
 
+
+
     TODO: finish documentation
     '''
     
@@ -478,78 +480,24 @@ def create_xy(v_train_data, binary, feature_select, sample_shape=(14, 14), verbo
 
     return x_all, y_all
 
-def reshape_and_scale_manual_OLD(X, y, v_train_data, verbose=False):
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=22)
-    start_min, start_max = X_train.min(), X_train.max()
+def reshape_arr(arr):
+    '''
+    Reshapes a 4D array (X) to 2D and a 3D array (y) to 1D for input into a 
+    machine learning model.
 
-    if verbose:
-        print(f'X_train: {X_train.shape} X_test: {X_test.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}')
+    Parameters:
+    - arr (array-like): Input array to be reshaped. For X, it is assumed to have 
+    shape (plots, 14, 14, n_feats), and for y, it is assumed to have shape (plots, 14, 14).
 
-    # standardize train/test data 
-    min_all = []
-    max_all = []
-
-    for band in range(0, X_train.shape[-1]):
-        
-        mins = np.percentile(X_train[..., band], 1)
-        maxs = np.percentile(X_train[..., band], 99)
-
-        if maxs > mins:
-            
-            # clip values in each band based on min/max of training dataset
-            X_train[..., band] = np.clip(X_train[..., band], mins, maxs)
-            X_test[..., band] = np.clip(X_test[..., band], mins, maxs)
-
-            #calculate standardized data
-            midrange = (maxs + mins) / 2
-            rng = maxs - mins
-            X_train_std = (X_train[..., band] - midrange) / (rng / 2)
-            X_test_std = (X_test[..., band] - midrange) / (rng / 2)
-
-            # update each band in X_train and X_test to hold standardized data
-            X_train[..., band] = X_train_std
-            X_test[..., band] = X_test_std
-            end_min, end_max = X_train.min(), X_train.max()
-            
-            min_all.append(mins)
-            max_all.append(maxs)
-        else:
-            pass
-    
-    # save mins and maxs 
-    np.save(f'../data/mins_{v_train_data}', min_all)
-    np.save(f'../data/maxs_{v_train_data}', max_all)
-
-    ## reshape
-    X_train_ss = np.reshape(X_train, (np.prod(X_train.shape[:-1]), X_train.shape[-1]))
-    X_test_ss = np.reshape(X_test, (np.prod(X_test.shape[:-1]), X_test.shape[-1]))
-    y_train = np.reshape(y_train, (np.prod(y_train.shape[:])))
-    y_test = np.reshape(y_test, (np.prod(y_test.shape[:])))
-    
-    if verbose:
-        print(f'Reshaped X_train: {X_train_ss.shape} X_test: {X_test_ss.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}')
-        print(f"The data was scaled to: Min {start_min} -> {end_min}, Max {start_max} -> {end_max}")
-
-    return X_train_ss, X_test_ss, y_train, y_test
-
-def reshape_no_scaling_OLD(X, y, verbose=False):
-
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=22)
-
-    if verbose:
-        print(f'X_train: {X_train.shape} X_test: {X_test.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}')
-
-    ## reshape
-    X_train_ss = np.reshape(X_train, (np.prod(X_train.shape[:-1]), X_train.shape[-1]))
-    X_test_ss = np.reshape(X_test, (np.prod(X_test.shape[:-1]), X_test.shape[-1]))
-    y_train = np.reshape(y_train, (np.prod(y_train.shape[:])))
-    y_test = np.reshape(y_test, (np.prod(y_test.shape[:])))
-    
-    if verbose:
-        print(f'Reshaped X_train: {X_train_ss.shape} X_test: {X_test_ss.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}')
-
-    return X_train_ss, X_test_ss, y_train, y_test
+    Returns:
+    - reshaped (array-like): Reshaped array with dimensions suitable for machine learning model input.
+    '''
+    if len(arr.shape) == 4:
+        reshaped = np.reshape(arr, (np.prod(arr.shape[:-1]), arr.shape[-1]))
+    else:
+        reshaped = np.reshape(arr, (np.prod(arr.shape[:])))
+    return reshaped
 
 
 def reshape_and_scale(X, y, scale, v_train_data, verbose=False):
@@ -558,40 +506,50 @@ def reshape_and_scale(X, y, scale, v_train_data, verbose=False):
     Scaling is performed manually and mins/maxs are saved
     for use in deployment.
     '''
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=22)
+    start_min, start_max = X_train.min(), X_train.max()
 
     if scale:
         min_all = []
         max_all = []
-        for band in range(0, X.shape[-1]):
-            mins = np.percentile(X[..., band], 1)
-            maxs = np.percentile(X[..., band], 99)
+        for band in range(0, X_train.shape[-1]):
+            mins = np.percentile(X_train[..., band], 1)
+            maxs = np.percentile(X_train[..., band], 99)
+
             if maxs > mins:
+                
                 # clip values in each band based on min/max of training dataset
-                X[..., band] = np.clip(X[..., band], mins, maxs)
-                # calculate standardized data
+                X_train[..., band] = np.clip(X_train[..., band], mins, maxs)
+                X_test[..., band] = np.clip(X_test[..., band], mins, maxs)
+
+                #calculate standardized data
                 midrange = (maxs + mins) / 2
                 rng = maxs - mins
-                X_std = (X[..., band] - midrange) / (rng / 2)
-                # update each band in X to hold standardized data
-                X[..., band] = X_std
+                X_train_std = (X_train[..., band] - midrange) / (rng / 2)
+                X_test_std = (X_test[..., band] - midrange) / (rng / 2)
+
+                # update each band in X_train and X_test to hold standardized data
+                X_train[..., band] = X_train_std
+                X_test[..., band] = X_test_std
+                end_min, end_max = X_train.min(), X_train.max()
                 min_all.append(mins)
                 max_all.append(maxs)
-        # save mins and maxs 
-        np.save(f'../data/mins_{v_train_data}', min_all)
-        np.save(f'../data/maxs_{v_train_data}', max_all)
-    else:
-        pass
+            else:
+                pass
     
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=22)
+    # #  TODO: make this a function - test below
+    # X_train_ss = np.reshape(X_train, (np.prod(X_train.shape[:-1]), X_train.shape[-1]))
+    # X_test_ss = np.reshape(X_test, (np.prod(X_test.shape[:-1]), X_test.shape[-1]))
+    # y_train = np.reshape(y_train, (np.prod(y_train.shape[:])))
+    # y_test = np.reshape(y_test, (np.prod(y_test.shape[:])))
 
-    ## reshape
-    #  TODO: make this a function
-    X_train_ss = np.reshape(X_train, (np.prod(X_train.shape[:-1]), X_train.shape[-1]))
-    X_test_ss = np.reshape(X_test, (np.prod(X_test.shape[:-1]), X_test.shape[-1]))
-    y_train = np.reshape(y_train, (np.prod(y_train.shape[:])))
-    y_test = np.reshape(y_test, (np.prod(y_test.shape[:])))
+    X_train_ss = reshape_arr(X_train)
+    X_test_ss = reshape_arr(X_test)
+    y_train = reshape_arr(y_train)
+    y_test = reshape_arr(y_test)
 
     if verbose:
         print(f'Reshaped X_train: {X_train_ss.shape} X_test: {X_test_ss.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}')
+        print(f"The data was scaled to: Min {start_min} -> {end_min}, Max {start_max} -> {end_max}")
         
     return X_train_ss, X_test_ss, y_train, y_test
