@@ -28,7 +28,7 @@ def fast_glcm_output(txt):
     assert txt.dtype == np.float32
 
 
-def train_output_range_dtype(dem, s1, s2, feats, feature_select):
+def train_output_range_dtype(s2, dem, s1, feats, feature_select):
     '''
     Sentinel-1, float32, range from 0-1 (divided by 65535), unscaled decibels >-22
     Sentinel-2, float32, range from 0-1 (divided by 65535), unscaled
@@ -41,8 +41,8 @@ def train_output_range_dtype(dem, s1, s2, feats, feature_select):
     assert dem.dtype == np.float32
     assert feats.dtype == np.float32
 
-    assert np.logical_and(s1.min() >= 0, s1.max() <= 1)
-    assert np.logical_and(s2.min() >= 0, s2.max() <= 1)
+    assert np.logical_and(s1.min() >= 0, s1.max() <= 1), print(s1.min(), s1.max())
+    assert np.logical_and(s2.min() >= 0, s2.max() <= 1), print(s2.min(), s2.max())
 
     # if there is no feature selection, assert feats meet logic
     # this only checks ttc feats and not txt feats
@@ -50,22 +50,6 @@ def train_output_range_dtype(dem, s1, s2, feats, feature_select):
         assert np.logical_and(feats[..., 1:65].min() >= -32.768, feats[..., 1:65].max() <= 32.768), print(feats[..., 1:65].min(), feats[..., 1:65].max())
         assert np.logical_and(feats[..., 0].min() >= 0, feats[..., 0].max() <= 1), print(feats[..., 0].min(), feats[..., 0].max())
    
-    # TODO: enable validation when feature selection used
-
-def train_output_range_dtype2(ard, feats, feature_select):
-
-    assert ard.dtype == np.float32
-    dem = ard[..., 0]
-    s1 = ard[..., 1:3]
-    s2 = ard[..., 3:13]
-
-    assert np.logical_and(s1.min() >= 0, s1.max() <= 1)
-    assert np.logical_and(s2.min() >= 0, s2.max() <= 1)
-
-    if len(feature_select) < 1:
-        assert np.logical_and(feats[..., 1:65].min() >= -32.768, feats[..., 1:65].max() <= 32.768), print(feats[..., 1:65].min(), feats[..., 1:65].max())
-        assert np.logical_and(feats[..., 0].min() >= 0, feats[..., 0].max() <= 1), print(feats[..., 0].min(), feats[..., 0].max())
-
     # TODO: enable validation when feature selection used
 
     
@@ -115,11 +99,12 @@ def input_ard(tile_idx, country):
 
     folder = f"tmp/{country}/{x}/{y}/"
     tile_str = f'{x}X{y}Y'
+    print(f'{folder}ard/{tile_str}_ard.hkl')
     ard = hkl.load(f'{folder}ard/{tile_str}_ard.hkl')
 
-    # TODO: Confirm
-    # assert ard.dtype ==
-    assert ard.shape[3] == 13
+    assert ard.dtype == np.float32
+    assert ard.shape[2] == 13
+    #assert np.logical_and(ard.min() >= 0, ard.max() <= 1), print(ard.min(), ard.max())
 
     del ard
 
