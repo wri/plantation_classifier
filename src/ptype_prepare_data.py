@@ -196,6 +196,12 @@ def load_label(idx, classes, directory = '../data/train-labels/'):
     The labels are stored as a binary 14 x 14 float64 array.
     Unless they are stored as (196,) and need to be reshaped.
     Dtype needs to be converted to float32.
+    
+    For binary (2 class) classification, update labels by converting
+    AF to 1. For 3 class classification, leave labels as is. For 
+    4 class classification, use the ttc data to update labels
+    for any vegetation >= 20% tree cover as natural trees.
+    
     0: no tree
     1: monoculture
     2: agroforestry
@@ -206,23 +212,19 @@ def load_label(idx, classes, directory = '../data/train-labels/'):
     if len(labels_raw.shape) == 1:
         labels_raw = labels_raw.reshape(14, 14)
 
-    # makes sure that a binary classification exercise updates
-    # any multiclass labels (this is just converting AF label (2) to 1)
     if classes == 2:
         labels = labels_raw.copy()
         labels[labels_raw == 2] = 1
         labels = labels.astype(np.float32)
 
-    # if performing 4 class classification
-    # load ttc plot and use that to relabel 
-    # natural tree cover will now be labeled 3
     if classes == 4:
         feats = hkl.load('../data/train-features-ard/' + str(idx) + '.hkl')
         ttc = feats[..., 0] 
-        print(ttc.shape)
         labels = labels_raw.copy()
-        labels[ttc >= .20000000] = 3
-        labels = labels.astype(np.float32)
+        noplant_mask = np.ma.masked_less(labels, 1)
+        notree_mask = np.ma.masked_greater(ttc, .20000000)
+        mask = np.logical_and(noplant_mask.mask, notree_mask.mask)
+        labels[mask] = 3
         
     else:
         labels = labels_raw.astype(np.float32)
@@ -278,36 +280,6 @@ def load_txt(idx, directory = '../data/train-ard/'):
         np.save(f'../data/train-texture/{idx}_ard.npy', output)
     
     return output.astype(np.float32)
-
-
-def make_sample_OLDDONTUSE(sample_shape, slope, s1, s2, txt, ttc, feature_select):
-    
-    ''' 
-    Defines dimensions and then combines slope, s1, s2, TML features and 
-    texture features from a plot into a sample with shape (14, 14, 94)
-    Feature select is a list of features that will be used, otherwise empty list
-    '''
-    # now filter to select features if arg provided
-    # squeeze extra axis that is added (14,14,1,15) -> (14,14,15)
-    feats = np.zeros((sample_shape[0], sample_shape[1], ttc.shape[-1] + txt.shape[-1]), dtype=np.float32)
-    feats[..., :65] = ttc
-    feats[..., 65:] = txt
-    if len(feature_select) > 0:
-        feats = np.squeeze(feats[:, :, [feature_select]])
-
-    # define the last dimension of the array
-    n_feats = 1 + s1.shape[-1] + s2.shape[-1] + feats.shape[-1] 
-
-    sample = np.empty((sample_shape[0], sample_shape[1], n_feats))
-
-    # populate empty array with each feature
-    sample[..., 0] = slope
-    sample[..., 1:3] = s1
-    sample[..., 3:13] = s2
-    sample[..., 13:] = feats
-
-    return sample
-
 
 def make_sample(sample_shape, ard, txt, ttc, feature_select):
 
