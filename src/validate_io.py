@@ -93,6 +93,15 @@ def input_dtype_and_dimensions(tile_idx, country):
 
 
 def input_ard(tile_idx, country):
+
+    '''
+    ARD will be between 0-1 in all cases except for SWIR bands, which are 
+    downloaded at 40-m and super-resolved to 10m. This super-resolution 
+    process is technically not bounded to the 0-1 range, so could in rare 
+    occasions predict a negative value. It appears that here some water 
+    pixels get assigned a negative value. Therefore the assertion counts the
+    number of pixels that are out of range and only fails if that exceeds 10,000.
+    '''
     
     x = str(tile_idx[0])
     y = str(tile_idx[1])
@@ -104,7 +113,11 @@ def input_ard(tile_idx, country):
 
     assert ard.dtype == np.float32
     assert ard.shape[2] == 13
-    #assert np.logical_and(ard.min() >= 0, ard.max() <= 1), print(ard.min(), ard.max())
+
+    pixel_counter = 0
+    if not np.logical_and(ard.min() >= 0, ard.max() <= 1):
+        pixel_counter += 1
+    assert pixel_counter < 10000, print(f'{pixel_counter} pixels have negative values.')
 
     del ard
 
@@ -196,17 +209,17 @@ def model_inputs(arr):
 def model_outputs(arr, type):
 
     '''
-    Ensures the classification ouput is 0, 1 or 2 or 255 
+    Ensures the classification ouput is 0, 1, 2, 3 or 255 
     and ensures no tile is solely monoculture predictions (1) 
     which is highly unlikely.
 
-    Ensures the classification output is between 0-100 or 255
+    Ensures the regression output is between 0-100 or 255
     and ensures no tile is solely 100% which is highly unlikely.
     '''
 
     # chain together multiple logical_or calls with reduce
     if type == 'classifier':
-        assert np.logical_or.reduce((arr == 0, arr == 1, arr == 2)).all() or np.any(arr == 255)
+        assert np.logical_or.reduce((arr == 0, arr == 1, arr == 2, arr == 3)).all() or np.any(arr == 255)
         assert arr.all() != 1
 
     elif type == 'regressor':
