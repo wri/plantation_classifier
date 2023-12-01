@@ -3,7 +3,7 @@ Research method to spatially differentiate planted and natural trees using a tra
 
 
 ## Directory Structure
-
+```
 ├── LICENSE
 ├── README.md                       <- The top-level README for developers using this project.
 ├── contributing.md                 <- Contribution guidelines
@@ -63,4 +63,7 @@ Research method to spatially differentiate planted and natural trees using a tra
 ├── .gitignore                     <- xx
 ├── .dockerignore                  <- xx
 └── .dvcignore                     <- xx
- 
+```
+
+## Contributing
+We welcome contributions! [See the docs for guidelines](https://github.com/wri/plantation_classifier/blob/dvc/contributing.md).
