@@ -1,0 +1,97 @@
+base:
+  log_level: DEBUG
+  random_state: 121
+
+data_load:
+  download_data: false
+  #sso_profile_name: rognstad-dev
+  bucket_name: restoration-monitoring
+  folder_prefix: plantation-mapping/data/train/
+  local_prefix: data/train/
+  summary_filename: data/Training_Data.xlsx
+  summary_sheetname: CEO_Surveys
+  survey_id_column_name: CEO Survey
+  ceo_survey_directory: data/ceo-surveys
+  data_prefix_list:
+    - slope
+    - s1
+    - s2
+    - dem
+    - features-ckpt-2023-02-09
+    - labels
+  ceo_json: reports/ceo_list.json
+  report_output_dir: /report/
+
+data_condition:
+  train_filter_features:
+    #    Country: ghana
+    Use?: "yes"
+    Classes: multi
+  label_cats:
+    Monoculture: 1
+    Agroforestry: 2
+    Not plantation: 0
+    Unknown: 255
+  scale_features: true
+  subset_fraction: 0.30 #used for pipeline testing, set to 1.0 for all data
+  test_split: 20
+  val_split: 25
+  X_train: data/train/X_train.pkl
+  y_train: data/train/y_train.pkl
+  X_test: data/train/X_test.pkl
+  y_test: data/train/y_test.pkl
+
+train:
+  select_features: true
+  select_X_train: data/train/X_train_selected.pkl
+  select_X_test: data/train/X_test_selected.pkl
+  selected_feature_indicies: reports/selected_feature_indicies.json
+  tune_hyperparams: false
+  cv: 3
+  estimator_name: cat
+  max_features: 90
+  tuning_metric: balanced_accuracy
+  testing_metrics: accuracy balanced_accuracy precision recall f1 roc_auc
+  fit_params:
+    use_best_model: false
+    early_stopping_rounds: 100
+  estimators:
+    rfc: #sklearn.ensemble.RandomForestClassifier
+      importance_metric: shap
+      use_class_weights: true
+      param_grid:
+    svm:
+      importance_metric: shap
+      use_class_weights: true
+      param_grid:
+    lgbm:
+      importance_metric: shap
+      use_class_weights: true
+      param_grid:
+    xgb:
+      importance_metric: shap
+      use_class_weights: true
+      param_grid:
+    cat:
+      importance_metric: shap
+      param_grid:
+        iterations: 500
+        max_depth: 5
+        learning_rate: 0.05
+        colsample_bylevel: 0.5
+        min_data_in_leaf: 50
+        logging_level: Silent
+    logreg:
+      importance_metric: shap
+      use_class_weights: true
+      param_grid:
+  model_path: models/model.joblib
+
+evaluate:
+  reports_dir: reports
+  metrics_file: metrics.json
+  confusion_matrix_image: confusion_matrix.png
+  confusion_matrix_data: confusion_matrix_data.csv
+  eval_map_name: eval_map.png
+  tile_id_loc: data
+  tile_s3_bucket: tof-output
