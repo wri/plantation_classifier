@@ -280,7 +280,7 @@ def make_sample(tile_idx: tuple, country: str, feats: np.array):
     # populate empty array with each feature
     # order: s2, dem, s1, ttc, txt
     sample[..., 0:10] = ard[..., 0:10]
-    sample[..., 10:11] = ard[..., 10]
+    sample[..., 10:11] = ard[..., 10:11]
     sample[..., 11:13] = ard[..., 11:13]
     sample[..., 13:] = feats
 
@@ -525,12 +525,13 @@ def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, feat
     will need to update
     '''
     print(f'Processing tile: {tile_idx}')
-    successful = download_ard(tile_idx, location[0], aak, ask, overwrite=True)
+    successful = download_ard(tile_idx, location[0], aak, ask, overwrite=False)
 
     if successful:
         x = tile_idx[0]
         y = tile_idx[1]
         ard = hkl.load(f'tmp/{location[0]}/{str(x)}/{str(y)}/ard/{str(x)}X{str(y)}Y_ard.hkl')
+        validate.input_ard(tile_idx, location[0])
         bbx = make_bbox(location[1], tile_idx)
         validate.output_dtype_and_dimensions(ard[..., 11:13], ard[..., 0:10], ard[..., 10])
         validate.feats_range(tile_idx, location[0])
@@ -597,6 +598,6 @@ if __name__ == '__main__':
             print(f'{counter}/{tile_count} tiles processed...')
     
     mosaic.mosaic_tif(args.location, args.model, compile_from='csv')
-    # mosaic.clip_it(args.location, args.model, args.shapefile)
+    mosaic.clip_it(args.location, args.model, args.shapefile)
     # mosaic.upload_mosaic(args.location, args.model, aak, ask)
     
