@@ -29,6 +29,7 @@ Research method to spatially differentiate planted and natural trees using a tra
 │   │   ├── __init__.py             <- Makes src a Python module 
 │   │   ├── large_feats.py          <- xx (update name) 
 │   │   ├── prepare_data.py         <- xx (update name) 
+│   │   ├── texture_analysis.py     <- xx 
 │   │   ├── slow_glcm.py            <- xx
 │   │   └── fast_glcm.py            <- xx 
 │   │    
