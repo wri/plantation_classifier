@@ -19,10 +19,13 @@ def get_console_handler() -> logging.StreamHandler:
 
 
 def get_logger(name: Text = __name__, log_level: Union[Text, int] = logging.DEBUG) -> logging.Logger:
-    """Get logger.
+    """
+    Retrieves or creates a logger instance for logging messages.
     Args:
         name {Text}: logger name
-        log_level {Text or int}: logging level; can be string name or integer value
+        log_level {Text or int}: logging level; can be string name (e.g., 'DEBUG', 'INFO') 
+        or integer value
+
     Returns:
         logging.Logger instance
     """
