@@ -5,6 +5,10 @@ import matplotlib.pyplot as plt
 import rasterio as rs
 import hickle as hkl
 import numpy as np
+import pickle
+
+from sklearn.model_selection import learning_curve
+from sklearn.metrics import roc_curve, roc_auc_score, precision_recall_curve, confusion_matrix, ConfusionMatrixDisplay
 
 # Base
 # └── basic visualizations
@@ -215,4 +219,176 @@ def heat_compare_hkl(arr_a, arr_b, title_a:str, title_b:str):
                 yticklabels=False,
                 cbar_kws = {'ticks' : [arr_b.min(), arr_b.max()]}).set_title(title_b);
 
+    return None
+
+
+
+def cm_roc_pr(model, y_test, pred, probs_pos):
+
+    ''' 
+    Visualize the performance of a classification model using a Confusion Matrix, 
+    ROC Curve, and Precision-Recall Curve.
+
+    Parameters:
+    - model: The trained classification model.
+    - y_test: True labels of the test set.
+    - pred: Predicted labels of the test set.
+    - probs_pos: Probability of the positive class for each sample in the test set.
+
+    Note:
+    This function requires the scikit-learn library for confusion matrix visualization
+    and matplotlib for creating ROC and Precision-Recall curves.
+    '''
+    
+    with open(f'../models/{model}.pkl', 'rb') as file:  
+        model = pickle.load(file)
+
+     # Calculate and plot CM
+    cm = confusion_matrix(y_test, pred, labels=model.classes_)
+    ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=model.classes_).plot();
+
+    # Calculate and plot ROC AUC 
+    fpr, tpr, thresholds = roc_curve(y_test, probs_pos)
+
+    plt.figure(figsize=(17,6)) 
+
+    plt.subplot(1,2,1)
+    plt.plot([0, 1], [0, 1], linestyle='--', label='No Skill')
+    plt.plot(fpr, tpr, marker='.', label=model, color='green')
+    plt.title('ROC Curve')
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.legend(loc='lower right');
+
+    
+    # Calculate and plot precision-recall curve and no skill
+    fpr, tpr, thresholds = precision_recall_curve(y_test, probs_pos)
+    no_skill = len(y_test[y_test == 1]) / len(y_test)
+
+    plt.subplot(1,2,2)
+    plt.plot([0,1], [no_skill, no_skill], linestyle='--', label='No Skill')
+    plt.plot(fpr, tpr, marker='.', label=model, color='purple')
+    plt.title('Precision Recall Curve')
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.legend(loc='lower left');
+    
+    return None
+
+
+
+def roc_curve_comp(X_test, y_test, model_names):
+
+    '''
+    Plot ROC Curves for multiple classification models.
+
+    Parameters:
+    - X_test: Testing features.
+    - y_test: True labels of the test set.
+    - model_names: List of models to be plotted and compared.
+
+    Note:
+    This function requires scikit-learn for calculating ROC curves.
+    '''
+    
+    plt.figure(figsize=(17,6)) 
+    
+    # ROC curve
+    for m in model_names:
+        
+        with open(f'../models/{m}.pkl', 'rb') as file:  
+             model = pickle.load(file)
+
+        plt.subplot(1,2,1)
+        
+        # calculate and plot ROC curve
+        probs = model.predict_proba(X_test)
+        probs_pos = probs[:, 1]
+        fpr, tpr, thresholds = roc_curve(y_test, probs_pos)
+        plt.plot(fpr, tpr, marker=',', label=m)
+    
+    # plot no skill and custom settings
+    plt.plot([0, 1], [0, 1], linestyle='--', label='No Skill')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.title('ROC Curve')
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.legend(loc='lower right');
+    
+    # AUC curve
+    for m in model_names:
+        
+        with open(f'../models/{m}.pkl', 'rb') as file:  
+             model = pickle.load(file)
+
+        plt.subplot(1,2,2)
+
+        # calculate and plot precision-recall curve
+        probs = model.predict_proba(X_test)
+        probs_pos = probs[:, 1]
+        fpr, tpr, thresholds = precision_recall_curve(y_test, probs_pos)
+        plt.plot(fpr, tpr, marker=',', label=m)
+    
+    # plot no skill and custom settings
+    no_skill = len(y_test[y_test == 1]) / len(y_test)
+    plt.plot([0,1], [no_skill, no_skill], linestyle='--', label='No Skill')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.4, 1.05])
+    plt.title('Precision Recall Curve')
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.legend(loc='lower left');
+    
+    return None
+
+
+def learning_curve_comp(model_names, X_train, y_train, x_max):
+
+    '''
+    Plot learning curves to compare the performance of machine learning models.
+
+    Parameters:
+    - model_names: List of model names to be compared.
+    - X_train: Training features.
+    - y_train: True labels of the training set.
+    - x_max: Maximum number of training samples to display on the x-axis.
+
+    Note: This function requires scikit-learn for learning curve computation
+    '''
+    colors = ['royalblue',
+              'maroon', 
+              'magenta', 
+              'gold', 
+              'limegreen'] 
+    
+    plt.figure(figsize = (13,6))
+    for i, x in zip(model_names, colors[:len(model_names)+1]):
+
+        filename = f'../models/{i}.pkl'
+
+        with open(filename, 'rb') as file:
+            model = pickle.load(file)
+
+        train_sizes, train_scores, test_scores, fit_times, _ = learning_curve(model, 
+                                                                              X_train, 
+                                                                              y_train, 
+                                                                              cv=5, 
+                                                                              return_times=True,
+                                                                              verbose=0) 
+
+        train_scores_mean = np.mean(train_scores, axis=1)
+        test_scores_mean = np.mean(test_scores, axis=1)
+
+        plt.grid()
+        plt.plot(train_sizes, train_scores_mean, "x-", color=x, label=f"{i[0:4]} Train")
+        plt.plot(train_sizes, test_scores_mean, ".-", color=x, label=f"{i[0:4]} Test")
+    
+    plt.xlim([1000, x_max])
+    plt.ylim([0.0, 1.2])
+    plt.title(f'Learning Curve Comparison for {len(model_names)} Models')
+    plt.xlabel('Training Samples')
+    plt.ylabel('Score')
+    plt.legend(title='Models', loc='lower right');        
+        
     return None
