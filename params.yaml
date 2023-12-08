@@ -7,7 +7,8 @@ data_load:
   #sso_profile_name: rognstad-dev
   bucket_name: restoration-monitoring
   folder_prefix: plantation-mapping/data/train/
-  local_prefix: data/train/
+  local_prefix: data/
+  ceo_survey: v08
   summary_filename: data/Training_Data.xlsx
   summary_sheetname: CEO_Surveys
   survey_id_column_name: CEO Survey
@@ -19,6 +20,8 @@ data_load:
     - dem
     - features-ckpt-2023-02-09
     - labels
+    - ard
+    - features-ard
   ceo_json: reports/ceo_list.json
   report_output_dir: /report/
 
