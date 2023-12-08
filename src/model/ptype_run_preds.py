@@ -168,9 +168,6 @@ def fit_eval_multiclassifier(X_train, X_test, y_train, y_test, model_name, v_tra
     '''
     Fits and evaluates a CatBoost multi-classification (3 class) model
     saving the model to a pkl file and saving scores in a csv. 
-
-    cat_v19: {'depth': 8, 'l2_leaf_reg': 11, 'iterations': 1100, 'learning_rate': 0.03}
-    cat_v20: {'depth': 10, 'l2_leaf_reg': 11, 'iterations': 1200, 'learning_rate': 0.03}
     '''
     depth=10
     l2_leaf=11

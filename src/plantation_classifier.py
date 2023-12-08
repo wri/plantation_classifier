@@ -31,7 +31,7 @@ import interpolation
 import cloud_removal
 import mosaic
 import validate_io as validate
-import slow_glcm as slow_txt
+import src.features.slow_glcm as slow_txt
 import fast_glcm as fast_txt
 
 with open("config.yaml", 'r') as stream:

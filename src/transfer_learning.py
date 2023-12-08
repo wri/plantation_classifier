@@ -28,7 +28,7 @@ from rasterio.plot import reshape_as_raster, reshape_as_image
 import sys
 sys.path.append('src/')
 
-import mosaic
+from utils import mosaic
 import validate_io as validate
 
 
@@ -575,7 +575,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     # specify tiles HERE
-    tiles_to_process = download_tile_ids(args.location, aak, ask)
+    tiles_to_process = download_tile_ids(args.location, aak, ask)[403:533]
     tile_count = len(tiles_to_process)
     counter = 0
 
