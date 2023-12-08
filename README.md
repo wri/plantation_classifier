@@ -23,7 +23,8 @@ Research method to spatially differentiate planted and natural trees using a tra
 │   │
 │   ├── load_data                   <- Scripts to download or generate data
 │   │   ├── __init__.py             <- Makes src a Python module 
-│   │   └── clean_ceo.py            <- xx
+│   │   ├── identify_tiles.py       <- xx 
+│   │   └── s3_download.py          <- xx
 │   │
 │   ├── features                    <- Scripts to turn raw data into features for modeling
 │   │   ├── __init__.py             <- Makes src a Python module 
@@ -36,8 +37,9 @@ Research method to spatially differentiate planted and natural trees using a tra
 │   ├── model                       <- Scripts to train models and then use trained models to make predictions
 │   │   ├── __init__.py             <- Makes src a Python module 
 │   │   ├── run_preds.py            <- xx (update name) 
-│   │   ├── train.py                <- xx  
+│   │   ├── train.py                <- xx (will replace run_preds)
 │   │   ├── feature_selection.py    <- xx 
+│   │   ├── tune.py                 <- xx 
 │   │   └── score_classifier.py     <- xx
 │   │
 │   └── utils                       <- Scripts for utility functions
@@ -48,7 +50,7 @@ Research method to spatially differentiate planted and natural trees using a tra
 │       ├── utils.py                <- xx  
 │       └── mosaic.py               <- xx 
 │
-├── notebooks               <- Jupyter notebooks.           
+├── notebooks                           <- Jupyter notebooks.           
 │   ├── exploratory_data_analysis.ipynb <- xx
 │   ├── modeling_approaches.ipynb       <- xx
 │   ├── mvp-pilots.ipynb                <- xx
