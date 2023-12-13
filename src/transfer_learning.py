@@ -241,12 +241,6 @@ def process_feats_slow(tile_idx: tuple, country: str, feature_select:list) -> np
     ttc[:, :, [low_feats]] = feats_rolled[:, :, [high_feats]]
     ttc[:, :, [high_feats]] = feats_rolled[:, :, [low_feats]]
 
-    # create no data and no tree flag (boolean mask)
-    # where TML probability is 255 or 0, pass along to preds
-    # note that the feats shape is (x, x, 65)
-    no_data_flag = ttc[...,0] == 255.
-    no_tree_flag = ttc[...,0] <= 0.1
-
     # combine ttc feats and txt into a single array
     output[..., :ttc.shape[-1]] = ttc
     output[..., ttc.shape[-1]:] = txt
@@ -255,9 +249,9 @@ def process_feats_slow(tile_idx: tuple, country: str, feature_select:list) -> np
     if len(feature_select) > 0:
         output = np.squeeze(output[:, :, [feature_select]])
 
-    del feats_raw, feats_rolled, high_feats, low_feats, ttc
+    del feats_raw, feats_rolled, high_feats, low_feats
 
-    return output, no_data_flag, no_tree_flag
+    return output, ttc
 
 def make_sample(tile_idx: tuple, country: str, feats: np.array):
     
@@ -386,8 +380,9 @@ def predict_regression(arr: np.array, pretrained_model: str, sample_dims: tuple)
 def remove_small_patches(arr, thresh):
     
     '''
-    Label features in an array using ndimage.label() and count 
-    pixels for each lavel. If the count doesn't meet provided
+    Finds patches of of size thresh in a given array.
+    Label these features using ndimage.label() and counts
+    pixels for each label. If the count doesn't meet provided
     threshold, make the label 0. Return an updated array
 
     (option to add a 3x3 structure which considers features connected even 
@@ -408,7 +403,28 @@ def remove_small_patches(arr, thresh):
     
     return arr
 
-def post_process_tile(arr: np.array, feature_select: list, no_data_flag: np.array, no_tree_flag: np.array):
+def cleanup_noisy_zeros1(preds, ttc_treecover):
+    is_fp_zero = np.logical_and(preds == 0, ttc_treecover > 10)
+    preds_flt = ndimage.median_filter(np.copy(preds), 5)
+    preds[is_fp_zero] = preds_flt[is_fp_zero]
+    return preds
+
+def cleanup_noisy_zeros2(preds, ttc_treecover):
+
+    # creates boolean mask in areas where preds is 0 but tree cover is above 10
+    is_fp_zero = np.logical_and(preds == 0, ttc_treecover > .10)
+
+    preds_flt = ndimage.median_filter(np.copy(preds), 5)
+
+    # replace all instances with filtered version of size 5
+    preds[is_fp_zero] = preds_flt[is_fp_zero]
+
+    # sets preds to 0 where tree cover is <10
+    preds = preds * (ttc_treecover > .10)
+
+    return preds
+
+def post_process_tile(arr: np.array, feature_select: list, ttc: np.array):
 
     '''
     Applies the no data and no tree flag if TTC tree cover predictions are used
@@ -417,8 +433,13 @@ def post_process_tile(arr: np.array, feature_select: list, no_data_flag: np.arra
     Performs a connected component analysis to remove positive predictions 
     where the connected pixel count is < thresh. 
     '''
+    # create no data and no tree flag (boolean mask)
+    # where TML probability is 255 or 0, pass along to preds
+    # note that the feats shape is (x, x, 65)
+    no_data_flag = ttc[...,0] == 255.
+    no_tree_flag = ttc[...,0] <= 0.1
 
-    # FLAG: requires feature selection
+    # FLAG: this step requires feature selection
     if 0 in feature_select:
         arr[no_data_flag] = 255.
         arr[no_tree_flag] = 0.
@@ -430,10 +451,13 @@ def post_process_tile(arr: np.array, feature_select: list, no_data_flag: np.arra
     # and keep every True as the original label
     arr[arr == 1] *= postprocess_mono[arr == 1]
     arr[arr == 2] *= postprocess_af[arr == 2]
+
+    # clean up pixels in the non-tree class
+    output = cleanup_noisy_zeros2(arr, ttc[...,0])
   
     del postprocess_af, postprocess_mono
 
-    return arr
+    return output
 
 def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, model_type: str, suffix = "preds") -> str:
     '''
@@ -535,7 +559,7 @@ def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, feat
         bbx = make_bbox(location[1], tile_idx)
         validate.output_dtype_and_dimensions(ard[..., 11:13], ard[..., 0:10], ard[..., 10])
         validate.feats_range(tile_idx, location[0])
-        feats, no_data_flag, no_tree_flag = process_feats_slow(tile_idx, location[0], feature_select)
+        feats, ttc = process_feats_slow(tile_idx, location[0], feature_select)
         sample, sample_dims = make_sample(tile_idx, location[0], feats)
         sample_ss = reshape(sample, verbose)
         #sample_ss = reshape_and_scale('v20', sample, verbose)
@@ -543,7 +567,7 @@ def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, feat
         validate.model_inputs(sample_ss)
         if model_type == 'classifier':
             preds = predict_classification(sample_ss, model, sample_dims)
-            preds_final = post_process_tile(preds, feature_select, no_data_flag, no_tree_flag)
+            preds_final = post_process_tile(preds, feature_select, ttc)
             validate.model_outputs(preds, model_type)
         else:
             preds_final = predict_regression(sample_ss, model, sample_dims)
@@ -551,7 +575,7 @@ def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, feat
         write_tif(preds_final, bbx, tile_idx, location[0], model_type, 'preds')
         #remove_folder(tile_idx, local_dir)
 
-        del ard, feats, no_data_flag, no_tree_flag, sample, sample_ss, preds_final
+        del ard, feats, sample, sample_ss, preds_final
     
     else:
         print(f'Raw data for {tile_idx} could not be downloaded or does not exist on s3.')
@@ -575,7 +599,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     # specify tiles HERE
-    tiles_to_process = download_tile_ids(args.location, aak, ask)[403:533]
+    tiles_to_process = download_tile_ids(args.location, aak, ask)[453:533]
     tile_count = len(tiles_to_process)
     counter = 0
 
