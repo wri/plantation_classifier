@@ -6,40 +6,33 @@ from typing import Text
 import yaml
 import json
 from utils.logs import get_logger
-from load_data import identify_tiles
 from load_data import s3_download as download
 
-def identify_and_download(config_path: Text) -> None:
+def download(param_path: Text) -> None:
     '''
-    These steps would access tiles to process from
-    the CEO surveys and the code and cadence from 
-    ptype_prepare_data.py
+    These steps download data from s3 according to
+    the specifed folders in the param file
+
+    The tiles that will be processed are also identified
+    TODO: update identify tiles to work for deply pipeline
     '''
-    with open(config_path) as conf_file:
-        config = yaml.safe_load(conf_file)
+    with open(param_path) as file:
+        params = yaml.safe_load(file)
+
+    # option to identify tiles and download by tile id?
     
-    # could be an if statement here for loading train versus deployment tiles
-    # identify CEO batches that will be used
-    tiles = identify_tiles(config['data_load']['ceo_survey'])
-    #logger.debug(ceo_batch_list)
-
-    # what is the purpose of this list?
-    with open(config["data_load"]["ceo_json"], "w") as fp:
-        json.dump(obj={"CEO_survey_list": ceo_batch_list}, fp=fp)
-    logger.info("CEO survey targets identified")
-
-    # download data from s3
-    logger = get_logger("DATA_LOAD", log_level=config["base"]["log_level"])
-    if config["data_load"]["download_data"]:
-        download.data_download(config_path, param_path) # TODO: clarify diff between param and configs
+    # download training data from s3
+    logger = get_logger("DATA_LOAD", log_level=params["base"]["log_level"])
+    if params["data_load"]["download_data"]:
+        download.data_download(param_path) 
     else:
         logger.info("No new data downloaded.")
 
 
 if __name__ == "__main__":
     args_parser = argparse.ArgumentParser()
-    args_parser.add_argument("--config", dest="config", required=True)
+    args_parser.add_argument("--params", dest="params", required=True)
     args = args_parser.parse_args()
-    identify_and_download(config_path=args.config)
+    download(config_path=args.params)
 
 
