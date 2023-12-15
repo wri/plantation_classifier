@@ -17,7 +17,7 @@ import sys
 from glob import glob
 sys.path.append('src/')
 
-import validate_io as validate
+import utils.validate_io as validate
 
 with open("config.yaml", 'r') as stream:
     document = (yaml.safe_load(stream))

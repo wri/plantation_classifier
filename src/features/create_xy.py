@@ -7,9 +7,9 @@ import os
 import utils.preprocessing as preprocess
 import utils.validate_io as validate
 import slow_glcm as slow_txt
-from load_data.identify_tiles import gather_plot_ids
 from tqdm import tqdm
 from skimage.util import img_as_ubyte
+from sklearn.model_selection import train_test_split
 
 def load_slope(idx, local_dir):
     """
@@ -281,6 +281,43 @@ def load_label(idx, ttc, classes, local_dir):
     
     return labels
 
+def gather_plot_ids(v_train_data):
+    '''
+    Creates a list of plot ids to process from collect earth surveys 
+    with multi-class labels (0, 1, 2, 255). Drops all plots with 
+    "unknown" labels and plots w/o s2 imagery. Returns list of plot_ids.
+    '''
+
+    # use CEO csv to gather plot id numbers
+    plot_ids = []
+    no_labels = []
+
+    for i in v_train_data:
+        df = pd.read_csv(f'../data/ceo-plantations-train-{i}.csv')
+
+        # assert unknown labels are always a full 14x14 (196 points) of unknowns
+        unknowns = df[df.PLANTATION == 255]
+        no_labels.extend(sorted(list(set(unknowns.PLOT_FNAME))))
+        for plot in set(list(unknowns.PLOT_ID)):
+            assert len(unknowns[unknowns.PLOT_ID == plot]) == 196,\
+            f'WARNING: {plot} has {len(unknowns[unknowns.PLOT_ID == plot])}/196 points labeled unknown.'
+
+        # drop unknowns and add to full list
+        labeled = df.drop(unknowns.index)
+        plot_ids += labeled.PLOT_FNAME.drop_duplicates().tolist()
+
+    # add leading 0 to plot_ids that do not have 5 digits
+    plot_ids = [str(item).zfill(5) if len(str(item)) < 5 else str(item) for item in plot_ids]
+    final_ard = [plot for plot in plot_ids if os.path.exists(f'../data/train-ard/{plot}.npy')]
+    no_ard = [plot for plot in plot_ids if not os.path.exists(f'../data/train-ard/{plot}.npy')]
+    final_raw = [plot for plot in no_ard if os.path.exists(f'../data/train-s2/{plot}.hkl')]
+
+    print(f'{len(no_labels)} plots labeled "unknown" were dropped.')
+    print(f'{len(no_ard)} plots did not have ARD.')
+    print(f'Training data batch includes: {len(final_ard)} plots.')
+
+    return final_ard
+
 def make_sample(sample_shape, s2, slope, s1, txt, ttc, feature_select):
     
     ''' 
@@ -311,7 +348,7 @@ def make_sample(sample_shape, s2, slope, s1, txt, ttc, feature_select):
 
     return sample
 
-def create_xy(v_train_data, classes, params_path, logger, feature_select=[]):
+def build_training_sample(v_train_data, classes, params_path, logger, feature_select=[]):
     '''
     Gathers training data plots from collect earth surveys (v1, v2, v3, etc)
     and loads data to create a sample for each plot. Removes ids where there is no
@@ -373,3 +410,83 @@ def create_xy(v_train_data, classes, params_path, logger, feature_select=[]):
     logger.info(f"Class count {dict(zip(labels, counts))}")
 
     return x_all, y_all
+
+def reshape_arr(arr):
+    '''
+    Reshapes a 4D array (X) to 2D and a 3D array (y) to 1D for input into a 
+    machine learning model.
+
+    Parameters:
+    - arr (array-like): Input array to be reshaped. For X, it is assumed to have 
+    shape (plots, 14, 14, n_feats), and for y, it is assumed to have shape (plots, 14, 14).
+
+    Returns:
+    - reshaped (array-like): Reshaped array with dimensions suitable for machine learning model input.
+    '''
+    if len(arr.shape) == 4:
+        reshaped = np.reshape(arr, (np.prod(arr.shape[:-1]), arr.shape[-1]))
+    else:
+        reshaped = np.reshape(arr, (np.prod(arr.shape[:])))
+    return reshaped
+
+
+def reshape_and_scale(X, y, scale, v_train_data, params_path, logger):
+    '''
+    Reshapes x and y for input into a machine learning model. 
+    Optionally scales the training data
+    Scaling is performed manually and mins/maxs are saved
+    for use in deployment.
+
+    '''
+    with open(params_path) as file:
+        params = yaml.safe_load(file)
+
+    X_train, X_test, y_train, y_test = train_test_split(
+    X,
+    y,
+    test_size=((params["data_condition"]["test_split"] / 100)),
+    random_state=params["base"]["random_state"],
+    )
+    logger.info(f"X_train: {X_train.shape}, X_test: {X_test.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}")
+    start_min, start_max = X_train.min(), X_train.max()
+    if scale:
+        min_all = []
+        max_all = []
+        for band in range(0, X_train.shape[-1]):
+            mins = np.percentile(X_train[..., band], 1)
+            maxs = np.percentile(X_train[..., band], 99)
+            if maxs > mins:
+                # clip values in each band based on min/max of training dataset
+                X_train[..., band] = np.clip(X_train[..., band], mins, maxs)
+                X_test[..., band] = np.clip(X_test[..., band], mins, maxs)
+
+                #calculate standardized data
+                midrange = (maxs + mins) / 2
+                rng = maxs - mins
+                X_train_std = (X_train[..., band] - midrange) / (rng / 2)
+                X_test_std = (X_test[..., band] - midrange) / (rng / 2)
+
+                # update each band in X_train and X_test to hold standardized data
+                X_train[..., band] = X_train_std
+                X_test[..., band] = X_test_std
+                end_min, end_max = X_train.min(), X_train.max()
+                min_all.append(mins)
+                max_all.append(maxs) 
+            else:
+                pass
+        np.save(f'../data/mins_{v_train_data}', min_all)
+        np.save(f'../data/maxs_{v_train_data}', max_all)
+
+    X_train_ss = reshape_arr(X_train)
+    X_test_ss = reshape_arr(X_test)
+    y_train = reshape_arr(y_train)
+    y_test = reshape_arr(y_test)
+
+    logger.info(
+        f"Reshaped X_train: {X_train_ss.shape} X_test: {X_test_ss.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}"
+    )
+    logger.info(
+        f"The data was scaled to: Min {start_min} -> {end_min}, Max {start_max} -> {end_max}"
+    )
+
+    return X_train_ss, X_test_ss, y_train, y_test
