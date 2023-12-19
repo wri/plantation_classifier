@@ -6,7 +6,7 @@ import numpy as np
 import os
 import utils.preprocessing as preprocess
 import utils.validate_io as validate
-import slow_glcm as slow_txt
+import features.slow_glcm as slow_txt
 from tqdm import tqdm
 from skimage.util import img_as_ubyte
 from sklearn.model_selection import train_test_split
@@ -376,13 +376,24 @@ def build_training_sample(v_train_data, classes, params_path, logger, feature_se
     n_samples = len(plot_ids)
     y_all = np.zeros(shape=(n_samples, sample_shape[0], sample_shape[1]))
     x_all = np.zeros(shape=(n_samples, sample_shape[0], sample_shape[1], n_feats))
-
+    med_indices = params['data_condition']['ard_subsample']
+    
     for num, plot in enumerate(tqdm(plot_ids)):
-        ard = load_ard(plot, train_data_dir, subsample=4)
-        ttc = load_ttc(plot, train_data_dir, use_ard=True)
-        txt = load_txt(plot, train_data_dir, use_ard=True) 
-        validate.train_output_range_dtype(ard[...,0:10], ard[...,10:11], ard[...,11:13], ttc, feature_select) 
-        X = make_sample(sample_shape, ard[...,0:10], ard[...,10:11], ard[...,11:13], txt, ttc, feature_select)
+        ard = load_ard(plot, med_indices, train_data_dir)
+        ttc = load_ttc(plot, True, train_data_dir)
+        txt = load_txt(plot, True, train_data_dir) 
+        validate.train_output_range_dtype(ard[...,0:10], 
+                                          ard[...,10:11], 
+                                          ard[...,11:13], 
+                                          ttc, 
+                                          feature_select) 
+        X = make_sample(sample_shape, 
+                        ard[...,0:10], 
+                        ard[...,10:11], 
+                        ard[...,11:13], 
+                        txt, 
+                        ttc, 
+                        feature_select)
         y = load_label(plot, ttc, classes, train_data_dir)
         x_all[num] = X
         y_all[num] = y
@@ -394,8 +405,8 @@ def build_training_sample(v_train_data, classes, params_path, logger, feature_se
     #     slope = load_slope(plot, train_data_dir)
     #     s1 = load_s1(plot, train_data_dir)
     #     s2 = load_s2(plot, train_data_dir)
-    #     ttc = load_ttc(plot, train_data_dir, use_ard=False)
-    #     txt = load_txt(plot, train_data_dir, use_ard=False)
+    #     ttc = load_ttc(plot, False, train_data_dir)
+    #     txt = load_txt(plot, False, train_data_dir)
     #     validate.train_output_range_dtype(slope, s1, s2, ttc, feature_select)
     #     X = make_sample(sample_shape, s2, slope, s1, txt, ttc, feature_select)
     #     y = load_label(plot, ttc, classes, train_data_dir)
@@ -445,7 +456,7 @@ def reshape_and_scale(X, y, scale, v_train_data, params_path, logger):
     X,
     y,
     test_size=((params["data_condition"]["test_split"] / 100)),
-    random_state=params["base"]["random_state"],
+                random_state=params["base"]["random_state"],
     )
     logger.info(f"X_train: {X_train.shape}, X_test: {X_test.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}")
     start_min, start_max = X_train.min(), X_train.max()
@@ -482,11 +493,11 @@ def reshape_and_scale(X, y, scale, v_train_data, params_path, logger):
     y_train = reshape_arr(y_train)
     y_test = reshape_arr(y_test)
 
-    logger.info(
-        f"Reshaped X_train: {X_train_ss.shape} X_test: {X_test_ss.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}"
-    )
-    logger.info(
-        f"The data was scaled to: Min {start_min} -> {end_min}, Max {start_max} -> {end_max}"
-    )
+    # logger.info(
+    #     f"Reshaped X_train: {X_train_ss.shape} X_test: {X_test_ss.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}"
+    # )
+    # logger.info(
+    #     f"The data was scaled to: Min {start_min} -> {end_min}, Max {start_max} -> {end_max}"
+    # )
 
     return X_train_ss, X_test_ss, y_train, y_test
