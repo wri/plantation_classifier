@@ -16,16 +16,17 @@ def featureize(param_path: Text) -> None:
         params = yaml.safe_load(file)
 
     logger = get_logger("FEATURIZE", log_level=params["base"]["log_level"])
-    ceo_batch_list = params["data_load"]['ceo_survey'] # need to figure out how to write list
+    ceo_batch_list = params["data_load"]['ceo_survey'] 
 
     X, y = create_xy.build_training_sample(
         ceo_batch_list,
-        feature_select=[],
-        classes=4,
+        feature_select=[], 
+        classes=params['data_condition']['classes'], 
         params_path=param_path,
-        logger=logger,
-    ) 
-    logger.info("X,y loaded")
+        logger=logger
+        ) 
+
+    logger.info("X and y loaded")
 
     # option to subset the training data 
     # by randomly selecting n random plots by index 
@@ -41,13 +42,14 @@ def featureize(param_path: Text) -> None:
         logger.debug(f"X data subsetted with final dimensions: {X.shape}")
         logger.debug(f"y data subsetted with final dimensions: {y.shape}")
     
-    scale_data = params["data_condition"]["scale_features"]
+
     X_train, X_test, y_train, y_test = create_xy.reshape_and_scale(X, 
                                                                   y, 
-                                                                  scale_data,
+                                                                  params["data_condition"]["scale_features"],
+                                                                  params["train"]["model_v"],
                                                                   param_path,  
                                                                   logger)
-    
+    # TODO: figure out how to add model v to saved pkl file
     logger.info(f"Train and test set generated")
     with open(params["data_condition"]["X_train"], "wb") as fp:
         pickle.dump(X_train, fp)
