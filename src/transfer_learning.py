@@ -10,6 +10,7 @@ import os
 import boto3
 import botocore
 import rasterio as rs
+from rasterio.plot import reshape_as_raster, reshape_as_image
 import yaml
 from osgeo import gdal
 from skimage.transform import resize
@@ -22,14 +23,8 @@ from skimage.util import img_as_ubyte
 import gc
 import copy
 import subprocess
-from rasterio.plot import reshape_as_raster, reshape_as_image
-
-## import other scripts
-import sys
-sys.path.append('src/')
-
+import utils.validate_io as validate
 from utils import mosaic
-import validate_io as validate
 
 
 with open("config.yaml", 'r') as stream:
@@ -549,7 +544,7 @@ def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, feat
     will need to update
     '''
     print(f'Processing tile: {tile_idx}')
-    successful = download_ard(tile_idx, location[0], aak, ask, overwrite=False)
+    successful = download_ard(tile_idx, location[0], aak, ask, overwrite=True)
 
     if successful:
         x = tile_idx[0]
@@ -599,7 +594,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     # specify tiles HERE
-    tiles_to_process = download_tile_ids(args.location, aak, ask)[453:533]
+    tiles_to_process = download_tile_ids(args.location, aak, ask) 
     tile_count = len(tiles_to_process)
     counter = 0
 

@@ -58,17 +58,16 @@ def get_supported_metrics():
         "roc_auc": roc_auc_score,
     }
 
-def fit_estimator(
-    X_train,
-    X_test,
-    y_train,
-    y_test,
-    estimator_name,
-    metric_name,
-    model_params_dict,
-    fit_params_dict,
-    v_train_data,
-    use_class_weights=False):
+def fit_estimator(X_train,
+                X_test,
+                y_train,
+                y_test,
+                estimator_name,
+                metric_name,
+                model_params_dict,
+                fit_params_dict,
+                v_train_data,
+                ):
 
     '''
     Train a machine learning model, evaluate its performance, and return the results. Raises UnsupportedClassifier
@@ -85,7 +84,6 @@ def fit_estimator(
     - metric_name (str): Name of the evaluation metric to be used.
     - model_params_dict (dict): Dictionary of hyperparameters for the estimator.
     - fit_params_dict (dict): Additional parameters for the model fitting process.
-    - use_class_weights (bool, optional): Whether to use class weights during training (default is False).
 
     Returns:
     - metric (float): Evaluation metric value on the testing set.
