@@ -5,16 +5,17 @@ import joblib
 import pickle
 import json
 from utils.logs import get_logger
-import train
-import models.feature_selection as fsl
+import model.train as train
+import model.feature_selection as fsl
+import model.tune as tune
 
 
-
-def train_model(params_path: Text) -> None:
+def train_model(param_path: Text) -> None:
 
     # load training parameters
     with open(param_path) as file:
         params = yaml.safe_load(file)
+
     logger = get_logger("TRAIN", log_level=params["base"]["log_level"])
     with open(params["data_condition"]["X_train"], "rb") as fp:
         X_train = pickle.load(fp)
@@ -29,13 +30,14 @@ def train_model(params_path: Text) -> None:
         y_test = pickle.load(fp)
     logger.debug(f"y_test shape: {y_test.shape}")
     logger.info("Training and testing data loaded.")
+   
     max_features = params["train"]["max_features"]
     logger.info(f"Max features: {max_features}")
+    estimator_name = params["train"]["estimator_name"]
 
-    # if using feature selection, import fs script from models
+    # if using select features, perform backward selection
+    # this will also train a model with the selected features
     if params["train"]["select_features"]:
-        logger.info("Starting feature selection")
-        estimator_name = params["train"]["estimator_name"]
         select_X_train, select_X_test = fsl.backward_selection(
             X_train,
             X_test,
@@ -55,25 +57,37 @@ def train_model(params_path: Text) -> None:
         X_train = select_X_train
         X_test = select_X_test
     else:
-        with open(params["train"]["select_X_train"], "wb") as fp:
-            pickle.dump(X_train, fp)
-        with open(params["train"]["select_X_test"], "wb") as fp:
-            pickle.dump(X_test, fp)
         logger.info("Using all features")
-    with open(params["train"]["selected_feature_indicies"], "w") as fp:
-        json.dump(
-            obj={
-                "feature_column_indicies": list(X_test.columns),
-                "n_features": len(list(X_test.columns)),
-            },
-            fp=fp,
-        )
-    logger.info(
-        f'Writing feature indicies to {params["train"]["selected_feature_indicies"]}'
-    )
+    
+    # this would overwrite the saved selected file with the 
+    # regular X-train if fs is not used?
+    # else:
+    #     with open(params["train"]["select_X_train"], "wb") as fp:
+    #         pickle.dump(X_train, fp)
+    #     with open(params["train"]["select_X_test"], "wb") as fp:
+    #         pickle.dump(X_test, fp)
+    #     logger.info("Using all features")
+
+    # logger.info(f'Writing feature indicies to {params["train"]["selected_feature_indicies"]}')
+    # with open(params["train"]["selected_feature_indicies"], "w") as fp:
+    #     json.dump(
+    #         obj={
+    #             "feature_column_indicies": list(X_test.columns),
+    #             "n_features": len(list(X_test.columns)),
+    #         },
+    #         fp=fp,
+    #     )
+        
     if params["train"]["tune_hyperparams"]:
-        logger.info("Starting hyperparameter tuning")
-    #       TODO: implement hyperparameter tuning
+        logger.info("Starting random search...")
+        tuning_params = tune.random_search_cat(X_train, 
+                                           y_train, 
+                                           param_path)
+        logger.info(f"Best hyperparameters: {tuning_params['params']}")
+        with open(params["tune"]["best_params"], "w") as fp:
+            json.dump(obj=tuning_params,
+                      fp=fp,
+        )
 
     else:
         logger.info("Using default hyperparameters")
@@ -88,14 +102,16 @@ def train_model(params_path: Text) -> None:
         params["train"]["tuning_metric"],
         params["train"]["estimators"][estimator_name]["param_grid"],
         params["train"]["fit_params"],
+        params["train"]["model_v"]
     )
     logger.info("Saving model")
-    model_path = params["train"]["model_path"]
-    joblib.dump(model, model_path)
+    model_path = (params["train"]["model_dir"] / params['train']['model_v'])
+    print(model_path)
+    joblib.dump(model, f'{model_path}.joblib')
 
 
 if __name__ == "__main__":
     args_parser = argparse.ArgumentParser()
     args_parser.add_argument("--params", dest="params", required=True)
     args = args_parser.parse_args()
-    train_model(params_path=args.params)
+    train_model(param_path=args.params)
