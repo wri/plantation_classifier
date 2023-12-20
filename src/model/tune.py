@@ -5,9 +5,9 @@ import pandas as pd
 import pickle
 from catboost import CatBoostClassifier
 from datetime import datetime
+import yaml
 
-
-def random_search_cat(X_train, y_train, model):
+def random_search_cat(X_train, y_train, param_path):
     '''
     Performs a randomized search of hyperparameters using Catboost's built in
     random search method and plots the results, then
@@ -18,50 +18,43 @@ def random_search_cat(X_train, y_train, model):
     depth: Determines the max depth of the individual decision trees (equiv to max_depth (must be <= 16))
     l2_leaf_reg: Regularization term that prevents overfitting by penalizing large parameter values.
     loss_function: Specifies the loss function to be optimized during training. 
-    For regression tasks, you might use RMSE, while for classification, Logloss is common.
-    '''
-    # Get the count of features used
-    feat_count = X_train.shape[1] - 13
-    
-    iterations = [int(x) for x in np.linspace(500, 1200, 10)]            
-    depth = [int(x) for x in np.linspace(4, 10, 4)]                  
-    l2_leaf_reg = [int(x) for x in np.linspace(2, 30, 4)]
-    learning_rate = [.02, .03, .04]                                      
 
-    param_dist = {'iterations': iterations,
-                  'depth': depth,
-                  'l2_leaf_reg': l2_leaf_reg,
-                  'learning_rate': learning_rate}
+    TODO: currently tailored to catboost models, not designed for other classifiers
+    '''
+    with open(param_path) as file:
+        params = yaml.safe_load(file)
+    
+    estimator_name = params["train"]["estimator_name"]
+    param_dist = params["tune"]["estimators"][estimator_name]["param_grid"]
+    iter_min = param_dist['iter_min']
+    iter_max = param_dist['iter_max']
+    iter_step = param_dist['iter_step']
+    depth_min = param_dist['depth_min']
+    depth_max = param_dist['depth_max']
+    depth_step = param_dist['depth_step']
+    leaf_min = param_dist['leaf_min']
+    leaf_max = param_dist['leaf_max']
+    leaf_step = param_dist['leaf_step']                               
+
+    rs_params = {'iterations': [int(x) for x in np.linspace(iter_min, iter_max, iter_step)],
+                  'depth': [int(x) for x in np.linspace(depth_min, depth_max, depth_step)],
+                  'l2_leaf_reg': [int(x) for x in np.linspace(leaf_min, leaf_max, leaf_step)],
+                  'learning_rate': param_dist['learn_rate']}
 
     # instantiate the classifier and perform Catboost built in method for random search
-    cat = CatBoostClassifier(random_state=22, 
-                             loss_function='MultiClass', 
-                             verbose=False)
+    cat = CatBoostClassifier(random_state=params['base']['random_state'], 
+                             loss_function=params['tune']['estimators'][estimator_name]['loss_function'], 
+                             verbose=params['tune']['verbose'])
     
-    randomized_search_result = cat.randomized_search(param_dist,
-                                                     X=X_train,
-                                                     y=y_train,
-                                                     n_iter=30,
-                                                     cv=3,
-                                                     plot=True,
-                                                     verbose=False)
+    randomized_search_result = cat.randomized_search(rs_params,
+                                                     X_train,
+                                                     y_train,
+                                                     params['tune']['n_iter'],
+                                                     params['tune']['cv'],
+                                                     params['tune']['plot'],
+                                                     params['tune']['verbose'],
+                                                     )
         
-    rs_results = {'model': {model},
-                  'class': 'binary',
-                  'tml_feats': feat_count,
-                  'iterations': iterations,
-                  'depth': depth,
-                  'l2_leaf_reg': l2_leaf_reg,
-                  'learning_rate': learning_rate,
-                  'results': randomized_search_result,
-                  'date': datetime.today().strftime('%Y-%m-%d')}
 
-    df = pd.DataFrame([rs_results])
-    print(df)
-    
-    # write scores to new line of csv
-    with open('../models/random_search.csv', 'a', newline='') as f:
-        f.write('\n')
-        df.to_csv('../models/random_search.csv', mode='a', index=False, header=False)
-    
+    # write scores somewhere?
     return randomized_search_result

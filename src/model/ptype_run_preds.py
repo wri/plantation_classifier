@@ -12,7 +12,7 @@ from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import cross_val_score
 from sklearn.metrics import roc_auc_score, f1_score, precision_score, recall_score
-from lightgbm import LGBMClassifier
+# from lightgbm import LGBMClassifier
 from xgboost import XGBClassifier
 from sklearn.svm import SVC
 import h5py
@@ -22,7 +22,7 @@ from sklearn.utils.class_weight import compute_class_weight
 import sys
 from datetime import datetime
 import rasterio as rs
-import validate_io as validate
+import utils.validate_io as validate
 
 
 
@@ -168,7 +168,7 @@ def fit_eval_multiclassifier(X_train, X_test, y_train, y_test, model_name, v_tra
     '''
     Fits and evaluates a CatBoost multi-classification (3 class) model
     saving the model to a pkl file and saving scores in a csv. 
-    '''
+    # '''
     depth=10
     l2_leaf=11
     itera=1200

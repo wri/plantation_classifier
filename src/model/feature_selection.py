@@ -3,7 +3,17 @@
 import pickle
 import pandas as pd
 from catboost import CatBoostClassifier
-
+from sklearn.metrics import (
+    accuracy_score,
+    balanced_accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+)
+import json
+import shap
+import model.train as trn
+from utils.logs import get_logger
 
 def feature_selection(model, feat_count):
     
@@ -29,3 +39,105 @@ def feature_selection(model, feat_count):
     top_feats_indices = [i - 13 for i in sorted(list(top_feats['Feature Id']))]
 
     return df, top_feats_indices
+
+
+def least_imp_feature(model, X_test, logger):
+    '''
+    Get the least important feature based on SHAP values.
+
+    This function uses SHAP (SHapley Additive exPlanations) 
+    values to explain the output of the model and identify the 
+    least important feature. The SHAP values are calculated for each feature 
+    in the test set, and the least important feature is determined 
+    based on the mean absolute SHAP values.
+
+    Returns:
+    - str: The least important feature based on SHAP values.
+    '''
+    # create shap explainer
+    explainer = shap.Explainer(model)
+    logger.debug("SHAP explainer calculated")
+    shap_values = explainer(X_test)
+    logger.debug("SHAP values calculated")
+    logger.debug(shap_values.shape)
+     # Calculate the mean absolute SHAP values across instances and features
+    feature_importance = shap_values.abs.mean(0).mean(1).values
+    logger.debug(X_test.columns)
+    importance_df = pd.DataFrame(
+        {"features": X_test.columns, "importance": feature_importance}
+    )
+    importance_df.sort_values(by="importance", ascending=False, inplace=True)
+
+    return importance_df["features"].iloc[-1]
+
+
+def backward_selection(X_train,
+                        X_test,
+                        y_train,
+                        y_test,
+                        estimator_name,
+                        metric_name,
+                        model_params_dict,
+                        fit_params_dict,
+                        logger,
+                        max_features=None):
+    """
+    This function uses the SHAP importance from a model
+    to incrementally remove features from the training set until the metric 
+    no longer improves. This function returns the dataframe with the features 
+    that give the best metric. Return at most max_features.
+    """
+    # get baseline metric
+    total_features = X_train.shape[1]
+    select_X_train = pd.DataFrame(X_train.copy())
+    select_X_test = pd.DataFrame(X_test.copy())
+    metric, model, X_test = trn.train(
+        X_train,
+        X_test,
+        y_train,
+        y_test,
+        estimator_name,
+        metric_name,
+        model_params_dict,
+        fit_params_dict,
+    )
+    logger.debug(f"X_test shape: {X_test.shape}")
+    logger.info(f"{metric} with {select_X_train.shape[1]} features")
+    last_metric = metric
+
+    # Drop least important feature and recalculate model peformance
+    if max_features is None:
+        max_features = total_features - 1
+
+    for num_features in range(total_features - 1, 1, -1):
+        # Trim features
+        logger.debug(f"select X test shape: {select_X_test.shape}")
+        dropped_feature = least_imp_feature(model, select_X_test, logger)
+        logger.info(f"Removing feature {dropped_feature}")
+        tmp_X_train = select_X_train.drop(columns=[dropped_feature])
+        tmp_X_test = select_X_test.drop(columns=[dropped_feature])
+
+        # Rerun modeling
+        metric, model, X_test = trn.fit_estimator(
+            tmp_X_train,
+            tmp_X_test,
+            y_train,
+            y_test,
+            estimator_name,
+            metric_name,
+            model_params_dict,
+            fit_params_dict,
+        )
+        logger.info(f"{metric} with {tmp_X_train.shape[1]} features")
+        if (num_features < max_features) and (metric < last_metric):
+            # metric decreased, return last dataframe
+            return select_X_train, select_X_test
+        else:
+            # metric improved, continue dropping features
+            last_metric = metric
+            select_X_train = tmp_X_train
+            select_X_test = tmp_X_test
+
+        # could save best fit model here or return below
+
+    return select_X_train, select_X_test
