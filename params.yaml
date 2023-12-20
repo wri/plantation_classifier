@@ -1,22 +1,29 @@
 base:
   log_level: DEBUG
   random_state: 121
+  config: config.yaml
 
 data_load:
   download_data: false
   #sso_profile_name: rognstad-dev
   bucket_name: restoration-monitoring
   folder_prefix: plantation-mapping/data/train/
-  local_prefix: data/
-  ceo_survey: v08
-  summary_filename: data/Training_Data.xlsx
+  local_prefix: ../data/
+  ceo_survey: 
+    - v08 
+    - v14 
+    - v15 
+    - v18 
+    - v19 
+    - v20
+  summary_filename: ../data/Training_Data.xlsx
   summary_sheetname: CEO_Surveys
   survey_id_column_name: CEO Survey
   ceo_survey_directory: data/ceo-surveys
   data_prefix_list:
     - slope
     - s1
-    - s2
+    - s2 
     - dem
     - features-ckpt-2023-02-09
     - labels
@@ -27,7 +34,6 @@ data_load:
 
 data_condition:
   train_filter_features:
-    #    Country: ghana
     Use?: "yes"
     Classes: multi
   label_cats:
@@ -35,24 +41,27 @@ data_condition:
     Agroforestry: 2
     Not plantation: 0
     Unknown: 255
+  classes: 4
+  ard_subsample: 4
   scale_features: true
   subset_fraction: 0.30 #used for pipeline testing, set to 1.0 for all data
   test_split: 20
   val_split: 25
-  X_train: data/train/X_train.pkl
-  y_train: data/train/y_train.pkl
-  X_test: data/train/X_test.pkl
-  y_test: data/train/y_test.pkl
+  X_train: ../data/train/X_train.pkl
+  y_train: ../data/train/y_train.pkl
+  X_test: ../data/train/X_test.pkl
+  y_test: ../data/train/y_test.pkl
 
 train:
-  select_features: true
-  select_X_train: data/train/X_train_selected.pkl
-  select_X_test: data/train/X_test_selected.pkl
+  model_v: 'v23'
+  select_features: True # true until storage of x train select is figured out
+  select_X_train: ../data/train/X_train_selected.pkl
+  select_X_test: ../data/train/X_test_selected.pkl
   selected_feature_indicies: reports/selected_feature_indicies.json
-  tune_hyperparams: false
+  tune_hyperparams: False
   cv: 3
   estimator_name: cat
-  max_features: 90
+  max_features: 81
   tuning_metric: balanced_accuracy
   testing_metrics: accuracy balanced_accuracy precision recall f1 roc_auc
   fit_params:
@@ -77,6 +86,7 @@ train:
       param_grid:
     cat:
       importance_metric: shap
+      use_class_weights: true
       param_grid:
         iterations: 500
         max_depth: 5
@@ -88,7 +98,32 @@ train:
       importance_metric: shap
       use_class_weights: true
       param_grid:
-  model_path: models/model.joblib
+  model_path: ../models/model.joblib
+
+tune:
+  estimator_name: cat
+  n_iter: 30
+  cv: 3
+  plot: False
+  verbose: False
+  estimators:
+    cat:
+      loss_function: MultiClass
+      param_grid:
+        iter_min: 500
+        iter_max: 1200
+        iter_step: 10
+        depth_min: 4
+        depth_max: 10
+        depth_step: 4
+        12_leaf_min: 2
+        12_leaf_max: 30
+        12_leaf_step: 4
+        learn_rate:
+          - .02
+          - .03
+          - .04
+  best_params: ../models/best_params.json
 
 evaluate:
   reports_dir: reports
