@@ -16,7 +16,7 @@ def load_slope(idx, local_dir):
     Slope is stored as a 32 x 32 float32 array with border information.
     Needs to be converted to 1 x 14 x 14 array to match the labels w/ new axis.
     """
-    directory = local_dir + "train-slope/"
+    directory = f'../{local_dir}train-slope/'
 
     # Remove axes of length one with .squeeze (32 x 32 x 1)
     x = np.load(directory + str(idx) + '.npy').squeeze()
@@ -40,7 +40,7 @@ def load_s1(idx, local_dir):
     and remove border information to match labels. 
     Dtype needs to be converted to float32.
     """
-    directory = local_dir + "train-s1/"
+    directory = f'../{local_dir}train-s1/'
 
     # since s1 is a float64, can't use to_float32() 
     s1 = hkl.load(directory + str(idx) + '.hkl')
@@ -73,7 +73,7 @@ def load_s2(idx, local_dir):
     Remove the border to correspond to the labels.
     Convert to float32.
     """
-    directory = local_dir + "train-s2/"
+    directory = f'../{local_dir}train-s2/'
     s2 = hkl.load(directory + str(idx) + '.hkl')
 
     # remove date of imagery (last axis)
@@ -113,7 +113,7 @@ def load_ard(idx, subsample, local_dir):
     (28, 28, 13)
     (14, 14, 13) 
     '''
-    directory = local_dir + "train-ard/"
+    directory = f'../{local_dir}train-ard/'
     ard = np.load(directory + str(idx) + '.npy')
 
     # checks for floating datatype, if not converts to float32
@@ -133,7 +133,7 @@ def load_ard(idx, subsample, local_dir):
                 varied_median[x, ...] = ard[i, ...]
 
         med_ard = np.median(varied_median, axis = 0).astype(np.float32) # np.median changes dtype to float64
-        np.save(f'../data/train-ard-sub/{idx}.npy', med_ard)
+        np.save(f'../{local_dir}train-ard-sub/{idx}.npy', med_ard)
      
     else:
         med_ard = np.median(ard, axis = 0)
@@ -153,11 +153,11 @@ def load_txt(idx, use_ard, local_dir):
     in order to extract texture features. Outputs the texture analysis 
     as a (14, 14, 16) float32 array.
     '''
-    directory = local_dir + "train-texture/"
+    directory = f'../{local_dir}train-texture/'
 
     # ARD TEXTURE
     if use_ard:
-        input_dir = f'../data/train-ard-sub/'
+        input_dir = f'../{local_dir}train-ard-sub/'
         # check if subset text has been created
         if os.path.exists(f'{directory}{idx}_sub.npy'):
             output = np.load(f'{directory}{idx}_sub.npy')
@@ -182,7 +182,7 @@ def load_txt(idx, use_ard, local_dir):
     
     # S2 TEXTURE
     else:
-        input_dir = f'../data/train-s2/'
+        input_dir = f'../{local_dir}train-s2/'
         if os.path.exists(f'{directory}{idx}.npy'):
             output = np.load(f'{directory}{idx}.npy')
         else: 
@@ -226,9 +226,9 @@ def load_ttc(idx, use_ard, local_dir):
     '''
     
     if use_ard:
-        directory = local_dir + 'train-features-ard/'
+        directory = f'../{local_dir}train-features-ard/'
     else:
-        directory = local_dir + 'train-features-ckpt-2023-02-09/'
+        directory = f'../{local_dir}train-features-ckpt-2023-02-09/'
 
     feats = hkl.load(directory + str(idx) + '.hkl')
 
@@ -256,7 +256,7 @@ def load_label(idx, ttc, classes, local_dir):
     2: agroforestry
     3: natural tree
     '''
-    directory = local_dir + 'train-labels/'
+    directory = f'../{local_dir}train-labels/'
     
     labels_raw = np.load(directory + str(idx) + '.npy')
 
@@ -281,7 +281,7 @@ def load_label(idx, ttc, classes, local_dir):
     
     return labels
 
-def gather_plot_ids(v_train_data):
+def gather_plot_ids(v_train_data, local_dir):
     '''
     Creates a list of plot ids to process from collect earth surveys 
     with multi-class labels (0, 1, 2, 255). Drops all plots with 
@@ -293,7 +293,7 @@ def gather_plot_ids(v_train_data):
     no_labels = []
 
     for i in v_train_data:
-        df = pd.read_csv(f'../data/ceo-plantations-train-{i}.csv')
+        df = pd.read_csv(f'../{local_dir}ceo-plantations-train-{i}.csv')
 
         # assert unknown labels are always a full 14x14 (196 points) of unknowns
         unknowns = df[df.PLANTATION == 255]
@@ -308,9 +308,9 @@ def gather_plot_ids(v_train_data):
 
     # add leading 0 to plot_ids that do not have 5 digits
     plot_ids = [str(item).zfill(5) if len(str(item)) < 5 else str(item) for item in plot_ids]
-    final_ard = [plot for plot in plot_ids if os.path.exists(f'../data/train-ard/{plot}.npy')]
-    no_ard = [plot for plot in plot_ids if not os.path.exists(f'../data/train-ard/{plot}.npy')]
-    final_raw = [plot for plot in no_ard if os.path.exists(f'../data/train-s2/{plot}.hkl')]
+    final_ard = [plot for plot in plot_ids if os.path.exists(f'../{local_dir}train-ard/{plot}.npy')]
+    no_ard = [plot for plot in plot_ids if not os.path.exists(f'../{local_dir}train-ard/{plot}.npy')]
+    final_raw = [plot for plot in no_ard if os.path.exists(f'../{local_dir}train-s2/{plot}.hkl')]
 
     print(f'{len(no_labels)} plots labeled "unknown" were dropped.')
     print(f'{len(no_ard)} plots did not have ARD.')
@@ -363,7 +363,7 @@ def build_training_sample(v_train_data, classes, params_path, logger, feature_se
         params = yaml.safe_load(file)
     
     train_data_dir = params['data_load']['local_prefix']
-    plot_ids = gather_plot_ids(v_train_data)
+    plot_ids = gather_plot_ids(v_train_data, train_data_dir)
     
     if len(feature_select) > 0:
         n_feats = 13 + len(feature_select)
@@ -493,11 +493,11 @@ def reshape_and_scale(X, y, scale, v_train_data, params_path, logger):
     y_train = reshape_arr(y_train)
     y_test = reshape_arr(y_test)
 
-    # logger.info(
-    #     f"Reshaped X_train: {X_train_ss.shape} X_test: {X_test_ss.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}"
-    # )
-    # logger.info(
-    #     f"The data was scaled to: Min {start_min} -> {end_min}, Max {start_max} -> {end_max}"
-    # )
+    logger.info(
+        f"Reshaped X_train: {X_train_ss.shape} X_test: {X_test_ss.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}"
+    )
+    logger.info(
+        f"The data was scaled to: Min {start_min} -> {end_min}, Max {start_max} -> {end_max}"
+    )
 
     return X_train_ss, X_test_ss, y_train, y_test
