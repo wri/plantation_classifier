@@ -119,7 +119,7 @@ def backward_selection(X_train,
         tmp_X_test = select_X_test.drop(columns=[dropped_feature])
 
         # Rerun modeling
-        metric, model, X_test = trn.fit_estimator(
+        metric, fs_model, X_test = trn.fit_estimator(
             tmp_X_train,
             tmp_X_test,
             y_train,
@@ -139,6 +139,4 @@ def backward_selection(X_train,
             select_X_train = tmp_X_train
             select_X_test = tmp_X_test
 
-        # could save best fit model here or return below
-
-    return select_X_train, select_X_test
+    return select_X_train, select_X_test, fs_model
