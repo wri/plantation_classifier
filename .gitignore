@@ -1,8 +1,11 @@
 # data/models/credentials
+# don't ignore metrics.json file
 config.yaml
 tmp/*
 data/*
 models/*
+src/reports/*
+!src/reports/metrics.json
 *.DS_Store
 plantations-packageslist.txt
 src/fil-result/*
@@ -15,5 +18,7 @@ __pycache__/
 
 # Jupyter Notebook
 .ipynb_checkpoints
+catboost_info/*
+src/catboost_info/*
 notebooks/catboost_info/*
 notebooks/conclusions.ipynb
