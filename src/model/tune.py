@@ -6,8 +6,17 @@ import pickle
 from catboost import CatBoostClassifier
 from datetime import datetime
 import yaml
+import model.train as trn
 
-def random_search_cat(X_train, y_train, param_path):
+def random_search_cat(X_train,
+                X_test,
+                y_train,
+                y_test,
+                estimator_name,
+                metric_name,
+                model_params_dict,
+                logger,
+                param_path):
     '''
     Performs a randomized search of hyperparameters using Catboost's built in
     random search method and plots the results, then
@@ -55,6 +64,18 @@ def random_search_cat(X_train, y_train, param_path):
                                                      params['tune']['verbose'],
                                                      )
         
-    # could fit the model here and return it
+    logger.info(f"Fitting model with {randomized_search_result['params']} ")
+    metric, tuned_model, X_test = trn.fit_estimator(X_train,
+                                                    X_test,
+                                                    y_train,
+                                                    y_test,
+                                                    estimator_name,
+                                                    metric_name,
+                                                    model_params_dict,
+                                                    randomized_search_result['params'],
+                                                    )
+    
+    
+    
     # write scores somewhere?
-    return randomized_search_result
+    return randomized_search_result, tuned_model
