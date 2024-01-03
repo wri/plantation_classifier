@@ -8,7 +8,7 @@ from utils.logs import get_logger
 from features import create_xy
 
 
-def featureize(param_path: Text) -> None:
+def featurize(param_path: Text) -> None:
     '''
     
     '''
@@ -16,10 +16,11 @@ def featureize(param_path: Text) -> None:
         params = yaml.safe_load(file)
 
     logger = get_logger("FEATURIZE", log_level=params["base"]["log_level"])
-    ceo_batch_list = params["data_load"]['ceo_survey'] 
+    ceo_batch = params["data_load"]['ceo_survey'] 
+    logger.info(f"ceo batch: {ceo_batch}")
 
     X, y = create_xy.build_training_sample(
-        ceo_batch_list,
+        ceo_batch,
         feature_select=[], 
         classes=params['data_condition']['classes'], 
         params_path=param_path,
@@ -27,6 +28,7 @@ def featureize(param_path: Text) -> None:
         ) 
 
     logger.info("X and y loaded")
+    logger.info(f"X and y shape: {X.shape, y.shape}")
 
     # option to subset the training data 
     # by randomly selecting n random plots by index 
@@ -46,7 +48,7 @@ def featureize(param_path: Text) -> None:
     X_train, X_test, y_train, y_test = create_xy.reshape_and_scale(X, 
                                                                   y, 
                                                                   params["data_condition"]["scale_features"],
-                                                                  params["train"]["model_v"],
+                                                                  params["train"]["model_name"],
                                                                   param_path,  
                                                                   logger)
     # TODO: figure out how to add model v to saved pkl file
@@ -66,4 +68,4 @@ if __name__ == "__main__":
     args_parser = argparse.ArgumentParser()
     args_parser.add_argument("--params", dest="params", required=True)
     args = args_parser.parse_args()
-    featureize(params_path=args.params)
+    featurize(param_path=args.params)

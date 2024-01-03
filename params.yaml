@@ -5,10 +5,9 @@ base:
 
 data_load:
   download_data: false
-  #sso_profile_name: rognstad-dev
   bucket_name: restoration-monitoring
   folder_prefix: plantation-mapping/data/train/
-  local_prefix: ../data/
+  local_prefix: data/
   ceo_survey: 
     - v08 
     - v14 
@@ -16,10 +15,10 @@ data_load:
     - v18 
     - v19 
     - v20
-  summary_filename: ../data/Training_Data.xlsx
-  summary_sheetname: CEO_Surveys
-  survey_id_column_name: CEO Survey
-  ceo_survey_directory: data/ceo-surveys
+  # summary_filename: data/Training_Data.xlsx
+  # summary_sheetname: CEO_Surveys
+  # survey_id_column_name: CEO Survey
+  # ceo_survey_directory: data/ceo-surveys
   data_prefix_list:
     - slope
     - s1
@@ -30,12 +29,9 @@ data_load:
     - ard
     - features-ard
   ceo_json: reports/ceo_list.json
-  report_output_dir: /report/
+  report_output_dir: /reports/
 
 data_condition:
-  train_filter_features:
-    Use?: "yes"
-    Classes: multi
   label_cats:
     Monoculture: 1
     Agroforestry: 2
@@ -44,26 +40,27 @@ data_condition:
   classes: 4
   ard_subsample: 4
   scale_features: true
-  subset_fraction: 0.30 #used for pipeline testing, set to 1.0 for all data
+  subset_fraction: 1.0 #used for pipeline testing, set to 1.0 for all data
   test_split: 20
+  train_split: 80
   val_split: 25
-  X_train: ../data/train/X_train.pkl
-  y_train: ../data/train/y_train.pkl
-  X_test: ../data/train/X_test.pkl
-  y_test: ../data/train/y_test.pkl
+  X_train: data/train/X_train.pkl
+  y_train: data/train/y_train.pkl
+  X_test: data/train/X_test.pkl
+  y_test: data/train/y_test.pkl
 
 train:
-  model_v: 'v23'
-  select_features: True # true until storage of x train select is figured out
-  select_X_train: ../data/train/X_train_selected.pkl
-  select_X_test: ../data/train/X_test_selected.pkl
+  model_name: model
+  select_features: False
+  select_X_train: data/train/X_train_selected.pkl
+  select_X_test: data/train/X_test_selected.pkl
   selected_feature_indicies: reports/selected_feature_indicies.json
   tune_hyperparams: False
   cv: 3
   estimator_name: cat
   max_features: 81
   tuning_metric: balanced_accuracy
-  testing_metrics: accuracy balanced_accuracy precision recall f1 roc_auc
+  testing_metrics: accuracy balanced_accuracy precision recall f1 roc_auc log_loss
   fit_params:
     use_best_model: false
     early_stopping_rounds: 100
@@ -98,7 +95,7 @@ train:
       importance_metric: shap
       use_class_weights: true
       param_grid:
-  model_path: ../models/model.joblib
+  model_dir: models/
 
 tune:
   estimator_name: cat
@@ -123,13 +120,11 @@ tune:
           - .02
           - .03
           - .04
-  best_params: ../models/best_params.json
+  best_params: src/reports/best_params.json
 
 evaluate:
-  reports_dir: reports
-  metrics_file: metrics.json
-  confusion_matrix_image: confusion_matrix.png
-  confusion_matrix_data: confusion_matrix_data.csv
-  eval_map_name: eval_map.png
+  metrics_file: src/reports/metrics.json
+  confusion_matrix_image: src/reports/confusion_matrix.png
+  confusion_matrix_data: src/reports/confusion_matrix_data.csv
   tile_id_loc: data
   tile_s3_bucket: tof-output

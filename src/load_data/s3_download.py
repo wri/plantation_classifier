@@ -28,7 +28,7 @@ def data_download(param_path: Text) -> None:
     bucket_name = params["data_load"]["bucket_name"]
     folder_prefix = params["data_load"]["folder_prefix"]
     data_prefix_list = params["data_load"]["data_prefix_list"]
-    local_prefix = params["data_load"]["local_prefix"]
+    local_prefix = f'../{params["data_load"]["local_prefix"]}'
 
     s3 = boto3.client("s3",
                      aws_access_key_id=aak, 

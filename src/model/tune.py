@@ -55,6 +55,6 @@ def random_search_cat(X_train, y_train, param_path):
                                                      params['tune']['verbose'],
                                                      )
         
-
+    # could fit the model here and return it
     # write scores somewhere?
     return randomized_search_result

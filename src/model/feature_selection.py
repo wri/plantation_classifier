@@ -9,13 +9,14 @@ from sklearn.metrics import (
     precision_score,
     recall_score,
     f1_score,
+    log_loss
 )
 import json
 import shap
 import model.train as trn
 from utils.logs import get_logger
 
-def feature_selection(model, feat_count):
+def OLD_feature_selection(model, feat_count):
     
     '''
     Calculates the feature importance score for a given model

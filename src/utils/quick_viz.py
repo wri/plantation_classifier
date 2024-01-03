@@ -199,10 +199,10 @@ def hist_compare_s2_byband(location: str, tile_idx_a: tuple, tile_idx_b: tuple, 
 
 
 
-def heat_compare_hkl(arr_a, arr_b, title_a:str, title_b:str):
+def heat_compare_arrays(arr_a, arr_b, title_a:str, title_b:str):
     '''
     Type: Seaborn heatmap
-    Purpose: Compare and visualize two hickle files (could be s2 data, ARD, feats, etc.)
+    Purpose: Compare and visualize two files (could be s2 data, ARD, feats, etc.)
     
     '''
 

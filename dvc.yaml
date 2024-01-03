@@ -2,29 +2,27 @@ stages:
   load_data:
     cmd: python src/stage_load_data.py --config=params.yaml
     deps:
-      # - CEO inputs in src/load_data/xyz
       - src/stage_load_data.py
     params:
       - base
       - data_load
-    outs:
-      - reports/ceo_list.json
+
   prep_features:
     cmd: python src/stage_prep_features.py --config=params.yaml
     deps:
-      - src/features/ptype_prepare_data.py
-      # - src/features/texture_analysis.py not sure where txt analysis will live
-      - reports/ceo_list.json
+      - src/features/create_xy.py
       - src/stage_prep_features.py
     params:
       - base
       - data_load
       - data_condition
+      - data_train
     outs:
       - data/train/X_train.pkl
       - data/train/X_test.pkl
       - data/train/y_train.pkl
       - data/train/y_test.pkl
+
   train_model:
     cmd: python src/stage_train_model.py --config=params.yaml
     deps:
@@ -32,25 +30,35 @@ stages:
       - data/train/X_test.pkl
       - data/train/y_train.pkl
       - data/train/y_test.pkl
+      - data/train/X_train_selected.pkl # optional?
+      - data/train/X_test_selected.pkl
+      - reports/selected_feature_indicies.json
       - src/model/feature_selection.py
       - src/model/train.py
+      - src/model/tune.py
       - src/stage_train_model.py
     params:
       - base
       - data_condition
       - train
+      - tune
     outs:
       - models/model.joblib
+      - models/model_fs.joblib
+      - models/model_tuned.joblib
       - data/train/X_train_selected.pkl
       - data/train/X_test_selected.pkl
       - reports/selected_feature_indicies.json
+      - reports/best_params.json
+
   evaluate_model:
     cmd: python src/stage_evaluate_model.py --config=params.yaml
     deps:
       - data/train/X_test_selected.pkl
+      - data/train/X_test.pkl # this or above
       - data/train/y_test.pkl
-      - models/model.joblib
-      - src/report/visualize.py
+      - models/model_tuned.joblib # this could vary?
+      - src/reports/validation_visuals.py
       - src/stage_evaluate_model.py
     params:
       - base
@@ -58,11 +66,11 @@ stages:
       - train
       - evaluate
     metrics:
-      - reports/metrics.json
+      - src/reports/metrics.json
 
-    # plots:
-    #   - reports/confusion_matrix.png
-    #   - reports/confusion_matrix_data.csv:
-    #       template: confusion_normalized
-    #       x: predicted
-    #       y: y_true
+    plots:
+      - src/reports/confusion_matrix.png
+      - src/reports/confusion_matrix_data.csv:
+          template: confusion_normalized
+          x: predicted
+          y: y_true

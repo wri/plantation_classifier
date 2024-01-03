@@ -9,6 +9,7 @@ from sklearn.metrics import (
     recall_score,
     f1_score,
     roc_auc_score,
+    log_loss
 )
 from sklearn.svm import SVC
 from sklearn.utils.class_weight import compute_class_weight
@@ -56,6 +57,7 @@ def get_supported_metrics():
         "recall": recall_score,
         "f1": f1_score,
         "roc_auc": roc_auc_score,
+        "logloss": log_loss
     }
 
 def fit_estimator(X_train,
@@ -66,7 +68,6 @@ def fit_estimator(X_train,
                 metric_name,
                 model_params_dict,
                 fit_params_dict,
-                v_train_data,
                 ):
 
     '''
@@ -107,10 +108,5 @@ def fit_estimator(X_train,
     model = estimator(**model_params_dict)
     model.fit(X_train, y_train, **fit_params_dict)
     metric = metric_fun(y_test, model.predict(X_test))
-    
-    # for now save model as pkl file
-    filename = f'../models/{estimator_name}_{v_train_data}.pkl'
-    with open(filename, 'wb') as file:
-        pickle.dump(model, file)
 
     return metric, model, X_test
