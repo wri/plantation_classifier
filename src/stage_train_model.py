@@ -13,6 +13,14 @@ import model.tune as tune
 
 def train_model(param_path: Text) -> None:
 
+    '''
+    There are 3 types of training that can be performed in this func
+    1. a model w/ all 94 features and default hyperparameters
+    2. a model w/ feature selection and default hyperparameters
+    3. a model w/ feature selection and tuned hyperparameters
+    
+    '''
+
     # load training parameters
     with open(param_path) as file:
         params = yaml.safe_load(file)
@@ -30,17 +38,18 @@ def train_model(param_path: Text) -> None:
     with open(params["data_condition"]["y_test"], "rb") as fp:
         y_test = pickle.load(fp)
     logger.debug(f"y_test shape: {y_test.shape}")
+
     logger.info("Training and testing data loaded.")
    
-    max_features = params["train"]["max_features"]
-    logger.info(f"Max features: {max_features}")
     estimator_name = params["train"]["estimator_name"]
     model_dir = Path(params["train"]["model_dir"])
     model_path = model_dir / params['train']['model_name']
 
 # if using select features, perform backward selection
 # will also perform tuning here
-    if params["train"]["select_features"]:
+    if params["train"]["perform_fs"]:
+        max_features = params["train"]["max_features"]
+        logger.info(f"Max features for feature selection: {max_features}")
         select_X_train, select_X_test, fs_model = fsl.backward_selection(
             X_train,
             X_test,
@@ -53,55 +62,30 @@ def train_model(param_path: Text) -> None:
             logger,
             max_features)
         logger.info(f"Feature selection completed with {select_X_train.shape[1]} features")
-        with open(params["train"]["select_X_train"], "wb") as fp:
+
+        # save feature selected training data
+        logger.info("Saving feature selected model and training data")
+        joblib.dump(fs_model, f'{model_path}.joblib')
+        with open(params["data_condition"]["select_X_train"], "wb") as fp:
             pickle.dump(select_X_train, fp)
-        with open(params["train"]["select_X_test"], "wb") as fp:
+        with open(params["data_condition"]["select_X_test"], "wb") as fp:
             pickle.dump(select_X_test, fp)
         
-        logger.info(f'Writing feature indicies to {params["train"]["selected_feature_indicies"]}')
-        with open(params["train"]["selected_feature_indicies"], "w") as fp:
+        logger.info(f'Writing feature indicies to {params["data_condition"]["selected_feature_indicies"]}')
+        with open(params["data_condition"]["selected_feature_indicies"], "w") as fp:
             json.dump(
                 obj={"feature_column_indicies": list(X_test.columns),
                     "n_features": len(list(X_test.columns))},
                 fp=fp,
                 )
-        logger.info("Saving feature selected model")
-        joblib.dump(fs_model, f'{model_path}.joblib')
-        X_train = select_X_train
-        X_test = select_X_test
-
-        # if performing hyperparameter tuning
-        if params["train"]["tune_hyperparams"]:
-            logger.info("Starting random search...")
-            tuning_params, tuned_model = tune.random_search_cat(X_train,
-                                                                X_test,
-                                                                y_train,
-                                                                y_test, 
-                                                                params["train"]["tuning_metric"],
-                                                                logger,
-                                                                param_path,
-                                                                )
-            logger.info(f"Best hyperparameters: {tuning_params['params']}")
-            with open(params["tune"]["best_params"], "w") as fp:
-                json.dump(obj=tuning_params,
-                        fp=fp,
-                        )
-            logger.info("Saving tuned model")
-            joblib.dump(tuned_model, f'{model_path}.joblib')
-        else:
-            # create empty files as placeholders
-            # TODO: should this store the default hyperparams?
-            with open(params["tune"]["best_params"], "w") as fp:
-                json.dump({}, fp=fp)
-            logger.info("Using default hyperparameters: ")
     
     else:
         # create empty fs files as placeholders
-        with open(params["train"]["select_X_train"], "wb") as fp:
+        with open(params["data_condition"]["select_X_train"], "wb") as fp:
             pickle.dump({}, fp)
-        with open(params["train"]["select_X_test"], "wb") as fp:
+        with open(params["data_condition"]["select_X_test"], "wb") as fp:
             pickle.dump({}, fp)
-        with open(params["train"]["selected_feature_indicies"], "wb") as fp:
+        with open(params["data_condition"]["selected_feature_indicies"], "wb") as fp:
             pickle.dump({}, fp)
       
         logger.info("Training model with all features...")
@@ -118,6 +102,32 @@ def train_model(param_path: Text) -> None:
         logger.info("Saving model")
         joblib.dump(model, f'{model_path}.joblib')
 
+
+    # if performing hyperparameter tuning
+    if params["train"]["tune_hyperparams"]:
+        # depending on what selected_X_train loooks like, could have option to import here
+        logger.info("Starting random search...")
+        tuning_params, tuned_model = tune.random_search_cat(select_X_train,
+                                                            select_X_test,
+                                                            y_train,
+                                                            y_test, 
+                                                            params["train"]["tuning_metric"],
+                                                            logger,
+                                                            param_path,
+                                                            )
+        logger.info(f"Best hyperparameters: {tuning_params['params']}")
+        with open(params["tune"]["best_params"], "w") as fp:
+            json.dump(obj=tuning_params,
+                    fp=fp,
+                    )
+        logger.info("Saving tuned model")
+        joblib.dump(tuned_model, f'{model_path}.joblib')
+    else:
+        logger.info("Using default hyperparameters: ")
+        # TODO: should this store the default hyperparams?
+        with open(params["tune"]["best_params"], "w") as fp:
+            json.dump({}, fp=fp)
+            
 
 if __name__ == "__main__":
     args_parser = argparse.ArgumentParser()
