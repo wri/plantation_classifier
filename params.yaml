@@ -15,10 +15,6 @@ data_load:
     - v18 
     - v19 
     - v20
-  # summary_filename: data/Training_Data.xlsx
-  # summary_sheetname: CEO_Surveys
-  # survey_id_column_name: CEO Survey
-  # ceo_survey_directory: data/ceo-surveys
   data_prefix_list:
     - slope
     - s1
@@ -32,15 +28,12 @@ data_load:
   report_output_dir: /reports/
 
 data_condition:
-  label_cats:
-    Monoculture: 1
-    Agroforestry: 2
-    Not plantation: 0
-    Unknown: 255
+  scale_features: true
+  select_features: false
+  selected_feature_indicies: src/reports/selected_feature_indicies.json
   classes: 4
   ard_subsample: 4
-  scale_features: true
-  subset_fraction: 1.0 #used for pipeline testing, set to 1.0 for all data
+  subset_fraction: 1.0 # used for pipeline testing, set to 1.0 for all data
   test_split: 20
   train_split: 80
   val_split: 25
@@ -48,17 +41,16 @@ data_condition:
   y_train: data/train/y_train.pkl
   X_test: data/train/X_test.pkl
   y_test: data/train/y_test.pkl
+  select_X_train: data/train/X_train_selected.pkl #confirm exactly what this is - df?
+  select_X_test: data/train/X_test_selected.pkl
 
 train:
-  model_name: model
-  select_features: False
-  select_X_train: data/train/X_train_selected.pkl
-  select_X_test: data/train/X_test_selected.pkl
-  selected_feature_indicies: reports/selected_feature_indicies.json
+  model_name: model #this could be changed to expl track versions?
+  perform_fs: true
   tune_hyperparams: False
   cv: 3
   estimator_name: cat
-  max_features: 81
+  max_features: 41    # number of feats to use in feature selection
   tuning_metric: balanced_accuracy
   testing_metrics: accuracy balanced_accuracy precision recall f1 roc_auc log_loss
   fit_params:
@@ -98,6 +90,7 @@ train:
   model_dir: models/
 
 tune:
+  use_fs_data: True
   estimator_name: cat
   n_iter: 30
   cv: 3
