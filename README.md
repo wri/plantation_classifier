@@ -12,16 +12,16 @@ Research method to spatially differentiate planted and natural trees using a tra
 │
 ├── setup.py                        <- makes project pip installable (pip install -e .) so src can be imported
 ├── environment.yaml                <- xx 
-├── params.yaml                     <- xx contributing.md Dockerfile
-├── config.yaml                     <- xx contributing.md Dockerfile
-├── dvc.yaml                        <- xx contributing.md Dockerfile
+├── params.yaml                     <- xx 
+├── config.yaml                     <- xx 
+├── dvc.yaml                        <- xx 
 ├── src                             <- Source code for use in this project.
 │   ├── __init__.py                 <- Makes src a Python module       
 │   ├── stage_load_data.py          <- xx
 │   ├── stage_prep_features.py      <- xx
 │   ├── stage_train_model.py        <- xx
 │   ├── stage_evaluate.py           <- xx
-│   ├── transfer_learning.py           <- deployment script
+│   ├── transfer_learning.py        <- deployment script
 │   │
 │   ├── load_data                   <- Scripts to download or generate data
 │   │   ├── __init__.py             <- Makes src a Python module 
@@ -41,6 +41,12 @@ Research method to spatially differentiate planted and natural trees using a tra
 │   │   ├── feature_selection.py    <- xx
 │   │   ├── train.py                <- xx           
 │   │   └── tune.py                 <- xx
+│   │    
+│   ├── evaluation                         <- Graphics and figures from model evaluation
+│   │   ├── confusion_matrix_data.csv       <- xx
+│   │   ├── confusion_matrix.png            <- xx
+│   │   ├── metrics.json                    <- xx
+│   │   └── validation_visuals.py           <- creates confusion matrix
 │   │
 │   └── utils                       <- Scripts for utility functions
 │       ├── __init__.py             <- Makes src a Python module 
@@ -66,11 +72,6 @@ Research method to spatially differentiate planted and natural trees using a tra
 │   ├── training_data_eda.ipynb          <- xx
 │   └── tuning-feature-selection.ipynb  <- xx
 │
-├── evaluation                        <- Graphics and figures from model evaluation
-│   ├── confusion_matrix_data.csv       <- xx
-│   ├── confusion_matrix.png            <- xx
-│   ├── metrics.json                    <- xx
-│   └── validation_visuals.py           <- creates confusion matrix
 │
 ├── .gitignore                     <- xx
 ├── .dockerignore                  <- xx
