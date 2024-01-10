@@ -14,17 +14,40 @@ def featurize(param_path: Text) -> None:
     '''
     with open(param_path) as file:
         params = yaml.safe_load(file)
-
+ 
     logger = get_logger("FEATURIZE", log_level=params["base"]["log_level"])
+    perform_scaling = params['train']['perform_fs'] # scaling is only done if fs performed
+    perform_fs = params['train']['perform_fs']
+    perform_hp = params['train']['tune_hyperparams']
+    logger.info(f"Perform scaling: {perform_scaling}")
+    logger.info(f"Perform feature selection: {perform_fs}")
+    logger.info(f"Perform tuning: {perform_hp}")
+                
     ceo_batch = params["data_load"]['ceo_survey'] 
-    logger.info(f"ceo batch: {ceo_batch}")
+    logger.info(f"CEO batch: {ceo_batch}")
+
+    # if the data condition specifies fs, prep training data w fs
+    # this is different from conducting the fs exercise
+    if params['data_condition']['select_features']: 
+        logger.info("Preparing X, y with select features.")
+        # with open(params['data_condition']['selected_features']) as fp:
+        #     report = json.load(fp)
+        #     fs_indices = report['feature_index'] 
+        
+        # for now this will pull from the non dvc file -- hard coded
+        with open('models/model_specs/selected_features.json') as fp:
+            report = json.load(fp)
+            fs_indices = report['feature_index'] 
+
+    else:
+        fs_indices = []
 
     X, y = create_xy.build_training_sample(
         ceo_batch,
-        feature_select=[], 
         classes=params['data_condition']['classes'], 
         params_path=param_path,
-        logger=logger
+        logger=logger,
+        feature_select=fs_indices, 
         ) 
 
     logger.info("X and y loaded")
@@ -47,11 +70,10 @@ def featurize(param_path: Text) -> None:
 
     X_train, X_test, y_train, y_test = create_xy.reshape_and_scale(X, 
                                                                   y, 
-                                                                  params["data_condition"]["scale_features"],
+                                                                  perform_fs, #only scale if rs performed
                                                                   params["train"]["model_name"],
                                                                   param_path,  
                                                                   logger)
-    # TODO: figure out how to add model v to saved pkl file
     logger.info(f"Train and test set generated")
     with open(params["data_condition"]["X_train"], "wb") as fp:
         pickle.dump(X_train, fp)
