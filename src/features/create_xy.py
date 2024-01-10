@@ -10,6 +10,8 @@ import features.slow_glcm as slow_txt
 from tqdm import tqdm
 from skimage.util import img_as_ubyte
 from sklearn.model_selection import train_test_split
+from sklearn.utils.class_weight import compute_class_weight
+import json
 
 def load_slope(idx, local_dir):
     """
@@ -287,7 +289,7 @@ def load_label(idx, ttc, classes, local_dir):
     
     return labels
 
-def gather_plot_ids(v_train_data, local_dir):
+def gather_plot_ids(v_train_data, local_dir, logger):
     '''
     Creates a list of plot ids to process from collect earth surveys 
     with multi-class labels (0, 1, 2, 255). Drops all plots with 
@@ -318,9 +320,9 @@ def gather_plot_ids(v_train_data, local_dir):
     no_ard = [plot for plot in plot_ids if not os.path.exists(f'{local_dir}train-ard/{plot}.npy')]
     final_raw = [plot for plot in no_ard if os.path.exists(f'{local_dir}train-s2/{plot}.hkl')]
 
-    print(f'{len(no_labels)} plots labeled "unknown" were dropped.')
-    print(f'{len(no_ard)} plots did not have ARD.')
-    print(f'Training data batch includes: {len(final_ard)} plots.')
+    logger.info(f'{len(no_labels)} plots labeled "unknown" were dropped.')
+    logger.info(f'{len(no_ard)} plots did not have ARD.')
+    logger.info(f'Training data batch includes: {len(final_ard)} plots.')
 
     return final_ard
 
@@ -354,7 +356,7 @@ def make_sample(sample_shape, s2, slope, s1, txt, ttc, feature_select):
 
     return sample
 
-def build_training_sample(v_train_data, classes, params_path, logger, feature_select=[]):
+def build_training_sample(v_train_data, classes, params_path, logger, feature_select):
     '''
     Gathers training data plots from collect earth surveys (v1, v2, v3, etc)
     and loads data to create a sample for each plot. Removes ids where there is no
@@ -369,10 +371,11 @@ def build_training_sample(v_train_data, classes, params_path, logger, feature_se
         params = yaml.safe_load(file)
     
     train_data_dir = params['data_load']['local_prefix']
-    plot_ids = gather_plot_ids(v_train_data, train_data_dir)
+    plot_ids = gather_plot_ids(v_train_data, train_data_dir, logger)
     logger.info(f"{len(plot_ids)} plots will be used in training.")
 
     if len(feature_select) > 0:
+        logger.info(f"Preparing training batch with selected features") 
         n_feats = 13 + len(feature_select)
     else:
         n_feats = 94
@@ -460,15 +463,22 @@ def reshape_and_scale(X, y, scale, v_train_data, params_path, logger):
         params = yaml.safe_load(file)
 
     X_train, X_test, y_train, y_test = train_test_split(
-    X,
-    y,
-    test_size=((params["data_condition"]["test_split"] / 100)),
-    train_size=((params["data_condition"]["train_split"] / 100)),
-    random_state=params["base"]["random_state"],
-    )
-    logger.info(f"X_train: {X_train.shape}, X_test: {X_test.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}")
-    start_min, start_max = X_train.min(), X_train.max()
+                                    X,
+                                    y,
+                                    test_size=((params["data_condition"]["test_split"] / 100)),
+                                    train_size=((params["data_condition"]["train_split"] / 100)),
+                                    random_state=params["base"]["random_state"],
+                                    )
+    logger.debug(f"X_train: {X_train.shape}, X_test: {X_test.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}")
+    logger.info(f'Computing and saving class weights')
+    classes = np.unique(y_train)
+    weights = compute_class_weight(class_weight='balanced', classes=classes, y=y_train)
+    class_weights = dict(zip(classes, weights))
+    with open('models/model_specs/class_weights.json', "w") as fp:
+        json.dump(obj=class_weights, fp=fp)
+
     if scale:
+        logger.info('Scaling training data')
         min_all = []
         max_all = []
         for band in range(0, X_train.shape[-1]):
@@ -488,24 +498,22 @@ def reshape_and_scale(X, y, scale, v_train_data, params_path, logger):
                 # update each band in X_train and X_test to hold standardized data
                 X_train[..., band] = X_train_std
                 X_test[..., band] = X_test_std
-                end_min, end_max = X_train.min(), X_train.max()
+                #end_min, end_max = X_train.min(), X_train.max()
                 min_all.append(mins)
                 max_all.append(maxs) 
             else:
                 pass
         np.save(f'data/mins_{v_train_data}', min_all)
         np.save(f'data/maxs_{v_train_data}', max_all)
+        #logger.debug(f"The data was scaled to mins: {min_all} and maxs: {max_all}")
 
     X_train_ss = reshape_arr(X_train)
     X_test_ss = reshape_arr(X_test)
     y_train = reshape_arr(y_train)
     y_test = reshape_arr(y_test)
 
-    logger.info(
+    logger.debug(
         f"Reshaped X_train: {X_train_ss.shape} X_test: {X_test_ss.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}"
-    )
-    logger.info(
-        f"The data was scaled to: Min {start_min} -> {end_min}, Max {start_max} -> {end_max}"
-    )
+        )
 
     return X_train_ss, X_test_ss, y_train, y_test
