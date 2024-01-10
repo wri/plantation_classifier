@@ -17,7 +17,7 @@ import yaml
 import pickle
 
 from utils.logs import get_logger
-from reports.validation_visuals import plot_confusion_matrix
+from evaluation.validation_visuals import plot_confusion_matrix
 
 def convert_to_labels(indexes, labels):
     result = []
@@ -52,24 +52,18 @@ def evaluate_model(params_path: Text) -> None:
 
     logger = get_logger("EVALUATE", log_level=params["base"]["log_level"])
 
-    logger.info("Loading model")
+    logger.info("Loading model and test data")
     model_dir = params["train"]["model_dir"]
     model_path = f"{model_dir}{params['train']['model_name']}.joblib"
-    print(f'model path: {model_path}')
     model = joblib.load(f'{model_path}')
 
-    # option to import selected features or full test data
-    if params['train']['select_features']:
-        with open(params["train"]["select_X_test"], "rb") as fp:
-            X_test = pickle.load(fp)
-    else:
-        with open(params["data_condition"]["X_test"], "rb") as fp:
-            X_test = pickle.load(fp)
+    with open(params["data_condition"]["X_test"], "rb") as fp:
+        X_test = pickle.load(fp)
 
     with open(params["data_condition"]["y_test"], "rb") as fp:
         y_test = pickle.load(fp)
 
-    logger.info("Evaluating... (building report)")
+    logger.info("Evaluating (building report)")
 
     prediction = model.predict(X_test)
     accuracy = accuracy_score(y_true=y_test, y_pred=prediction)
@@ -77,7 +71,6 @@ def evaluate_model(params_path: Text) -> None:
     f1 = f1_score(y_true=y_test, y_pred=prediction, average="weighted")
     precision = precision_score(y_true=y_test, y_pred=prediction, average="weighted")
     recall = recall_score(y_true=y_test, y_pred=prediction, average="weighted")
-    #logloss = log_loss(y_true=y_test, y_pred=prediction)
 
     cm = confusion_matrix(y_test, prediction)
 
@@ -87,13 +80,10 @@ def evaluate_model(params_path: Text) -> None:
         "precision": precision,
         "recall": recall,
         "f1": f1,
-        # "logloss": logloss,
         "cm": cm,
         "actual": y_test,
         "predicted": prediction,
     }
-   # logger.debug(report)
-    # reports_dir = Path(params["evaluate"]["reports_dir"])
     metrics_path = params["evaluate"]["metrics_file"]
     logger.info(f'Writing metrics to {metrics_path}')
     with open(metrics_path, "w") as fp:
@@ -104,7 +94,6 @@ def evaluate_model(params_path: Text) -> None:
                 "balanced_accuracy_socre": balanced_accuracy,
                 "precision_score": precision,
                 "recall_score": recall,
-                # "logloss": logloss,
             },
             fp=fp,
         )
