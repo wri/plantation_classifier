@@ -15,8 +15,12 @@ import json
 import shap
 import model.train as trn
 from utils.logs import get_logger
+import joblib
 
-def OLD_feature_importance(model, feat_count):
+def feature_importance(model_path,
+                       logger,
+                       max_features=None,
+                        ):
     
     '''
     Calculates the feature importance score for a given model
@@ -24,11 +28,9 @@ def OLD_feature_importance(model, feat_count):
     Returns df containing importance score for each feature and
     top n (feat_count) most important features
     '''
+    logger.info("Loading model and calculating feature importance")
+    model = joblib.load(f'{model_path}.joblib')
     
-    filename = f'../models/{model}.pkl'
-    with open(filename, 'rb') as file:
-        model = pickle.load(file)
-
     # calculate the feature importance 
     df = model.get_feature_importance(prettified=True)
     df = df.astype({'Feature Id': int})
@@ -36,10 +38,10 @@ def OLD_feature_importance(model, feat_count):
     # filter to features > index 13 (remove importance for s1, s2, dem)
     # get the indices and print in ascending order
     feats_df = df[df['Feature Id'] >= 13]
-    top_feats = feats_df.sort_values(by='Importances', ascending=False)[:feat_count]
+    top_feats = feats_df.sort_values(by='Importances', ascending=False)[:max_features]
     top_feats_indices = [i - 13 for i in sorted(list(top_feats['Feature Id']))]
-
-    return df, top_feats_indices
+    print(top_feats_indices)
+    return top_feats_indices
 
 
 def least_imp_feature(model, X_test, logger):
@@ -81,7 +83,6 @@ def backward_selection(X_train,
                         estimator_name,
                         metric_name,
                         model_params_dict,
-                        fit_params_dict,
                         logger,
                         max_features=None):
     """
@@ -105,7 +106,7 @@ def backward_selection(X_train,
         estimator_name,
         metric_name,
         model_params_dict,
-        fit_params_dict,
+        logger,
     )
     logger.debug(f"X_test shape: {X_test.shape}")
     logger.info(f"BASELINE: {round(metric, 4)} with {select_X_train.shape[1]} features")
@@ -116,14 +117,17 @@ def backward_selection(X_train,
         max_features = total_features - 1
 
     for num_features in range(total_features - 1, 1, -1):
+        
+        # only keep features > index 13 (ignore s1, s2, dem)
+        select_X_test = select_X_test[select_X_test['features'] >= 13]
+        logger.debug(f"select X test shape: {select_X_test.shape} (should be 81)")
+
         # Trim features
-        logger.debug(f"select X test shape: {select_X_test.shape}")
         dropped_feature = least_imp_feature(model, select_X_test, logger)
         logger.info(f"Removing feature {dropped_feature}")
         tmp_X_train = select_X_train.drop(columns=[dropped_feature])
         tmp_X_test = select_X_test.drop(columns=[dropped_feature])
 
-        # Rerun modeling - depending on what format select x train is, this could be a separate step
         metric, model, X_test = trn.fit_estimator(
             tmp_X_train,
             tmp_X_test,
@@ -132,18 +136,27 @@ def backward_selection(X_train,
             estimator_name,
             metric_name,
             model_params_dict,
-            fit_params_dict,
+            logger
         )
         logger.info(f"{round(metric, 4)} with {tmp_X_train.shape[1]} features")
-        # not sure this is working?
+        
+        # so for balanced accuracy, we want metric to decrease
         if (num_features < max_features) and (metric < last_metric):
             # metric decreased, return last dataframe
+            # first calculate appropriate indices
+            select_X_train = [i - 13 for i in select_X_train]
+            select_X_test = [i - 13 for i in select_X_test]
             return select_X_train, select_X_test, model
+        
         else:
             # metric improved, continue dropping features
             last_metric = metric
             select_X_train = tmp_X_train
             select_X_test = tmp_X_test
 
-    # confirm which model is being returned here
+    select_X_train = [i - 13 for i in select_X_train]
+    select_X_test = [i - 13 for i in select_X_test]
+    logger.info(f"Selected X_train: {select_X_train}")
+    logger.info(f"Selected X_test: {select_X_train}")
+
     return select_X_train, select_X_test, model
