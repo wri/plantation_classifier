@@ -24,16 +24,13 @@ data_load:
     - labels
     - ard
     - features-ard
-  ceo_json: reports/ceo_list.json
-  report_output_dir: /reports/
 
 data_condition:
-  scale_features: true
-  select_features: false
-  selected_feature_indicies: src/reports/selected_feature_indicies.json
+  select_features: True 
+  selected_features: data/train/selected_features.json
   classes: 4
   ard_subsample: 4
-  subset_fraction: 1.0 # used for pipeline testing, set to 1.0 for all data
+  subset_fraction: 1.0 # set to 1.0 for all data
   test_split: 20
   train_split: 80
   val_split: 25
@@ -41,21 +38,16 @@ data_condition:
   y_train: data/train/y_train.pkl
   X_test: data/train/X_test.pkl
   y_test: data/train/y_test.pkl
-  select_X_train: data/train/X_train_selected.pkl #confirm exactly what this is - df?
-  select_X_test: data/train/X_test_selected.pkl
 
 train:
-  model_name: model #this could be changed to expl track versions?
-  perform_fs: true
-  tune_hyperparams: False
-  cv: 3
+  model_name: model 
+  perform_fs: False #this will also trigger scaling
+  tune_hyperparams: True
+  max_features: 40    # number of feats to use in feature selection
   estimator_name: cat
-  max_features: 41    # number of feats to use in feature selection
+  cv: 3
   tuning_metric: balanced_accuracy
   testing_metrics: accuracy balanced_accuracy precision recall f1 roc_auc log_loss
-  fit_params:
-    use_best_model: false
-    early_stopping_rounds: 100
   estimators:
     rfc: #sklearn.ensemble.RandomForestClassifier
       importance_metric: shap
@@ -73,51 +65,57 @@ train:
       importance_metric: shap
       use_class_weights: true
       param_grid:
-    cat:
-      importance_metric: shap
-      use_class_weights: true
-      param_grid:
-        iterations: 500
-        max_depth: 5
-        learning_rate: 0.05
-        colsample_bylevel: 0.5
-        min_data_in_leaf: 50
-        logging_level: Silent
     logreg:
       importance_metric: shap
       use_class_weights: true
       param_grid:
+    cat:
+      importance_metric: shap
+      use_class_weights: true
+      use_defaults: true 
+      param_grid:
+        loss_function: MultiClass 
+        random_state: 121
+        # iterations: 811         #default is 500
+        # depth: 10               #default is 6
+        # 12_leaf_reg: 11         #default is 3
+        # min_data_in_leaf: 50    #default is 1
+        # learning_rate: 0.04       #default is 0.1007
+        logging_level: Silent
   model_dir: models/
 
 tune:
-  use_fs_data: True
+  # use_fs_data: True
   estimator_name: cat
-  n_iter: 30
+  n_iter: 3 #num of parameter settings that are sampled
   cv: 3
   plot: False
   verbose: False
   estimators:
     cat:
-      loss_function: MultiClass
       param_grid:
         iter_min: 500
         iter_max: 1200
         iter_step: 10
-        depth_min: 4
-        depth_max: 10
+        depth_min: 6
+        depth_max: 12
         depth_step: 4
-        12_leaf_min: 2
-        12_leaf_max: 30
-        12_leaf_step: 4
+        leaf_reg_min: 2
+        leaf_reg_max: 30
+        leaf_reg_step: 4
+        min_data_leaf_min: 20
+        min_data_leaf_max: 100
+        min_data_leaf_step: 3
         learn_rate:
           - .02
           - .03
           - .04
-  best_params: src/reports/best_params.json
+  best_params: src/evaluation/best_params.json
 
 evaluate:
-  metrics_file: src/reports/metrics.json
-  confusion_matrix_image: src/reports/confusion_matrix.png
-  confusion_matrix_data: src/reports/confusion_matrix_data.csv
+  # migrate to -- folder_prefix: src/evaluation
+  metrics_file: src/evaluation/metrics.json
+  confusion_matrix_image: src/evaluation/confusion_matrix.png
+  confusion_matrix_data: src/evaluation/confusion_matrix_data.csv
   tile_id_loc: data
   tile_s3_bucket: tof-output
