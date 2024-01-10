@@ -13,10 +13,11 @@ from sklearn.metrics import (
 )
 from sklearn.svm import SVC
 from sklearn.utils.class_weight import compute_class_weight
-from lightgbm import LGBMClassifier
-from xgboost import XGBClassifier
+# from lightgbm import LGBMClassifier
+# from xgboost import XGBClassifier
 from catboost import CatBoostClassifier
 import pickle
+import json
 
 class UnsupportedClassifier(Exception):
     def __init__(self, estimator_name):
@@ -38,8 +39,8 @@ def get_supported_estimator():
     return {
         "rfc": RandomForestClassifier,
         "svm": SVC,
-        "lgbm": LGBMClassifier,
-        "xgb": XGBClassifier,
+        # "lgbm": LGBMClassifier,
+        # "xgb": XGBClassifier,
         "cat": CatBoostClassifier,
         "lr": LogisticRegression,
     }
@@ -57,7 +58,7 @@ def get_supported_metrics():
         "recall": recall_score,
         "f1": f1_score,
         "roc_auc": roc_auc_score,
-        "logloss": log_loss
+        "log_loss": log_loss
     }
 
 def fit_estimator(X_train,
@@ -67,8 +68,7 @@ def fit_estimator(X_train,
                 estimator_name,
                 metric_name,
                 model_params_dict,
-                fit_params_dict,
-                ):
+                logger):
 
     '''
     Train a machine learning model, evaluate its performance, and return the results. Raises UnsupportedClassifier
@@ -104,9 +104,15 @@ def fit_estimator(X_train,
     if metric_name not in metrics.keys():
         raise UnsupportedMetric(metric_name)
 
-    metric_fun = metrics[metric_name]
+    with open('models/model_specs/class_weights.json') as fp:
+        class_weights = json.load(fp)
+    model_params_dict['class_weights'] = class_weights
+
+    # metric fun creates the function for the specified metric, cool!
+    metric_func = metrics[metric_name]
     model = estimator(**model_params_dict)
-    model.fit(X_train, y_train, **fit_params_dict)
-    metric = metric_fun(y_test, model.predict(X_test))
+    model.fit(X_train, y_train) 
+    preds = model.predict(X_test)
+    metric = metric_func(y_test, preds)
 
     return metric, model, X_test
