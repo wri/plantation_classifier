@@ -14,9 +14,8 @@ def random_search_cat(X_train,
                 y_test,
                 estimator_name,
                 metric_name,
-                model_params_dict,
                 logger,
-                param_path):
+                param_path): 
     '''
     Performs a randomized search of hyperparameters using Catboost's built in
     random search method and plots the results, then
@@ -41,18 +40,23 @@ def random_search_cat(X_train,
     depth_min = param_dist['depth_min']
     depth_max = param_dist['depth_max']
     depth_step = param_dist['depth_step']
-    leaf_min = param_dist['leaf_min']
-    leaf_max = param_dist['leaf_max']
-    leaf_step = param_dist['leaf_step']                               
+    leaf_min = param_dist['leaf_reg_min']
+    leaf_max = param_dist['leaf_reg_max']
+    leaf_step = param_dist['leaf_reg_step'] 
+    mdl_min = param_dist['min_data_leaf_min']
+    mdl_max = param_dist['min_data_leaf_max']
+    mdl_step = param_dist['min_data_leaf_step']                            
 
     rs_params = {'iterations': [int(x) for x in np.linspace(iter_min, iter_max, iter_step)],
                   'depth': [int(x) for x in np.linspace(depth_min, depth_max, depth_step)],
                   'l2_leaf_reg': [int(x) for x in np.linspace(leaf_min, leaf_max, leaf_step)],
-                  'learning_rate': param_dist['learn_rate']}
+                  'learning_rate': param_dist['learn_rate'],
+                  'min_data_in_leaf': [int(x) for x in np.linspace(mdl_min, mdl_max, mdl_step)],
+                  }
 
     # instantiate the classifier and perform Catboost built in method for random search
     cat = CatBoostClassifier(random_state=params['base']['random_state'], 
-                             loss_function=params['tune']['estimators'][estimator_name]['loss_function'], 
+                             loss_function=params['train']['estimators'][estimator_name]['param_grid']['loss_function'], # use same as train
                              verbose=params['tune']['verbose'])
     
     randomized_search_result = cat.randomized_search(rs_params,
@@ -71,8 +75,8 @@ def random_search_cat(X_train,
                                                     y_test,
                                                     estimator_name,
                                                     metric_name,
-                                                    model_params_dict,
                                                     randomized_search_result['params'],
+                                                    logger
                                                     )
     
     
