@@ -8,17 +8,17 @@ data_load:
   bucket_name: restoration-monitoring
   folder_prefix: plantation-mapping/data/train/
   local_prefix: data/
-  ceo_survey: 
-    - v08 
-    - v14 
-    - v15 
-    - v18 
-    - v19 
+  ceo_survey:
+    - v08
+    # - v14
+    - v15
+    - v18
+    - v19
     - v20
   data_prefix_list:
     - slope
     - s1
-    - s2 
+    - s2
     - dem
     - features-ckpt-2023-02-09
     - labels
@@ -26,11 +26,11 @@ data_load:
     - features-ard
 
 data_condition:
-  select_features: True 
+  select_features: True
   selected_features: data/train/selected_features.json
   classes: 4
   ard_subsample: 4
-  subset_fraction: 1.0 # set to 1.0 for all data
+  subset_fraction: 0.10 # set to 1.0 for all data
   test_split: 20
   train_split: 80
   val_split: 25
@@ -40,10 +40,10 @@ data_condition:
   y_test: data/train/y_test.pkl
 
 train:
-  model_name: model 
-  perform_fs: False #this will also trigger scaling
+  model_name: model
+  perform_fs: True #this will also trigger scaling
   tune_hyperparams: True
-  max_features: 40    # number of feats to use in feature selection
+  max_features: 40 # number of feats to use in feature selection
   estimator_name: cat
   cv: 3
   tuning_metric: balanced_accuracy
@@ -72,9 +72,9 @@ train:
     cat:
       importance_metric: shap
       use_class_weights: true
-      use_defaults: true 
+      use_defaults: true
       param_grid:
-        loss_function: MultiClass 
+        loss_function: MultiClass
         random_state: 121
         # iterations: 811         #default is 500
         # depth: 10               #default is 6
@@ -87,7 +87,7 @@ train:
 tune:
   # use_fs_data: True
   estimator_name: cat
-  n_iter: 3 #num of parameter settings that are sampled
+  n_iter: 5 #num of parameter settings that are sampled
   cv: 3
   plot: False
   verbose: False

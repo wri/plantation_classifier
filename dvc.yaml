@@ -23,8 +23,8 @@ stages:
       - data/train/y_train.pkl
       - data/train/y_test.pkl
 
-  train_model:
-    cmd: python src/stage_train_model.py --params=params.yaml
+  select_features:
+    cmd: python src/stage_select_features.py --params=params.yaml
     deps:
       - data/train/X_train.pkl
       - data/train/X_test.pkl
@@ -32,8 +32,44 @@ stages:
       - data/train/y_test.pkl
       - src/model/feature_selection.py
       - src/model/train.py
+      - src/stage_select_features.py
+    params:
+      - base
+      - data_condition
+      - train
+    outs:
+      - data/train/selected_features.json
+
+  tune_hyperparameters:
+    cmd: python src/stage_tune_hyperparameters.py --params=params.yaml
+    deps:
+      - data/train/X_train.pkl
+      - data/train/X_test.pkl
+      - data/train/y_train.pkl
+      - data/train/y_test.pkl
+      - data/train/selected_features.json
+      - src/model/train.py
       - src/model/tune.py
+      - src/stage_tune_hyperparameters.py
+    params:
+      - base
+      - data_condition
+      - train
+      - tune
+    outs:
+      - src/evaluation/best_params.json
+
+  train_model:
+    cmd: python src/stage_train_model.py --params=params.yaml
+    deps:
+      - data/train/X_train.pkl
+      - data/train/X_test.pkl
+      - data/train/y_train.pkl
+      - data/train/y_test.pkl
+      - src/model/train.py
       - src/stage_train_model.py
+      - data/train/selected_features.json
+      - src/evaluation/best_params.json
     params:
       - base
       - data_condition
@@ -41,15 +77,13 @@ stages:
       - tune
     outs:
       - models/model.joblib
-      - data/train/selected_features.json
-      - src/evaluation/best_params.json
 
   evaluate_model:
     cmd: python src/stage_evaluate_model.py --params=params.yaml
     deps:
-      - data/train/X_test.pkl 
+      - data/train/X_test.pkl
       - data/train/y_test.pkl
-      - models/model.joblib 
+      - models/model.joblib
       - src/evaluation/validation_visuals.py
       - src/stage_evaluate_model.py
     params:

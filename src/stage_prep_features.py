@@ -9,52 +9,58 @@ from features import create_xy
 
 
 def featurize(param_path: Text) -> None:
-    '''
-    
-    '''
+    """ """
     with open(param_path) as file:
         params = yaml.safe_load(file)
- 
+
     logger = get_logger("FEATURIZE", log_level=params["base"]["log_level"])
-    perform_scaling = params['train']['perform_fs'] # scaling is only done if fs performed
-    perform_fs = params['train']['perform_fs']
-    perform_hp = params['train']['tune_hyperparams']
+    perform_scaling = params["train"][
+        "perform_fs"
+    ]  # scaling is only done if fs performed
+    perform_fs = params["train"]["perform_fs"]
+    perform_hp = params["train"]["tune_hyperparams"]
     logger.info(f"Perform scaling: {perform_scaling}")
     logger.info(f"Perform feature selection: {perform_fs}")
     logger.info(f"Perform tuning: {perform_hp}")
-                
-    ceo_batch = params["data_load"]['ceo_survey'] 
+
+    ceo_batch = params["data_load"]["ceo_survey"]
     logger.info(f"CEO batch: {ceo_batch}")
 
     # if the data condition specifies fs, prep training data w fs
     # this is different from conducting the fs exercise
-    if params['data_condition']['select_features']: 
-        logger.info("Preparing X, y with select features.")
+    if params["data_condition"]["select_features"]:
+        logger.info("Preparing X, y with selected features.")
         # with open(params['data_condition']['selected_features']) as fp:
         #     report = json.load(fp)
-        #     fs_indices = report['feature_index'] 
-        
+        #     fs_indices = report['feature_index']
+
         # for now this will pull from the non dvc file -- hard coded
-        with open('models/model_specs/selected_features.json') as fp:
-            report = json.load(fp)
-            fs_indices = report['feature_index'] 
+        try:
+            with open("models/model_specs/selected_features.json") as fp:
+                report = json.load(fp)
+                fs_indices = report["feature_index"]
+        except FileNotFoundError:
+            logger.error(
+                "No selected features json found, proceeding with all features"
+            )
+            fs_indices = []
 
     else:
         fs_indices = []
 
     X, y = create_xy.build_training_sample(
         ceo_batch,
-        classes=params['data_condition']['classes'], 
+        classes=params["data_condition"]["classes"],
         params_path=param_path,
         logger=logger,
-        feature_select=fs_indices, 
-        ) 
+        feature_select=fs_indices,
+    )
 
     logger.info("X and y loaded")
     logger.info(f"X and y shape: {X.shape, y.shape}")
 
-    # option to subset the training data 
-    # by randomly selecting n random plots by index 
+    # option to subset the training data
+    # by randomly selecting n random plots by index
     if params["data_condition"]["subset_fraction"] < 1.0:
         np.random.seed(params["base"]["random_state"])
         subset_idx = np.random.choice(
@@ -66,14 +72,15 @@ def featurize(param_path: Text) -> None:
         y = y[subset_idx]
         logger.debug(f"X data subsetted with final dimensions: {X.shape}")
         logger.debug(f"y data subsetted with final dimensions: {y.shape}")
-    
 
-    X_train, X_test, y_train, y_test = create_xy.reshape_and_scale(X, 
-                                                                  y, 
-                                                                  perform_fs, #only scale if rs performed
-                                                                  params["train"]["model_name"],
-                                                                  param_path,  
-                                                                  logger)
+    X_train, X_test, y_train, y_test = create_xy.reshape_and_scale(
+        X,
+        y,
+        perform_fs,  # only scale if rs performed
+        params["train"]["model_name"],
+        param_path,
+        logger,
+    )
     logger.info(f"Train and test set generated")
     with open(params["data_condition"]["X_train"], "wb") as fp:
         pickle.dump(X_train, fp)
