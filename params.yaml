@@ -7,7 +7,7 @@ data_load:
   download_data: false
   bucket_name: restoration-monitoring
   folder_prefix: plantation-mapping/data/train/
-  local_prefix: data/
+  local_prefix: ../data/
   ceo_survey: 
     - v08 
     - v14 
@@ -26,24 +26,22 @@ data_load:
     - features-ard
 
 data_condition:
-  select_features: True 
-  selected_features: data/train/selected_features.json
+  select_features: False
+  selected_features: ../data/train/selected_features.json
   classes: 4
   ard_subsample: 4
   subset_fraction: 1.0 # set to 1.0 for all data
   test_split: 20
   train_split: 80
   val_split: 25
-  X_train: data/train/X_train.pkl
-  y_train: data/train/y_train.pkl
-  X_test: data/train/X_test.pkl
-  y_test: data/train/y_test.pkl
+  X_train: ../data/train/X_train.pkl
+  y_train: ../data/train/y_train.pkl
+  X_test: ../data/train/X_test.pkl
+  y_test: ../data/train/y_test.pkl
+  class_weights: ../data/train/class_weights.json
 
 train:
   model_name: model 
-  perform_fs: False #this will also trigger scaling
-  tune_hyperparams: True
-  max_features: 40    # number of feats to use in feature selection
   estimator_name: cat
   cv: 3
   tuning_metric: balanced_accuracy
@@ -76,18 +74,24 @@ train:
       param_grid:
         loss_function: MultiClass 
         random_state: 121
-        # iterations: 811         #default is 500
+        # iterations: 811         #default is 500 # guess this isn't needed
         # depth: 10               #default is 6
         # 12_leaf_reg: 11         #default is 3
         # min_data_in_leaf: 50    #default is 1
         # learning_rate: 0.04       #default is 0.1007
         logging_level: Silent
-  model_dir: models/
+  model_dir: ../models/
+
+select:
+  scale: True
+  perform_fs: True #this will also trigger scaling
+  max_features: 40    # number of feats to use in feature selection
+  fs_analysis: feat_imp
+
 
 tune:
-  # use_fs_data: True
   estimator_name: cat
-  n_iter: 3 #num of parameter settings that are sampled
+  n_iter: 30 #num of parameter settings that are sampled
   cv: 3
   plot: False
   verbose: False
@@ -110,12 +114,12 @@ tune:
           - .02
           - .03
           - .04
-  best_params: src/evaluation/best_params.json
+  best_params: ../src/evaluation/best_params.json
 
-evaluate:
+evaluate: 
   # migrate to -- folder_prefix: src/evaluation
-  metrics_file: src/evaluation/metrics.json
-  confusion_matrix_image: src/evaluation/confusion_matrix.png
-  confusion_matrix_data: src/evaluation/confusion_matrix_data.csv
+  metrics_file: ../src/evaluation/metrics.json
+  confusion_matrix_image: ../src/evaluation/confusion_matrix.png
+  confusion_matrix_data: ../src/evaluation/confusion_matrix_data.csv
   tile_id_loc: data
   tile_s3_bucket: tof-output
