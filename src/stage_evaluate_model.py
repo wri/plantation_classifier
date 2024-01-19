@@ -64,6 +64,7 @@ def evaluate_model(params_path: Text) -> None:
         y_test = pickle.load(fp)
 
     logger.info("Evaluating (building report)")
+    y_test = y_test.astype('str')
 
     prediction = model.predict(X_test)
     accuracy = accuracy_score(y_true=y_test, y_pred=prediction)
@@ -71,7 +72,7 @@ def evaluate_model(params_path: Text) -> None:
     f1 = f1_score(y_true=y_test, y_pred=prediction, average="weighted")
     precision = precision_score(y_true=y_test, y_pred=prediction, average="weighted")
     recall = recall_score(y_true=y_test, y_pred=prediction, average="weighted")
-
+    
     cm = confusion_matrix(y_test, prediction)
 
     report = {
@@ -97,10 +98,11 @@ def evaluate_model(params_path: Text) -> None:
             },
             fp=fp,
         )
-
+    
+    # converts ['0.0', '2.0', '3.0', '1.0'] to [0, 2, 3, 1]
     logger.info("Creating confusion matrix")
     labels = list(set(y_test))
-    labels = [int(fl) for fl in labels]
+    labels = [int(float(fl)) for fl in labels]
 
     # save confusion_matrix.png and data
     plt = plot_confusion_matrix(cm=report["cm"], target_names=labels, normalize=False)
@@ -109,8 +111,8 @@ def evaluate_model(params_path: Text) -> None:
     logger.info(f"Confusion matrix saved to : {confusion_matrix_png_path}")
 
     confusion_matrix_data_path = (params["evaluate"]["confusion_matrix_data"])
-    y_test = [int(fl) for fl in y_test]
-    prediction = [int(fl) for fl in prediction]
+    y_test = [int(float(fl)) for fl in y_test]
+    prediction = [int(float(fl)) for fl in prediction]
     write_confusion_matrix_data(y_test, 
                                 prediction, 
                                 labels=labels, 

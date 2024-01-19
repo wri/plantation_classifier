@@ -451,7 +451,7 @@ def reshape_arr(arr):
     return reshaped
 
 
-def reshape_and_scale(X, y, scale, v_train_data, params_path, logger):
+def reshape_and_scale(X, y, scale, params_path, logger):
     '''
     Reshapes x and y for input into a machine learning model. 
     Optionally scales the training data
@@ -470,13 +470,6 @@ def reshape_and_scale(X, y, scale, v_train_data, params_path, logger):
                                     random_state=params["base"]["random_state"],
                                     )
     logger.debug(f"X_train: {X_train.shape}, X_test: {X_test.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}")
-    logger.info(f'Computing and saving class weights')
-    classes = np.unique(y_train)
-    weights = compute_class_weight(class_weight='balanced', classes=classes, y=y_train)
-    class_weights = dict(zip(classes, weights))
-    with open('models/model_specs/class_weights.json', "w") as fp:
-        json.dump(obj=class_weights, fp=fp)
-
     if scale:
         logger.info('Scaling training data')
         min_all = []
@@ -503,17 +496,25 @@ def reshape_and_scale(X, y, scale, v_train_data, params_path, logger):
                 max_all.append(maxs) 
             else:
                 pass
-        np.save(f'data/mins_{v_train_data}', min_all)
-        np.save(f'data/maxs_{v_train_data}', max_all)
+        
+        np.save(params['data_condition']['mins'], min_all)
+        np.save(params['data_condition']['maxs'], max_all)
         #logger.debug(f"The data was scaled to mins: {min_all} and maxs: {max_all}")
 
     X_train_ss = reshape_arr(X_train)
     X_test_ss = reshape_arr(X_test)
     y_train = reshape_arr(y_train)
     y_test = reshape_arr(y_test)
-
+    
     logger.debug(
         f"Reshaped X_train: {X_train_ss.shape} X_test: {X_test_ss.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}"
         )
+
+    logger.info(f'Computing and saving class weights')
+    classes = np.unique(y_train)
+    weights = compute_class_weight(class_weight='balanced', classes=classes, y=y_train)
+    class_weights = dict(zip(classes, weights))
+    with open(params['data_condition']['class_weights'], "w") as fp:
+        json.dump(obj=class_weights, fp=fp)
 
     return X_train_ss, X_test_ss, y_train, y_test

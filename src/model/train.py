@@ -104,10 +104,9 @@ def fit_estimator(X_train,
     if metric_name not in metrics.keys():
         raise UnsupportedMetric(metric_name)
 
-    with open('models/model_specs/class_weights.json') as fp:
-        class_weights = json.load(fp)
-    model_params_dict['class_weights'] = class_weights
-
+    print(X_train.dtype, X_test.dtype, y_train.dtype, y_test.dtype)
+    y_test = y_test.astype('str')
+    
     # metric fun creates the function for the specified metric, cool!
     metric_func = metrics[metric_name]
     model = estimator(**model_params_dict)

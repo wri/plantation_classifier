@@ -26,22 +26,25 @@ data_load:
     - features-ard
 
 data_condition:
-  select_features: False
-  selected_features: ../data/train/selected_features.json
+  select_features: True
+  scale: False
+  selected_features: ../data/train/selected_features.csv
   classes: 4
   ard_subsample: 4
   subset_fraction: 1.0 # set to 1.0 for all data
   test_split: 20
   train_split: 80
   val_split: 25
-  X_train: ../data/train/X_train.pkl
-  y_train: ../data/train/y_train.pkl
-  X_test: ../data/train/X_test.pkl
-  y_test: ../data/train/y_test.pkl
-  class_weights: ../data/train/class_weights.json
+  X_train: ../data/train/X_train_fs.pkl
+  y_train: ../data/train/y_train_fs.pkl
+  X_test: ../data/train/X_test_fs.pkl
+  y_test: ../data/train/y_test_fs.pkl
+  mins: ../data/train/mins.npy # these are not tracked by dvc
+  maxs: ../data/train/maxs.npy
+  class_weights: ../data/train/class_weights_p2.json
 
 train:
-  model_name: model 
+  model_name: model_p2
   estimator_name: cat
   cv: 3
   tuning_metric: balanced_accuracy
@@ -83,14 +86,11 @@ train:
   model_dir: ../models/
 
 select:
-  scale: True
-  perform_fs: True #this will also trigger scaling
   max_features: 40    # number of feats to use in feature selection
   fs_analysis: feat_imp
 
 
 tune:
-  estimator_name: cat
   n_iter: 30 #num of parameter settings that are sampled
   cv: 3
   plot: False
@@ -118,8 +118,8 @@ tune:
 
 evaluate: 
   # migrate to -- folder_prefix: src/evaluation
-  metrics_file: ../src/evaluation/metrics.json
-  confusion_matrix_image: ../src/evaluation/confusion_matrix.png
-  confusion_matrix_data: ../src/evaluation/confusion_matrix_data.csv
+  metrics_file: ../src/evaluation/metrics_p2.json
+  confusion_matrix_image: ../src/evaluation/confusion_matrix_p2.png
+  confusion_matrix_data: ../src/evaluation/confusion_matrix_data_p2.csv
   tile_id_loc: data
   tile_s3_bucket: tof-output

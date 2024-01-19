@@ -60,10 +60,6 @@ def perform_tuning(param_path: Text) -> None:
     tuning_params['class_weights'] = class_weights
     with open(params["tune"]["best_params"], "w") as fp:
         json.dump(obj=tuning_params, fp=fp)
-
-    # # save other untracked version - hard coded for now
-    # with open('models/model_specs/best_params.json', "w") as fp:
-    #     json.dump(obj=tuning_params, fp=fp)
         
     logger.info(f"Fitting model with {tuning_params}")
     metric, tuned_model, X_test = trn.fit_estimator(X_train,

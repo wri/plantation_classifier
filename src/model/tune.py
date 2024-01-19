@@ -67,19 +67,5 @@ def random_search_cat(X_train,
                                                      params['tune']['plot'],
                                                      params['tune']['verbose'],
                                                      )
-        
-    logger.info(f"Fitting model with {randomized_search_result['params']} ")
-    metric, tuned_model, X_test = trn.fit_estimator(X_train,
-                                                    X_test,
-                                                    y_train,
-                                                    y_test,
-                                                    estimator_name,
-                                                    metric_name,
-                                                    randomized_search_result['params'],
-                                                    logger
-                                                    )
     
-    
-    
-    # write scores somewhere?
-    return randomized_search_result, tuned_model
+    return randomized_search_result['params']

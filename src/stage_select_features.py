@@ -3,6 +3,7 @@ from typing import Text
 import json
 import pickle
 import yaml
+import pandas as pd
 import numpy as np
 from pathlib import Path
 from utils.logs import get_logger
@@ -20,7 +21,7 @@ def perform_feature_selection(param_path: Text) -> None:
     model_dir = Path(params["train"]["model_dir"])
     model_path = model_dir / params['train']['model_name']
     feature_analysis = params['select']['fs_analysis']
-    max_features = params["train"]["max_features"]
+    max_features = params["select"]["max_features"]
     assert max_features <= 81
     logger.info(f"Max features for feature selection: {max_features}")
 
@@ -45,23 +46,18 @@ def perform_feature_selection(param_path: Text) -> None:
                                             logger,
                                             max_features)
         logger.info(f'Writing features to file')
+        df = pd.DataFrame(top_feats, columns=['feature_index'])
+        df.to_csv(params["data_condition"]["selected_features"], index=False)
         
         # save dvc version
-        with open(params["data_condition"]["selected_features"], "w") as fp:
-            json.dump(
-                obj={"feature_index": top_feats,
-                    "n_features": len(top_feats)},
-                fp=fp,
-                )
-        # # save other untracked version - hard coded for now
-        # with open('models/model_specs/selected_features.json', "w") as fp:
+        # with open(params["data_condition"]["selected_features"], "w") as fp:
         #     json.dump(
         #         obj={"feature_index": top_feats,
         #             "n_features": len(top_feats)},
         #         fp=fp,
         #         )
 
-    if feature_analysis == 'shap':
+    else: #this code needs to be updated
         logger.info(f"Performing feature selection with SHAP analysis")
         select_X_train, select_X_test, fs_model = fsl.backward_selection(
             X_train,
@@ -91,11 +87,6 @@ def perform_feature_selection(param_path: Text) -> None:
                     "n_features": len(list(select_X_test.columns))},
                 fp=fp,
                 )
-    
-    # or train model with all feats and create empty file as placeholder
-    else:
-        with open(params["data_condition"]["selected_features"], "wb") as fp:
-            pickle.dump({}, fp)
     
 
 if __name__ == "__main__":

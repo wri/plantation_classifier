@@ -10,6 +10,7 @@ src/reports/*
 plantations-packageslist.txt
 src/fil-result/*
 fil-result/*
+pipeline1/cheatsheet.yaml
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

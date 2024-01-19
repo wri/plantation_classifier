@@ -9,16 +9,16 @@ stages:
       - ${params}:
         - base
         - data_condition
-        - train
     deps:
-      - ../src/features/create_xy.py
+      - ../src/features/create_xy.py 
       - ../src/stage_prep_features.py
+      - ../data/train/selected_features.csv
     outs:
-      - ../data/train/X_train.pkl
-      - ../data/train/X_test.pkl
-      - ../data/train/y_train.pkl
-      - ../data/train/y_test.pkl
-      - ../data/train/class_weights.json
+      - ../data/train/X_train_fs.pkl
+      - ../data/train/X_test_fs.pkl
+      - ../data/train/y_train_fs.pkl
+      - ../data/train/y_test_fs.pkl
+      - ../data/train/class_weights_p2.json
 
   tune_hyperparams:
     cmd: python ../src/stage_tune_hyperparams.py --params=${params}
@@ -29,17 +29,17 @@ stages:
         - train
         - tune
     deps:
-      - ../data/train/X_train.pkl
-      - ../data/train/X_test.pkl
-      - ../data/train/y_train.pkl
-      - ../data/train/y_test.pkl
-      - ../data/train/selected_features.json # this file should be leftover from the last pipeline iteration
+      - ../data/train/X_train_fs.pkl
+      - ../data/train/X_test_fs.pkl
+      - ../data/train/y_train_fs.pkl
+      - ../data/train/y_test_fs.pkl
+      - ../data/train/selected_features.csv # this file created in pipeline1
       - ../src/model/tune.py
       - ../src/model/train.py
       - ../src/stage_tune_hyperparameters.py
     outs:
       - ../data/train/best_params.json
-      - ../models/model.joblib
+      - ../models/model_p2.joblib
 
   evaluate_model:
     cmd: python ../src/stage_evaluate_model.py --params=${params}
@@ -50,17 +50,17 @@ stages:
         - train
         - evaluate
     deps:
-      - ../data/train/X_test.pkl 
-      - ../data/train/y_test.pkl
-      - ../models/model.joblib 
+      - ../data/train/X_test_fs.pkl 
+      - ../data/train/y_test_fs.pkl
+      - ../models/model_p2.joblib 
       - ../src/evaluation/validation_visuals.py
       - ../src/stage_evaluate_model.py
     metrics:
-      - ../src/evaluation/metrics.json
+      - ../src/evaluation/metrics_p2.json
       #cache: false  # keep as part of git history
     plots:
-      - ../src/evaluation/confusion_matrix.png
-      - ../src/evaluation/confusion_matrix_data.csv:
+      - ../src/evaluation/confusion_matrix_p2.png
+      - ../src/evaluation/confusion_matrix_data_p2.csv:
           template: confusion_normalized
           x: predicted
           y: y_true
