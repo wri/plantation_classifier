@@ -450,8 +450,43 @@ def reshape_arr(arr):
         reshaped = np.reshape(arr, (np.prod(arr.shape[:])))
     return reshaped
 
+def scale_arr(X_train, X_test, mins_path, maxs_path):
+    '''
+    Performs manual scaling of training data
+    Saves mins and maxs to provided file paths
+    '''
 
-def reshape_and_scale(X, y, scale, params_path, logger):
+    min_all = []
+    max_all = []
+
+    for band in range(0, X_train.shape[-1]):
+        mins = np.percentile(X_train[..., band], 1)
+        maxs = np.percentile(X_train[..., band], 99)
+        if maxs > mins:
+            # clip values in each band based on min/max of training dataset
+            X_train[..., band] = np.clip(X_train[..., band], mins, maxs)
+            X_test[..., band] = np.clip(X_test[..., band], mins, maxs)
+
+            #calculate standardized data
+            midrange = (maxs + mins) / 2
+            rng = maxs - mins
+            X_train_std = (X_train[..., band] - midrange) / (rng / 2)
+            X_test_std = (X_test[..., band] - midrange) / (rng / 2)
+
+            # update each band in X_train and X_test to hold standardized data
+            X_train[..., band] = X_train_std
+            X_test[..., band] = X_test_std
+            #end_min, end_max = X_train.min(), X_train.max()
+            min_all.append(mins)
+            max_all.append(maxs) 
+    
+    np.save(mins_path, min_all)
+    np.save(maxs_path, max_all)
+    #logger.debug(f"The data was scaled to mins: {min_all} and maxs: {max_all}")
+    return X_train, X_test
+
+
+def prepare_model_inputs(X, y, params_path, logger):
     '''
     Reshapes x and y for input into a machine learning model. 
     Optionally scales the training data
@@ -469,46 +504,26 @@ def reshape_and_scale(X, y, scale, params_path, logger):
                                     train_size=((params["data_condition"]["train_split"] / 100)),
                                     random_state=params["base"]["random_state"],
                                     )
+
     logger.debug(f"X_train: {X_train.shape}, X_test: {X_test.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}")
-    if scale:
-        logger.info('Scaling training data')
-        min_all = []
-        max_all = []
-        for band in range(0, X_train.shape[-1]):
-            mins = np.percentile(X_train[..., band], 1)
-            maxs = np.percentile(X_train[..., band], 99)
-            if maxs > mins:
-                # clip values in each band based on min/max of training dataset
-                X_train[..., band] = np.clip(X_train[..., band], mins, maxs)
-                X_test[..., band] = np.clip(X_test[..., band], mins, maxs)
+    
+    logger.info('Scaling training data')
+    mins = params['data_condition']['mins']
+    maxs = params['data_condition']['maxs']
+    X_train_scaled, X_test_scaled = scale_arr(X_train, X_test, mins, maxs)
+    
+    # save this version for tuning
+    X_train_unscaled = reshape_arr(X_train)
+    X_test_unscaled = reshape_arr(X_test)
 
-                #calculate standardized data
-                midrange = (maxs + mins) / 2
-                rng = maxs - mins
-                X_train_std = (X_train[..., band] - midrange) / (rng / 2)
-                X_test_std = (X_test[..., band] - midrange) / (rng / 2)
-
-                # update each band in X_train and X_test to hold standardized data
-                X_train[..., band] = X_train_std
-                X_test[..., band] = X_test_std
-                #end_min, end_max = X_train.min(), X_train.max()
-                min_all.append(mins)
-                max_all.append(maxs) 
-            else:
-                pass
-        
-        np.save(params['data_condition']['mins'], min_all)
-        np.save(params['data_condition']['maxs'], max_all)
-        #logger.debug(f"The data was scaled to mins: {min_all} and maxs: {max_all}")
-
-    X_train_ss = reshape_arr(X_train)
-    X_test_ss = reshape_arr(X_test)
+    # return this version
+    X_train_scaled = reshape_arr(X_train_scaled)
+    X_test_scaled = reshape_arr(X_test_scaled)
     y_train = reshape_arr(y_train)
     y_test = reshape_arr(y_test)
-    
-    logger.debug(
-        f"Reshaped X_train: {X_train_ss.shape} X_test: {X_test_ss.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}"
-        )
+
+    logger.debug(f"Reshaped X_train: {X_train_scaled.shape} X_test: {X_test_scaled.shape}")
+    logger.debug(f"Reshaped y_train: {y_train.shape} y_test: {y_test.shape}")
 
     logger.info(f'Computing and saving class weights')
     classes = np.unique(y_train)
@@ -517,4 +532,4 @@ def reshape_and_scale(X, y, scale, params_path, logger):
     with open(params['data_condition']['class_weights'], "w") as fp:
         json.dump(obj=class_weights, fp=fp)
 
-    return X_train_ss, X_test_ss, y_train, y_test
+    return X_train_unscaled, X_test_unscaled, X_train_scaled, X_test_scaled, y_train, y_test
