@@ -14,11 +14,16 @@ stages:
       - ../src/stage_prep_features.py
       - ../data/train/selected_features.csv
     outs:
-      - ../data/train/X_train_fs.pkl
-      - ../data/train/X_test_fs.pkl
-      - ../data/train/y_train_fs.pkl
-      - ../data/train/y_test_fs.pkl
-      - ../data/train/class_weights_p2.json
+      - ../data/train/X_train_fs.pkl:
+          persist: true
+      - ../data/train/X_test_fs.pkl:
+          persist: true
+      - ../data/train/y_train_fs.pkl:
+          persist: true
+      - ../data/train/y_test_fs.pkl:
+          persist: true
+      - ../data/train/class_weights_p2.json:
+          persist: true 
 
   tune_hyperparams:
     cmd: python ../src/stage_tune_hyperparams.py --params=${params}
@@ -36,10 +41,10 @@ stages:
       - ../data/train/selected_features.csv # this file created in pipeline1
       - ../src/model/tune.py
       - ../src/model/train.py
-      - ../src/stage_tune_hyperparameters.py
+      - ../src/stage_tune_hyperparams.py
     outs:
-      - ../data/train/best_params.json
-      - ../models/model_p2.joblib
+      - ../data/train/best_params.json persist:true
+      - ../models/model_p2.joblib persist:true
 
   evaluate_model:
     cmd: python ../src/stage_evaluate_model.py --params=${params}
@@ -56,10 +61,10 @@ stages:
       - ../src/evaluation/validation_visuals.py
       - ../src/stage_evaluate_model.py
     metrics:
-      - ../src/evaluation/metrics_p2.json
+      - ../src/evaluation/metrics_p2.json persist:true
       #cache: false  # keep as part of git history
     plots:
-      - ../src/evaluation/confusion_matrix_p2.png
+      - ../src/evaluation/confusion_matrix_p2.png persist:true
       - ../src/evaluation/confusion_matrix_data_p2.csv:
           template: confusion_normalized
           x: predicted
