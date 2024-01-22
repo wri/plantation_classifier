@@ -23,11 +23,16 @@ stages:
       - ../src/features/create_xy.py
       - ../src/stage_prep_features.py
     outs:
-      - ../data/train/X_train_scaled.pkl
-      - ../data/train/X_test_scaled.pkl
-      - ../data/train/y_train_scaled.pkl
-      - ../data/train/y_test_scaled.pkl
-      - ../data/train/class_weights_p1.json
+      - ../data/train/X_train_scaled.pkl:
+          persist: true
+      - ../data/train/X_test_scaled.pkl:
+          persist: true
+      - ../data/train/y_train_scaled.pkl:
+          persist: true
+      - ../data/train/y_test_scaled.pkl:
+          persist: true
+      - ../data/train/class_weights_p1.json:
+          persist: true
 
   train_model:
     cmd: python ../src/stage_train_model.py --params=${params}
@@ -45,7 +50,8 @@ stages:
       - ../src/model/train.py
       - ../src/stage_train_model.py
     outs:
-      - ../models/model_p1.joblib
+      - ../models/model_p1.joblib:
+          persist: true
 
   select_features:
     cmd: python ../src/stage_select_features.py --params=${params}
@@ -64,7 +70,8 @@ stages:
       - ../src/features/feature_selection.py
       - ../src/stage_select_features.py
     outs:
-      - ../data/train/selected_features.csv
+      - ../data/train/selected_features.csv:
+          persist: true
 
   evaluate_model:
     cmd: python ../src/stage_evaluate_model.py --params=${params}
@@ -82,7 +89,6 @@ stages:
       - ../src/stage_evaluate_model.py
     metrics:
       - ../src/evaluation/metrics_p1.json
-      #cache: false  # keep as part of git history
     plots:
       - ../src/evaluation/confusion_matrix_p1.png
       - ../src/evaluation/confusion_matrix_data_p1.csv:
