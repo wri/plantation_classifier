@@ -16,7 +16,6 @@ def featurize(param_path: Text) -> None:
         params = yaml.safe_load(file)
  
     logger = get_logger("FEATURIZE", log_level=params["base"]["log_level"])
-    scale = params['data_condition']['scale']
     ceo_batch = params["data_load"]['ceo_survey'] 
     logger.info(f"CEO batch: {ceo_batch}")
 
@@ -24,10 +23,6 @@ def featurize(param_path: Text) -> None:
         logger.info("Preparing X, y with select features.")
         top_feats = pd.read_csv(params['data_condition']['selected_features'])
         fs_indices = top_feats.feature_index
-        
-        # with open(params['data_condition']['selected_features']) as fp:
-        #     report = json.load(fp, encoding="UTF-8")
-        #     fs_indices = report['feature_index'] 
         
     else:
         fs_indices = []
@@ -57,13 +52,13 @@ def featurize(param_path: Text) -> None:
         logger.debug(f"X data subsetted with final dimensions: {X.shape}")
         logger.debug(f"y data subsetted with final dimensions: {y.shape}")
     
-
-    X_train, X_test, y_train, y_test = create_xy.reshape_and_scale(X, 
+    # prepare scaled data
+    X_train, X_test, X_train_sc, X_test_sc, y_train, y_test = create_xy.prepare_model_inputs(X, 
                                                                   y, 
-                                                                  scale, 
                                                                   param_path,  
                                                                   logger)
-    logger.info(f"Train and test set generated")
+    # prepare unscaled data w/ selected features
+    logger.info(f"Train and test sets generated")
     with open(params["data_condition"]["X_train"], "wb") as fp:
         pickle.dump(X_train, fp)
     with open(params["data_condition"]["y_train"], "wb") as fp:
@@ -72,6 +67,11 @@ def featurize(param_path: Text) -> None:
         pickle.dump(X_test, fp)
     with open(params["data_condition"]["y_test"], "wb") as fp:
         pickle.dump(y_test, fp)
+
+    with open(params['data_condition']['scaled_train'], "wb") as fp:
+        pickle.dump(X_train_sc, fp)
+    with open(params['data_condition']['scaled_test'], "wb") as fp:
+        pickle.dump(X_test_sc, fp)
     logger.info("Training and testing data exported")
 
 
@@ -81,9 +81,3 @@ if __name__ == "__main__":
     args = args_parser.parse_args()
     featurize(param_path=args.params)
 
-
-
-    # # for now this will pull from the non dvc file -- hard coded
-    #     with open('models/model_specs/selected_features.json') as fp:
-    #         report = json.load(fp)
-    #         fs_indices = report['feature_index'] 

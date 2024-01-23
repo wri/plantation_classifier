@@ -9,12 +9,9 @@ import yaml
 import model.train as trn
 
 def random_search_cat(X_train,
-                X_test,
                 y_train,
-                y_test,
                 estimator_name,
                 metric_name,
-                logger,
                 param_path): 
     '''
     Performs a randomized search of hyperparameters using Catboost's built in

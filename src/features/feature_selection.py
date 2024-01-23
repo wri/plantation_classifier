@@ -29,7 +29,7 @@ def feature_importance(model_path,
     top n (feat_count) most important features
     '''
     logger.info("Loading model and calculating feature importance")
-    model = joblib.load(f'{model_path}.joblib')
+    model = joblib.load(f'{model_path}')
     
     # calculate the feature importance 
     df = model.get_feature_importance(prettified=True)

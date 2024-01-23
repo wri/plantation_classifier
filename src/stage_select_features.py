@@ -18,8 +18,8 @@ def perform_feature_selection(param_path: Text) -> None:
 
     # define parameters for feature selection
     estimator_name = params["train"]["estimator_name"]
-    model_dir = Path(params["train"]["model_dir"])
-    model_path = model_dir / params['train']['model_name']
+    pipe = params['base']['pipeline']
+    model_path = f"{params['train']['model_dir']}{params['train']['model_name']}_{pipe}.joblib"
     feature_analysis = params['select']['fs_analysis']
     max_features = params["select"]["max_features"]
     assert max_features <= 81
@@ -48,16 +48,9 @@ def perform_feature_selection(param_path: Text) -> None:
         logger.info(f'Writing features to file')
         df = pd.DataFrame(top_feats, columns=['feature_index'])
         df.to_csv(params["data_condition"]["selected_features"], index=False)
-        
-        # save dvc version
-        # with open(params["data_condition"]["selected_features"], "w") as fp:
-        #     json.dump(
-        #         obj={"feature_index": top_feats,
-        #             "n_features": len(top_feats)},
-        #         fp=fp,
-        #         )
-
-    else: #this code needs to be updated
+    
+    # this code needs to be updated
+    else: 
         logger.info(f"Performing feature selection with SHAP analysis")
         select_X_train, select_X_test, fs_model = fsl.backward_selection(
             X_train,
@@ -74,7 +67,7 @@ def perform_feature_selection(param_path: Text) -> None:
         # overwrite saved X_train and X_test w feature selected data
         # do we want to save this data?
         logger.info("Saving feature selected model and data.")
-        joblib.dump(fs_model, f'{model_path}.joblib')
+        joblib.dump(fs_model, f'{model_path}')
         with open(params["data_condition"]["X_train"], "wb") as fp:
             pickle.dump(select_X_train, fp)
         with open(params["data_condition"]["X_test"], "wb") as fp:

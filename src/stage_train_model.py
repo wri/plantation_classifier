@@ -18,16 +18,30 @@ def train_model(param_path: Text) -> None:
     with open(param_path) as file:
         params = yaml.safe_load(file)
     logger = get_logger("TRAIN", log_level=params["base"]["log_level"])
+    
+    # if running pipeline 1, scaled data is imported
+    # if running pipeline 2, unscaled data is imported
+    if params['base']['pipeline'] == 'p1':
+        logger.info("Importing scaled training data")
+        with open(params["data_condition"]["scaled_train"], "rb") as fp:
+            X_train = pickle.load(fp)
+        logger.debug(f"X_train shape: {X_train.shape}")
+        with open(params["data_condition"]["scaled_test"], "rb") as fp:
+            X_test = pickle.load(fp)
+        logger.debug(f"X_test shape: {X_test.shape}")
 
-    with open(params["data_condition"]["X_train"], "rb") as fp:
-        X_train = pickle.load(fp)
-    logger.debug(f"X_train shape: {X_train.shape}")
+    else:
+        logger.info("Importing unscaled training data")
+        with open(params["data_condition"]["X_train"], "rb") as fp:
+            X_train = pickle.load(fp)
+        logger.debug(f"X_train shape: {X_train.shape}")
+        with open(params["data_condition"]["X_test"], "rb") as fp:
+            X_test = pickle.load(fp)
+        logger.debug(f"X_test shape: {X_test.shape}")
+
     with open(params["data_condition"]["y_train"], "rb") as fp:
         y_train = pickle.load(fp)
     logger.debug(f"y_train shape: {y_train.shape}")
-    with open(params["data_condition"]["X_test"], "rb") as fp:
-        X_test = pickle.load(fp)
-    logger.debug(f"X_test shape: {X_test.shape}")
     with open(params["data_condition"]["y_test"], "rb") as fp:
         y_test = pickle.load(fp)
     logger.debug(f"y_test shape: {y_test.shape}")
@@ -36,8 +50,8 @@ def train_model(param_path: Text) -> None:
     logger.info("Training and testing data loaded.")
 
     estimator_name = params["train"]["estimator_name"]
-    model_dir = Path(params["train"]["model_dir"])
-    model_path = model_dir / params['train']['model_name']
+    pipe = params['base']['pipeline']
+    model_path = f"{params['train']['model_dir']}{params['train']['model_name']}_{pipe}.joblib"
     model_params = params["train"]["estimators"][estimator_name]["param_grid"]
     model_params['class_weights'] = class_weights
 
@@ -53,7 +67,7 @@ def train_model(param_path: Text) -> None:
                                         logger
                                         )
     logger.info("Saving model")
-    joblib.dump(model, f'{model_path}.joblib')
+    joblib.dump(model, f'{model_path}')
           
 if __name__ == "__main__":
     args_parser = argparse.ArgumentParser()

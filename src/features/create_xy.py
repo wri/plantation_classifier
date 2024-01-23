@@ -356,22 +356,19 @@ def make_sample(sample_shape, s2, slope, s1, txt, ttc, feature_select):
 
     return sample
 
-def build_training_sample(v_train_data, classes, params_path, logger, feature_select):
+def build_training_sample(train_batch, classes, params_path, logger, feature_select):
     '''
     Gathers training data plots from collect earth surveys (v1, v2, v3, etc)
     and loads data to create a sample for each plot. Removes ids where there is no
     cloud-free imagery or "unknown" labels.
 
     Combines samples as X and loads labels as y for input to the model. 
-    Returns baseline accuracy score?
-
-    TODO: finish documentation
     '''
     with open(params_path) as file:
         params = yaml.safe_load(file)
     
     train_data_dir = params['data_load']['local_prefix']
-    plot_ids = gather_plot_ids(v_train_data, train_data_dir, logger)
+    plot_ids = gather_plot_ids(train_batch, train_data_dir, logger)
     logger.info(f"{len(plot_ids)} plots will be used in training.")
 
     if len(feature_select) > 0:
@@ -504,8 +501,8 @@ def prepare_model_inputs(X, y, params_path, logger):
                                     train_size=((params["data_condition"]["train_split"] / 100)),
                                     random_state=params["base"]["random_state"],
                                     )
-
-    logger.debug(f"X_train: {X_train.shape}, X_test: {X_test.shape}, y_train: {y_train.shape}, y_test: {y_test.shape}")
+    logger.debug(f"Original X_train: {X_train.shape} X_test: {X_test.shape}")
+    logger.debug(f"Original y_train: {y_train.shape} y_test: {y_test.shape}")
     
     logger.info('Scaling training data')
     mins = params['data_condition']['mins']

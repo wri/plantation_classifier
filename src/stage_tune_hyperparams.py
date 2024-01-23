@@ -40,21 +40,16 @@ def perform_tuning(param_path: Text) -> None:
     logger.info("Training and testing data loaded.")
 
     estimator_name = params["train"]["estimator_name"]
-    model_dir = Path(params["train"]["model_dir"])
-    model_path = model_dir / params['train']['model_name']
+    pipe = params['base']['pipeline']
+    model_path = f"{params['train']['model_dir']}{params['train']['model_name']}_{pipe}.joblib"
 
     logger.info(f"Starting random search with {params['tune']['n_iter']} samples")
     tuning_params, tuned_model = tune.random_search_cat(X_train,
-                                                        X_test,
                                                         y_train,
-                                                        y_test, 
                                                         params["train"]["estimator_name"],
                                                         params["train"]["tuning_metric"],
-                                                        logger,
                                                         param_path,
                                                         )
-        
-
     
     # add class weights and save to file
     tuning_params['class_weights'] = class_weights
@@ -72,7 +67,7 @@ def perform_tuning(param_path: Text) -> None:
                                                     logger
                                                     )
     logger.info("Saving model")
-    joblib.dump(tuned_model, f'{model_path}.joblib')
+    joblib.dump(tuned_model, f'{model_path}')
 
 if __name__ == "__main__":
     args_parser = argparse.ArgumentParser()

@@ -53,8 +53,8 @@ def evaluate_model(params_path: Text) -> None:
     logger = get_logger("EVALUATE", log_level=params["base"]["log_level"])
 
     logger.info("Loading model and test data")
-    model_dir = params["train"]["model_dir"]
-    model_path = f"{model_dir}{params['train']['model_name']}.joblib"
+    pipe = params['base']['pipeline']
+    model_path = f"{params['train']['model_dir']}{params['train']['model_name']}_{pipe}.joblib"
     model = joblib.load(f'{model_path}')
 
     with open(params["data_condition"]["X_test"], "rb") as fp:
@@ -85,7 +85,7 @@ def evaluate_model(params_path: Text) -> None:
         "actual": y_test,
         "predicted": prediction,
     }
-    metrics_path = params["evaluate"]["metrics_file"]
+    metrics_path = f'{params["evaluate"]["metrics_file"]}_{pipe}.json'
     logger.info(f'Writing metrics to {metrics_path}')
     with open(metrics_path, "w") as fp:
         json.dump(
@@ -106,11 +106,11 @@ def evaluate_model(params_path: Text) -> None:
 
     # save confusion_matrix.png and data
     plt = plot_confusion_matrix(cm=report["cm"], target_names=labels, normalize=False)
-    confusion_matrix_png_path = (params["evaluate"]["confusion_matrix_image"])
+    confusion_matrix_png_path = f'{params["evaluate"]["cm_image"]}_{pipe}.png'
     plt.savefig(confusion_matrix_png_path)
     logger.info(f"Confusion matrix saved to : {confusion_matrix_png_path}")
 
-    confusion_matrix_data_path = (params["evaluate"]["confusion_matrix_data"])
+    confusion_matrix_data_path = f'{params["evaluate"]["cm_data"]}_{pipe}.csv'
     y_test = [int(float(fl)) for fl in y_test]
     prediction = [int(float(fl)) for fl in prediction]
     write_confusion_matrix_data(y_test, 
