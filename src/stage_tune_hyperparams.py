@@ -40,8 +40,7 @@ def perform_tuning(param_path: Text) -> None:
     logger.info("Training and testing data loaded.")
 
     estimator_name = params["train"]["estimator_name"]
-    pipe = params['base']['pipeline']
-    model_path = f"{params['train']['model_dir']}{params['train']['model_name']}_{pipe}.joblib"
+    model_path = f"{params['train']['model_dir']}{params['train']['model_name']}.joblib"
 
     logger.info(f"Starting random search with {params['tune']['n_iter']} samples")
     tuning_params, tuned_model = tune.random_search_cat(X_train,

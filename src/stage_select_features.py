@@ -8,6 +8,7 @@ import numpy as np
 from pathlib import Path
 from utils.logs import get_logger
 from features import feature_selection as fsl
+from features import create_xy
 import joblib
 
 def perform_feature_selection(param_path: Text) -> None:
@@ -16,23 +17,23 @@ def perform_feature_selection(param_path: Text) -> None:
         params = yaml.safe_load(file)
     logger = get_logger("FEATURE SELECTION", log_level=params["base"]["log_level"])
 
-    # define parameters for feature selection
     estimator_name = params["train"]["estimator_name"]
-    pipe = params['base']['pipeline']
-    model_path = f"{params['train']['model_dir']}{params['train']['model_name']}_{pipe}.joblib"
+    model_path = f"{params['train']['model_dir']}{params['train']['model_name']}.joblib"
+    
+    # define parameters for feature selection
     feature_analysis = params['select']['fs_analysis']
     max_features = params["select"]["max_features"]
     assert max_features <= 81
     logger.info(f"Max features for feature selection: {max_features}")
 
-    # load data
-    with open(params["data_condition"]["X_train"], "rb") as fp:
+    # load scaled data
+    with open(params["data_condition"]["scaled_train"], "rb") as fp:
         X_train = pickle.load(fp)
     logger.debug(f"X_train shape: {X_train.shape}")
     with open(params["data_condition"]["y_train"], "rb") as fp:
         y_train = pickle.load(fp)
     logger.debug(f"y_train shape: {y_train.shape}")
-    with open(params["data_condition"]["X_test"], "rb") as fp:
+    with open(params["data_condition"]["scaled_test"], "rb") as fp:
         X_test = pickle.load(fp)
     logger.debug(f"X_test shape: {X_test.shape}")
     with open(params["data_condition"]["y_test"], "rb") as fp:
@@ -49,7 +50,7 @@ def perform_feature_selection(param_path: Text) -> None:
         df = pd.DataFrame(top_feats, columns=['feature_index'])
         df.to_csv(params["data_condition"]["selected_features"], index=False)
     
-    # this code needs to be updated
+    # this code needs to be updated (output files and features saved as csv not json)
     else: 
         logger.info(f"Performing feature selection with SHAP analysis")
         select_X_train, select_X_test, fs_model = fsl.backward_selection(
@@ -65,7 +66,6 @@ def perform_feature_selection(param_path: Text) -> None:
         logger.info(f"Feature selection completed with {select_X_train.shape[1]} features")
 
         # overwrite saved X_train and X_test w feature selected data
-        # do we want to save this data?
         logger.info("Saving feature selected model and data.")
         joblib.dump(fs_model, f'{model_path}')
         with open(params["data_condition"]["X_train"], "wb") as fp:
@@ -80,7 +80,7 @@ def perform_feature_selection(param_path: Text) -> None:
                     "n_features": len(list(select_X_test.columns))},
                 fp=fp,
                 )
-    
+
 
 if __name__ == "__main__":
     args_parser = argparse.ArgumentParser()

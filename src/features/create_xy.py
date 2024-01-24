@@ -486,14 +486,18 @@ def scale_arr(X_train, X_test, mins_path, maxs_path):
 def prepare_model_inputs(X, y, params_path, logger):
     '''
     Reshapes x and y for input into a machine learning model. 
-    Optionally scales the training data
     Scaling is performed manually and mins/maxs are saved
     for use in deployment.
+
+    WIP: Presently this only returns the scaled inputs 
 
     '''
     with open(params_path) as file:
         params = yaml.safe_load(file)
-
+    
+    # ((723, 14, 14, 40), (723, 14, 14))
+    # (578, 14, 14, 40) X_test: (145, 14, 14, 40)
+    # need to operate here on tts features
     X_train, X_test, y_train, y_test = train_test_split(
                                     X,
                                     y,
@@ -504,16 +508,11 @@ def prepare_model_inputs(X, y, params_path, logger):
     logger.debug(f"Original X_train: {X_train.shape} X_test: {X_test.shape}")
     logger.debug(f"Original y_train: {y_train.shape} y_test: {y_test.shape}")
     
+    # scale and reshape
     logger.info('Scaling training data')
     mins = params['data_condition']['mins']
     maxs = params['data_condition']['maxs']
     X_train_scaled, X_test_scaled = scale_arr(X_train, X_test, mins, maxs)
-    
-    # save this version for tuning
-    X_train_unscaled = reshape_arr(X_train)
-    X_test_unscaled = reshape_arr(X_test)
-
-    # return this version
     X_train_scaled = reshape_arr(X_train_scaled)
     X_test_scaled = reshape_arr(X_test_scaled)
     y_train = reshape_arr(y_train)
@@ -529,4 +528,6 @@ def prepare_model_inputs(X, y, params_path, logger):
     with open(params['data_condition']['class_weights'], "w") as fp:
         json.dump(obj=class_weights, fp=fp)
 
-    return X_train_unscaled, X_test_unscaled, X_train_scaled, X_test_scaled, y_train, y_test
+    return X_train_scaled, X_test_scaled, y_train, y_test
+
+

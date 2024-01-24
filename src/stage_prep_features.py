@@ -53,11 +53,11 @@ def featurize(param_path: Text) -> None:
         logger.debug(f"y data subsetted with final dimensions: {y.shape}")
     
     # prepare scaled data
-    X_train, X_test, X_train_sc, X_test_sc, y_train, y_test = create_xy.prepare_model_inputs(X, 
+    X_train, X_test, y_train, y_test = create_xy.prepare_model_inputs(X, 
                                                                   y, 
                                                                   param_path,  
                                                                   logger)
-    # prepare unscaled data w/ selected features
+    # save scaled data
     logger.info(f"Train and test sets generated")
     with open(params["data_condition"]["X_train"], "wb") as fp:
         pickle.dump(X_train, fp)
@@ -67,11 +67,6 @@ def featurize(param_path: Text) -> None:
         pickle.dump(X_test, fp)
     with open(params["data_condition"]["y_test"], "wb") as fp:
         pickle.dump(y_test, fp)
-
-    with open(params['data_condition']['scaled_train'], "wb") as fp:
-        pickle.dump(X_train_sc, fp)
-    with open(params['data_condition']['scaled_test'], "wb") as fp:
-        pickle.dump(X_test_sc, fp)
     logger.info("Training and testing data exported")
 
 

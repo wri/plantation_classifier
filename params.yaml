@@ -7,7 +7,7 @@ data_load:
   download_data: false
   bucket_name: restoration-monitoring
   folder_prefix: plantation-mapping/data/train/
-  local_prefix: ../data/
+  local_prefix: /data/
   ceo_survey: 
     - v08 
     - v14 
@@ -26,25 +26,25 @@ data_load:
     - features-ard
 
 data_condition:
-  select_features: True
-  scale: False
-  selected_features: ../data/train/selected_features.csv
+  select_features: False                 
+  selected_features: data/train/selected_features.csv
   classes: 4
   ard_subsample: 4
   subset_fraction: 1.0 # set to 1.0 for all data
   test_split: 20
   train_split: 80
-  val_split: 25
-  X_train: ../data/train/X_train_fs.pkl
-  y_train: ../data/train/y_train_fs.pkl
-  X_test: ../data/train/X_test_fs.pkl
-  y_test: ../data/train/y_test_fs.pkl
-  mins: ../data/train/mins.npy # these are not tracked by dvc
-  maxs: ../data/train/maxs.npy
-  class_weights: ../data/train/class_weights_p2.json
+  val_split: 25 
+  X_train: data/train/X_train.pkl    
+  y_train: data/train/y_train.pkl     
+  X_test: data/train/X_test.pkl       
+  y_test: data/train/y_test.pkl      
+  mins: data/train/mins.npy 
+  maxs: data/train/maxs.npy
+  class_weights: data/train/class_weights.json
 
 train:
-  model_name: model_p2
+  model_name: model                      
+  model_dir: models/
   estimator_name: cat
   cv: 3
   tuning_metric: balanced_accuracy
@@ -83,15 +83,15 @@ train:
         # min_data_in_leaf: 50    #default is 1
         # learning_rate: 0.04       #default is 0.1007
         logging_level: Silent
-  model_dir: ../models/
+
 
 select:
   max_features: 40    # number of feats to use in feature selection
-  fs_analysis: feat_imp
+  fs_analysis: feat_imp # this is where you specify fs analysis using shap or feature importance
 
 
 tune:
-  n_iter: 30 #num of parameter settings that are sampled
+  n_iter: 21 # num of parameter settings that are sampled
   cv: 3
   plot: False
   verbose: False
@@ -114,12 +114,11 @@ tune:
           - .02
           - .03
           - .04
-  best_params: ../src/evaluation/best_params.json
+  best_params: src/evaluation/best_params.json
 
 evaluate: 
-  # migrate to -- folder_prefix: src/evaluation
-  metrics_file: ../src/evaluation/metrics_p2.json
-  confusion_matrix_image: ../src/evaluation/confusion_matrix_p2.png
-  confusion_matrix_data: ../src/evaluation/confusion_matrix_data_p2.csv
+  metrics_file: src/evaluation/metrics                    
+  cm_image: src/evaluation/confusion_matrix 
+  cm_data: src/evaluation/confusion_matrix_data 
   tile_id_loc: data
   tile_s3_bucket: tof-output
