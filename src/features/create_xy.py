@@ -326,7 +326,7 @@ def gather_plot_ids(v_train_data, local_dir, logger):
 
     return final_ard
 
-def make_sample(sample_shape, s2, slope, s1, txt, ttc, feature_select):
+def make_sample(sample_shape, s2, slope, s1, txt, ttc):
     
     ''' 
     Defines dimensions and then combines slope, s1, s2, TML features and 
@@ -340,8 +340,6 @@ def make_sample(sample_shape, s2, slope, s1, txt, ttc, feature_select):
     feats = np.zeros((sample_shape[0], sample_shape[1], ttc.shape[-1] + txt.shape[-1]), dtype=np.float32)
     feats[..., :ttc.shape[-1]] = ttc
     feats[..., ttc.shape[-1]:] = txt
-    if len(feature_select) > 0:
-        feats = np.squeeze(feats[:, :, [feature_select]])
 
     # define the last dimension of the array
     n_feats = 1 + s1.shape[-1] + s2.shape[-1] + feats.shape[-1] 
@@ -356,7 +354,7 @@ def make_sample(sample_shape, s2, slope, s1, txt, ttc, feature_select):
 
     return sample
 
-def build_training_sample(train_batch, classes, params_path, logger, feature_select):
+def build_training_sample(train_batch, classes, params_path, logger):
     '''
     Gathers training data plots from collect earth surveys (v1, v2, v3, etc)
     and loads data to create a sample for each plot. Removes ids where there is no
@@ -370,16 +368,11 @@ def build_training_sample(train_batch, classes, params_path, logger, feature_sel
     train_data_dir = params['data_load']['local_prefix']
     plot_ids = gather_plot_ids(train_batch, train_data_dir, logger)
     logger.info(f"{len(plot_ids)} plots will be used in training.")
-
-    if len(feature_select) > 0:
-        logger.info(f"Preparing training batch with selected features") 
-        n_feats = 13 + len(feature_select)
-    else:
-        n_feats = 94
         
     # create empty x and y array based on number of plots 
     # x.shape is (plots, 14, 14, n_feats) y.shape is (plots, 14, 14)
     sample_shape=(14, 14)
+    n_feats = 94
     n_samples = len(plot_ids)
     y_all = np.zeros(shape=(n_samples, sample_shape[0], sample_shape[1]))
     x_all = np.zeros(shape=(n_samples, sample_shape[0], sample_shape[1], n_feats))
@@ -393,15 +386,19 @@ def build_training_sample(train_batch, classes, params_path, logger, feature_sel
                                           ard[...,10:11], 
                                           ard[...,11:13], 
                                           ttc, 
-                                          feature_select) 
+                                          ) 
         X = make_sample(sample_shape, 
                         ard[...,0:10], 
                         ard[...,10:11], 
                         ard[...,11:13], 
                         txt, 
                         ttc, 
-                        feature_select)
-        y = load_label(plot, ttc, classes, train_data_dir)
+                        )
+        
+        y = load_label(plot, 
+                       ttc, 
+                       classes, 
+                       train_data_dir)
         x_all[num] = X
         y_all[num] = y
 
@@ -424,7 +421,6 @@ def build_training_sample(train_batch, classes, params_path, logger, feature_sel
         
     # check class balance 
     labels, counts = np.unique(y_all, return_counts=True)
-    #print(f'Class count {dict(zip(labels, counts))}')
     logger.info(f"Class count {dict(zip(labels, counts))}")
 
     return x_all, y_all
@@ -482,8 +478,41 @@ def scale_arr(X_train, X_test, mins_path, maxs_path):
     #logger.debug(f"The data was scaled to mins: {min_all} and maxs: {max_all}")
     return X_train, X_test
 
+def use_select_feats(X_train: np.array, X_test: np.array, feature_select: list):
+    """
+    Filters X_train and X_test to only use indices listed in feature_select 
 
-def prepare_model_inputs(X, y, params_path, logger):
+    Input
+    X_train: array with shape (578, 14, 14, 94) 
+    X_test: array with shape (145, 14, 14, 94)
+
+    Output
+    X_train_fs: array with shape (578, 14, 14, 40) 
+    X_test_fs: array with shape (145, 14, 14, 40) 
+    """
+    n_feats = len(feature_select)
+
+    # create output arrays
+    X_train_fs = np.zeros(shape=(X_train.shape[0], 
+                                    X_train.shape[1], 
+                                    X_train.shape[2],
+                                    n_feats))
+    
+    X_test_fs = np.zeros(shape=(X_test.shape[0], 
+                                    X_test.shape[1], 
+                                    X_test.shape[2],
+                                    n_feats))
+    
+    for i in range(X_train.shape[0]):
+        X_train_fs[i:i+1, ...] = X_train[i:i+1, :, :, feature_select]
+    
+    for i in range(X_train.shape[0]):
+        X_test_fs[i:i+1, ...] = X_test[i:i+1, :, :, feature_select]
+
+    return X_train_fs, X_test_fs
+
+
+def prepare_model_inputs(X, y, params_path, logger, feature_select):
     '''
     Reshapes x and y for input into a machine learning model. 
     Scaling is performed manually and mins/maxs are saved
@@ -494,10 +523,7 @@ def prepare_model_inputs(X, y, params_path, logger):
     '''
     with open(params_path) as file:
         params = yaml.safe_load(file)
-    
-    # ((723, 14, 14, 40), (723, 14, 14))
-    # (578, 14, 14, 40) X_test: (145, 14, 14, 40)
-    # need to operate here on tts features
+
     X_train, X_test, y_train, y_test = train_test_split(
                                     X,
                                     y,
@@ -508,17 +534,27 @@ def prepare_model_inputs(X, y, params_path, logger):
     logger.debug(f"Original X_train: {X_train.shape} X_test: {X_test.shape}")
     logger.debug(f"Original y_train: {y_train.shape} y_test: {y_test.shape}")
     
+    # fs unscaled and reshaped
+    X_train_fs, X_test_fs = use_select_feats(X_train, X_test, feature_select)
+    X_train_fs = reshape_arr(X_train_fs)
+    X_test_fs = reshape_arr(X_test_fs)
+
     # scale and reshape
-    logger.info('Scaling training data')
-    mins = params['data_condition']['mins']
-    maxs = params['data_condition']['maxs']
-    X_train_scaled, X_test_scaled = scale_arr(X_train, X_test, mins, maxs)
+    filepath_mins = params['data_condition']['mins']
+    filepath_maxs = params['data_condition']['maxs']
+    X_train_scaled, X_test_scaled = scale_arr(X_train, 
+                                              X_test, 
+                                              filepath_mins, 
+                                              filepath_maxs)
     X_train_scaled = reshape_arr(X_train_scaled)
     X_test_scaled = reshape_arr(X_test_scaled)
+
+    # prepare y
     y_train = reshape_arr(y_train)
     y_test = reshape_arr(y_test)
 
-    logger.debug(f"Reshaped X_train: {X_train_scaled.shape} X_test: {X_test_scaled.shape}")
+    logger.debug(f"Reshaped, unscaled X_train: {X_train_fs.shape} X_test: {X_test_fs.shape}")
+    logger.debug(f"Reshaped, scaled X_train: {X_train_scaled.shape} X_test: {X_test_scaled.shape}")
     logger.debug(f"Reshaped y_train: {y_train.shape} y_test: {y_test.shape}")
 
     logger.info(f'Computing and saving class weights')
@@ -528,6 +564,6 @@ def prepare_model_inputs(X, y, params_path, logger):
     with open(params['data_condition']['class_weights'], "w") as fp:
         json.dump(obj=class_weights, fp=fp)
 
-    return X_train_scaled, X_test_scaled, y_train, y_test
+    return X_train_scaled, X_test_scaled, X_train_fs, X_test_fs, y_train, y_test
 
 
