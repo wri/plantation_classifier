@@ -23,6 +23,7 @@ def featurize(param_path: Text) -> None:
         logger.info("Preparing X, y with select features.")
         top_feats = pd.read_csv(params['data_condition']['selected_features'])
         fs_indices = top_feats.feature_index
+        fs_indices = [0, 1, 5, 6, 8, 9, 11, 14, 16, 19, 20, 21, 28, 31, 33, 34, 36, 37, 39, 44, 45, 47, 48, 49, 50, 51, 52, 57, 58, 60, 61, 62, 63, 64, 72, 76, 77, 78, 79, 80]
         
     else:
         fs_indices = []
@@ -32,7 +33,6 @@ def featurize(param_path: Text) -> None:
         classes=params['data_condition']['classes'], 
         params_path=param_path,
         logger=logger,
-        feature_select=fs_indices, 
         ) 
 
     logger.info("X and y loaded")
@@ -52,19 +52,23 @@ def featurize(param_path: Text) -> None:
         logger.debug(f"X data subsetted with final dimensions: {X.shape}")
         logger.debug(f"y data subsetted with final dimensions: {y.shape}")
     
-    # prepare scaled data
-    X_train, X_test, y_train, y_test = create_xy.prepare_model_inputs(X, 
-                                                                  y, 
-                                                                  param_path,  
-                                                                  logger)
-    # save scaled data
+  
+    X_train_sc, X_test_sc, X_train_fs, X_test_fs, y_train, y_test = create_xy.prepare_model_inputs(X, 
+                                                                    y, 
+                                                                    param_path,  
+                                                                    logger,
+                                                                    fs_indices,
+                                                                    )
+    # save scaled and unscaled data
+    # NOTE: this is not currrently saving feature selected data
+    # can update per structure of yaml file.
     logger.info(f"Train and test sets generated")
     with open(params["data_condition"]["X_train"], "wb") as fp:
-        pickle.dump(X_train, fp)
+        pickle.dump(X_train_sc, fp)
     with open(params["data_condition"]["y_train"], "wb") as fp:
         pickle.dump(y_train, fp)
     with open(params["data_condition"]["X_test"], "wb") as fp:
-        pickle.dump(X_test, fp)
+        pickle.dump(X_test_sc, fp)
     with open(params["data_condition"]["y_test"], "wb") as fp:
         pickle.dump(y_test, fp)
     logger.info("Training and testing data exported")
