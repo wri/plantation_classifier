@@ -8,17 +8,17 @@ data_load:
   bucket_name: restoration-monitoring
   folder_prefix: plantation-mapping/data/train/
   local_prefix: /data/
-  ceo_survey: 
-    - v08 
-    - v14 
-    - v15 
-    - v18 
-    - v19 
+  ceo_survey:
+    - v08
+    - v14
+    - v15
+    - v18
+    - v19
     - v20
   data_prefix_list:
     - slope
     - s1
-    - s2 
+    - s2
     - dem
     - features-ckpt-2023-02-09
     - labels
@@ -26,25 +26,60 @@ data_load:
     - features-ard
 
 data_condition:
-  select_features: False                 
-  selected_features: data/train/selected_features.csv
   classes: 4
   ard_subsample: 4
   subset_fraction: 1.0 # set to 1.0 for all data
   test_split: 20
   train_split: 80
-  val_split: 25 
-  X_train: data/train/X_train.pkl    
-  y_train: data/train/y_train.pkl     
-  X_test: data/train/X_test.pkl       
-  y_test: data/train/y_test.pkl      
-  mins: data/train/mins.npy 
+  val_split: 25
+  X_train: data/train/X_train.pkl
+  y_train: data/train/y_train.pkl
+  X_test: data/train/X_test.pkl
+  y_test: data/train/y_test.pkl
+  X_train_scaled: data/train/X_train_sc.pkl
+  X_test_scaled: data/train/X_test_sc.pkl
+  mins: data/train/mins.npy
   maxs: data/train/maxs.npy
   class_weights: data/train/class_weights.json
 
+select:
+  select_features: False
+  selected_features: data/train/selected_features.csv
+  max_features: 40 # number of feats to use in feature selection
+  fs_analysis: feat_imp # this is where you specify fs analysis using shap or feature importance
+  X_train_selected: data/train/X_train_selected.pkl
+  X_test_selected: data/train/X_test_selected.pkl
+
+tune:
+  tune_hyperparameters: False
+  n_iter: 21 # num of parameter settings that are sampled
+  cv: 3
+  plot: False
+  verbose: False
+  estimators:
+    cat:
+      param_grid:
+        iter_min: 500
+        iter_max: 1200
+        iter_step: 10
+        depth_min: 6
+        depth_max: 12
+        depth_step: 4
+        leaf_reg_min: 2
+        leaf_reg_max: 30
+        leaf_reg_step: 4
+        min_data_leaf_min: 20
+        min_data_leaf_max: 100
+        min_data_leaf_step: 3
+        learn_rate:
+          - .02
+          - .03
+          - .04
+  best_params: src/evaluation/best_params.json
+
 train:
-  model_name: model                      
   model_dir: models/
+  model_name: models/model.joblib
   estimator_name: cat
   cv: 3
   tuning_metric: balanced_accuracy
@@ -73,9 +108,9 @@ train:
     cat:
       importance_metric: shap
       use_class_weights: true
-      use_defaults: true 
+      use_defaults: true
       param_grid:
-        loss_function: MultiClass 
+        loss_function: MultiClass
         random_state: 121
         # iterations: 811         #default is 500 # guess this isn't needed
         # depth: 10               #default is 6
@@ -84,41 +119,9 @@ train:
         # learning_rate: 0.04       #default is 0.1007
         logging_level: Silent
 
-
-select:
-  max_features: 40    # number of feats to use in feature selection
-  fs_analysis: feat_imp # this is where you specify fs analysis using shap or feature importance
-
-
-tune:
-  n_iter: 21 # num of parameter settings that are sampled
-  cv: 3
-  plot: False
-  verbose: False
-  estimators:
-    cat:
-      param_grid:
-        iter_min: 500
-        iter_max: 1200
-        iter_step: 10
-        depth_min: 6
-        depth_max: 12
-        depth_step: 4
-        leaf_reg_min: 2
-        leaf_reg_max: 30
-        leaf_reg_step: 4
-        min_data_leaf_min: 20
-        min_data_leaf_max: 100
-        min_data_leaf_step: 3
-        learn_rate:
-          - .02
-          - .03
-          - .04
-  best_params: src/evaluation/best_params.json
-
-evaluate: 
-  metrics_file: src/evaluation/metrics                    
-  cm_image: src/evaluation/confusion_matrix 
-  cm_data: src/evaluation/confusion_matrix_data 
+evaluate:
+  metrics_file: src/evaluation/metrics
+  cm_image: src/evaluation/confusion_matrix
+  cm_data: src/evaluation/confusion_matrix_data
   tile_id_loc: data
   tile_s3_bucket: tof-output
