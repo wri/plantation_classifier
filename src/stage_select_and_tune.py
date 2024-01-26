@@ -7,6 +7,7 @@ from utils.logs import get_logger
 import pandas as pd
 from features import feature_selection as fsl
 from model import train as train
+from model import tune as tune
 
 
 def perform_selection_and_tuning(param_path: Text) -> None:
@@ -38,10 +39,8 @@ def perform_selection_and_tuning(param_path: Text) -> None:
     logger.debug(f"y_test shape: {y_test.shape}")
     logger.info("Training and testing data loaded.")
 
-    if (
-        params["select"]["select_features"]
-        == False & params["tune"]["tune_hyperparameters"]
-        == False
+    if (params["select"]["select_features"] == False) and (
+        params["tune"]["tune_hyperparameters"] == False
     ):
         logger.info("Using all features and default hyperparameters")
         df = pd.DataFrame(list(range(0, (X_train.shape[1]))))
@@ -85,18 +84,21 @@ def perform_selection_and_tuning(param_path: Text) -> None:
 
     if params["tune"]["tune_hyperparameters"]:
         logger.info(f"Starting random search with {params['tune']['n_iter']} samples")
-        tuning_params, tuned_model = tune.random_search_cat(X_train,
-                                                        y_train,
-                                                        params["train"]["estimator_name"],
-                                                        params["train"]["tuning_metric"],
-                                                        param_path,
-                                                        )
+        tuning_params, tuned_model = tune.random_search_cat(
+            X_train,
+            y_train,
+            params["train"]["estimator_name"],
+            params["train"]["tuning_metric"],
+            param_path,
+        )
         final_hyperparams = tuned_model.get_all_params()
-
-#  Write all outputs
+        logger.debug(f"Returned params: {tuning_params}")
+        logger.debug(f"Final params: {final_params}")
+    #  Write all outputs
     final_hyperparams["class_weights"] = class_weights
     with open(params["tune"]["best_params"], "w") as fp:
         json.dump(obj=final_hyperparams, fp=fp)
+
 
 if __name__ == "__main__":
     args_parser = argparse.ArgumentParser()
