@@ -11,11 +11,15 @@ plantations-packageslist.txt
 src/fil-result/*
 fil-result/*
 pipeline1/cheatsheet.yaml
+reports/*
+src/models/*
+.vscode/
+*.code-workspace
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
-*.pyc 
+*.pyc
 
 # Jupyter Notebook
 .ipynb_checkpoints

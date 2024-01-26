@@ -7,10 +7,10 @@ data_load:
   download_data: false
   bucket_name: restoration-monitoring
   folder_prefix: plantation-mapping/data/train/
-  local_prefix: /data/
+  local_prefix: data/
   ceo_survey:
     - v08
-    - v14
+    #    - v14
     - v15
     - v18
     - v19
@@ -28,7 +28,7 @@ data_load:
 data_condition:
   classes: 4
   ard_subsample: 4
-  subset_fraction: 1.0 # set to 1.0 for all data
+  subset_fraction: 0.1 # set to 1.0 for all data
   test_split: 20
   train_split: 80
   val_split: 25
@@ -44,7 +44,7 @@ data_condition:
 
 select:
   select_features: False
-  selected_features: data/train/selected_features.csv
+  selected_features_path: data/train/selected_features.csv
   max_features: 40 # number of feats to use in feature selection
   fs_analysis: feat_imp # this is where you specify fs analysis using shap or feature importance
   X_train_selected: data/train/X_train_selected.pkl

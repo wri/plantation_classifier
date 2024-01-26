@@ -21,16 +21,23 @@ stages:
       - src/features/create_xy.py
       - src/stage_prep_features.py
     outs:
-      - ${data_condition.X_train}
-      - ${data_condition.X_train_scaled}
-      - ${data_condition.X_test_scaled}
-      - ${data_condition.X_test}
-      - ${data_condition.y_train}
-      - ${data_condition.y_test}
-      - ${data_condition.class_weights}
+      - ${data_condition.X_train}:
+          persist: True
+      - ${data_condition.X_train_scaled}:
+          persist: True
+      - ${data_condition.X_test_scaled}:
+          persist: True
+      - ${data_condition.X_test}:
+          persist: True
+      - ${data_condition.y_train}:
+          persist: True
+      - ${data_condition.y_test}:
+          persist: True
+      - ${data_condition.class_weights}:
+          persist: True
 
   select_features_hyperparams:
-    cmd: python src/stage_select_features.py --params=params.yaml
+    cmd: python src/stage_select_and_tune.py --params=params.yaml
     params:
       - base
       - data_condition
@@ -47,7 +54,7 @@ stages:
       - src/features/feature_selection.py
       - src/stage_select_features.py
     outs:
-      - ${select.selected_features}
+      - ${select.selected_features_path}
       - ${select.X_train_selected}
       - ${select.X_test_selected}
       - ${tune.best_params}
@@ -61,7 +68,7 @@ stages:
     deps:
       - ${data_condition.y_train}
       - ${data_condition.y_test}
-      - ${select.selected_features}
+      - ${select.selected_features_path}
       - ${select.X_train_selected}
       - ${select.X_test_selected}
       - ${tune.best_params}
