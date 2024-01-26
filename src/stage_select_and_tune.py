@@ -17,7 +17,7 @@ def perform_selection_and_tuning(param_path: Text) -> None:
         log_level=params["base"]["log_level"],
     )
 
-    # load scaled data
+    # load all data
     with open(params["data_condition"]["X_train_scaled"], "rb") as fp:
         X_train_scaled = pickle.load(fp)
     logger.debug(f"X_train_scaled shape: {X_train_scaled.shape}")
@@ -81,12 +81,22 @@ def perform_selection_and_tuning(param_path: Text) -> None:
             logger.info(f"Writing features to file")
             df = pd.DataFrame(top_feats, columns=["feature_index"])
             df.to_csv(params["data_condition"]["selected_features"], index=False)
-
             final_hyperparams = model.get_all_params()
-            final_hyperparams["class_weights"] = class_weights
-            with open(params["tune"]["best_params"], "w") as fp:
-                json.dump(obj=final_hyperparams, fp=fp)
 
+    if params["tune"]["tune_hyperparameters"]:
+        logger.info(f"Starting random search with {params['tune']['n_iter']} samples")
+        tuning_params, tuned_model = tune.random_search_cat(X_train,
+                                                        y_train,
+                                                        params["train"]["estimator_name"],
+                                                        params["train"]["tuning_metric"],
+                                                        param_path,
+                                                        )
+        final_hyperparams = tuned_model.get_all_params()
+
+#  Write all outputs
+    final_hyperparams["class_weights"] = class_weights
+    with open(params["tune"]["best_params"], "w") as fp:
+        json.dump(obj=final_hyperparams, fp=fp)
 
 if __name__ == "__main__":
     args_parser = argparse.ArgumentParser()

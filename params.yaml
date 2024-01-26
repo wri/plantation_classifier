@@ -43,7 +43,7 @@ data_condition:
   class_weights: data/train/class_weights.json
 
 select:
-  select_features: False
+  select_features: True
   selected_features_path: data/train/selected_features.csv
   max_features: 40 # number of feats to use in feature selection
   fs_analysis: feat_imp # this is where you specify fs analysis using shap or feature importance
