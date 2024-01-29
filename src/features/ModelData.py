@@ -1,5 +1,4 @@
 import pickle
-import yaml
 import numpy as np
 from sklearn.model_selection import train_test_split
 from utils.preprocessing import reshape_arr
@@ -7,11 +6,10 @@ from sklearn.utils.class_weight import compute_class_weight
 
 
 class ModelData(params_path):
-    def __init__(self, X_data_array, y_data_array, params_path):
+    def __init__(self, X_data_array, y_data_array, params):
         self.X_data_array = X_data_array
         self.y_data_array = y_data_array
-        with open(params_path) as file:
-            self.params = yaml.safe_load(file)
+        self.params = params
 
     def split_data(self):
         self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
@@ -32,7 +30,7 @@ class ModelData(params_path):
         self.y_train_reshaped = reshape_arr(self.y_train)
         self.y_test_reshaped = reshape_arr(self.y_test)
 
-    def scale_arr(self):
+    def scale_X_arrays(self):
         """
         Performs manual scaling of training data
         """
