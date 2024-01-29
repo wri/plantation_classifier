@@ -36,6 +36,8 @@ def perform_selection_and_tuning(param_path: Text) -> None:
     logger.debug(f"X_test shape: {X_test.shape}")
     with open(params["data_condition"]["y_test"], "rb") as fp:
         y_test = pickle.load(fp)
+    with open(params["data_condition"]["class_weights"]) as fp:
+        class_weights = json.load(fp)
     logger.debug(f"y_test shape: {y_test.shape}")
     logger.info("Training and testing data loaded.")
 
@@ -52,52 +54,55 @@ def perform_selection_and_tuning(param_path: Text) -> None:
         with open(params["tune"]["best_params"], "w") as fp:
             json.dump(obj="None", fp=fp)
 
-    if params["select"]["select_features"]:
-        estimator_name = params["train"]["estimator_name"]
+    else:
+        if params["select"]["select_features"]:
+            estimator_name = params["train"]["estimator_name"]
 
-        # define parameters for feature selection
-        feature_analysis = params["select"]["fs_analysis"]
-        max_features = params["select"]["max_features"]
-        assert max_features <= 81
-        logger.info(f"Max features for feature selection: {max_features}")
+            # define parameters for feature selection
+            feature_analysis = params["select"]["fs_analysis"]
+            max_features = params["select"]["max_features"]
+            assert max_features <= 81
+            logger.info(f"Max features for feature selection: {max_features}")
 
-        if feature_analysis == "feat_imp":
+            if feature_analysis == "feat_imp":
+                logger.info(
+                    f"Performing feature selection with CatBoost feature importance"
+                )
+                model_params = params["train"]["estimators"]["cat"]["param_grid"]
+                model = train.fit_estimator(
+                    X_train_scaled,
+                    X_test_scaled,
+                    y_train,
+                    y_test,
+                    "cat",
+                    params["train"]["tuning_metric"],
+                    model_params,
+                    logger,
+                )
+                top_feats = fsl.feature_importance(model, logger, max_features)
+                logger.info(f"Writing features to file")
+                df = pd.DataFrame(top_feats, columns=["feature_index"])
+                df.to_csv(params["data_condition"]["selected_features"], index=False)
+                final_hyperparams = model.get_all_params()
+
+        if params["tune"]["tune_hyperparameters"]:
             logger.info(
-                f"Performing feature selection with CatBoost feature importance"
+                f"Starting random search with {params['tune']['n_iter']} samples"
             )
-            model_params = params["train"]["estimators"]["cat"]["param_grid"]
-            model = train.fit_estimator(
-                X_train_scaled,
-                X_test_scaled,
+            tuning_params, tuned_model = tune.random_search_cat(
+                X_train,
                 y_train,
-                y_test,
-                "cat",
+                params["train"]["estimator_name"],
                 params["train"]["tuning_metric"],
-                model_params,
-                logger,
+                param_path,
             )
-            top_feats = fsl.feature_importance(model, logger, max_features)
-            logger.info(f"Writing features to file")
-            df = pd.DataFrame(top_feats, columns=["feature_index"])
-            df.to_csv(params["data_condition"]["selected_features"], index=False)
-            final_hyperparams = model.get_all_params()
+            final_hyperparams = tuned_model.get_all_params()
+            logger.debug(f"Returned params: {tuning_params}")
+            logger.debug(f"Final params: {final_params}")
 
-    if params["tune"]["tune_hyperparameters"]:
-        logger.info(f"Starting random search with {params['tune']['n_iter']} samples")
-        tuning_params, tuned_model = tune.random_search_cat(
-            X_train,
-            y_train,
-            params["train"]["estimator_name"],
-            params["train"]["tuning_metric"],
-            param_path,
-        )
-        final_hyperparams = tuned_model.get_all_params()
-        logger.debug(f"Returned params: {tuning_params}")
-        logger.debug(f"Final params: {final_params}")
-    #  Write all outputs
-    final_hyperparams["class_weights"] = class_weights
-    with open(params["tune"]["best_params"], "w") as fp:
-        json.dump(obj=final_hyperparams, fp=fp)
+        final_hyperparams["class_weights"] = class_weights
+        with open(params["tune"]["best_params"], "w") as fp:
+            json.dump(obj=final_hyperparams, fp=fp)
 
 
 if __name__ == "__main__":

@@ -52,7 +52,6 @@ stages:
       - ${data_condition.y_test}
       - ${data_condition.class_weights}
       - src/features/feature_selection.py
-      - src/stage_select_features.py
     outs:
       - ${select.selected_features_path}
       - ${select.X_train_selected}

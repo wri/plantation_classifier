@@ -32,6 +32,7 @@ data_condition:
   test_split: 20
   train_split: 80
   val_split: 25
+  modelData_path: data/train/modelData.pkl
   X_train: data/train/X_train.pkl
   y_train: data/train/y_train.pkl
   X_test: data/train/X_test.pkl

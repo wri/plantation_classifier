@@ -420,23 +420,6 @@ def build_training_sample(train_batch, classes, params_path, logger):
         x_all[num] = X
         y_all[num] = y
 
-        # clean up memory
-        del ard, ttc, txt, X, y
-
-    # for num, plot in enumerate(tqdm(raw)):
-    #     slope = load_slope(plot, train_data_dir)
-    #     s1 = load_s1(plot, train_data_dir)
-    #     s2 = load_s2(plot, train_data_dir)
-    #     ttc = load_ttc(plot, False, train_data_dir)
-    #     txt = load_txt(plot, False, train_data_dir)
-    #     validate.train_output_range_dtype(slope, s1, s2, ttc, feature_select)
-    #     X = make_sample(sample_shape, s2, slope, s1, txt, ttc, feature_select)
-    #     y = load_label(plot, ttc, classes, train_data_dir)
-    #     x_all[num] = X
-    #     y_all[num] = y
-
-    #     del slope, s1, s2, ttc, txt, X, y
-
     # check class balance
     labels, counts = np.unique(y_all, return_counts=True)
     logger.info(f"Class count {dict(zip(labels, counts))}")

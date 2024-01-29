@@ -150,10 +150,6 @@ stages:
       hash: md5
       md5: 5def28987c4bfbe450d3ec9fa31c7de2
       size: 5884
-    - path: src/stage_select_features.py
-      hash: md5
-      md5: fcce66751e5b07fd7f39337e0406055b
-      size: 3828
     params:
       params.yaml:
         base:
@@ -237,3 +233,106 @@ stages:
       hash: md5
       md5: fa1f59a407fd23ceb39da5c4351ecbc5
       size: 6
+  train_model:
+    cmd: python src/stage_train_model.py --params=params.yaml
+    deps:
+    - path: data/train/X_test_selected.pkl
+      hash: md5
+      md5: 4a18d497017be0d100998c73dae89cda
+      size: 1179298
+    - path: data/train/X_train_selected.pkl
+      hash: md5
+      md5: 52a59606bf873e9ed044b4ba5ef05e73
+      size: 4569314
+    - path: data/train/class_weights.json
+      hash: md5
+      md5: 2622683eb9b0ded2042c3dbe2b3b0c2a
+      size: 108
+    - path: data/train/selected_features.csv
+      hash: md5
+      md5: 98d7c1bbe340fe4bc737e9e6c9ccba28
+      size: 274
+    - path: data/train/y_test.pkl
+      hash: md5
+      md5: 83927f6e882bb6daf941bbbd244eac98
+      size: 12695
+    - path: data/train/y_train.pkl
+      hash: md5
+      md5: 6b10627d0d512ed6cbe7acb1c33c63e0
+      size: 48759
+    - path: src/evaluation/best_params.json
+      hash: md5
+      md5: fa1f59a407fd23ceb39da5c4351ecbc5
+      size: 6
+    - path: src/model/train.py
+      hash: md5
+      md5: a69219e996b6431f0ba70c6da0c4db10
+      size: 3581
+    - path: src/stage_train_model.py
+      hash: md5
+      md5: 85333cf509e9078dff282e8457f9c627
+      size: 2013
+    params:
+      params.yaml:
+        base:
+          log_level: DEBUG
+          random_state: 121
+          config: config.yaml
+        data_condition:
+          classes: 4
+          ard_subsample: 4
+          subset_fraction: 0.1
+          test_split: 20
+          train_split: 80
+          val_split: 25
+          X_train: data/train/X_train.pkl
+          y_train: data/train/y_train.pkl
+          X_test: data/train/X_test.pkl
+          y_test: data/train/y_test.pkl
+          X_train_scaled: data/train/X_train_sc.pkl
+          X_test_scaled: data/train/X_test_sc.pkl
+          mins: data/train/mins.npy
+          maxs: data/train/maxs.npy
+          class_weights: data/train/class_weights.json
+        train:
+          model_dir: models/
+          model_name: models/model.joblib
+          estimator_name: cat
+          cv: 3
+          tuning_metric: balanced_accuracy
+          testing_metrics: accuracy balanced_accuracy precision recall f1 roc_auc
+            log_loss
+          estimators:
+            rfc:
+              importance_metric: shap
+              use_class_weights: true
+              param_grid:
+            svm:
+              importance_metric: shap
+              use_class_weights: true
+              param_grid:
+            lgbm:
+              importance_metric: shap
+              use_class_weights: true
+              param_grid:
+            xgb:
+              importance_metric: shap
+              use_class_weights: true
+              param_grid:
+            logreg:
+              importance_metric: shap
+              use_class_weights: true
+              param_grid:
+            cat:
+              importance_metric: shap
+              use_class_weights: true
+              use_defaults: true
+              param_grid:
+                loss_function: MultiClass
+                random_state: 121
+                logging_level: Silent
+    outs:
+    - path: models/model.joblib
+      hash: md5
+      md5: a8abbfc9cb6b3664a0a2899c87b7ec7e
+      size: 2638002
