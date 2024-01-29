@@ -1,6 +1,5 @@
 import argparse
 from typing import Text
-import json
 import pickle
 import yaml
 import numpy as np
@@ -28,7 +27,7 @@ def featurize(param_path: Text) -> None:
     logger.debug("X and y loaded")
     logger.debug(f"X and y shape: {X.shape, y.shape}")
 
-    model_data = ModelData(X, y, params)
+    model_data = ModelData.ModelData(X, y, params)
     logger.info("Initialized ModelData object")
     model_data.split_data()
     logger.info(f"Split data")
@@ -42,6 +41,8 @@ def featurize(param_path: Text) -> None:
     logger.debug(f"X_test_reshape shape: {model_data.X_test_reshaped.shape}")
     logger.debug(f"y_train_reshape shape: {model_data.y_train_reshaped.shape}")
     logger.debug(f"y_test_reshape shape: {model_data.y_test_reshaped.shape}")
+    logger.debug(f"Class names: {model_data.class_names}")
+    logger.debug(f"Class weights: {model_data.class_weights}")
     model_data.scale_X_arrays()
     logger.info("X arrays scaled for feature selection")
 

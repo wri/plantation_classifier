@@ -5,12 +5,12 @@ stages:
     deps:
     - path: src/features/create_xy.py
       hash: md5
-      md5: b782c1fd6972664543b5f8972c7bc873
-      size: 20364
+      md5: 2543c85221c5cff45c75d3a14e2a3a9d
+      size: 19693
     - path: src/stage_prep_features.py
       hash: md5
-      md5: a4ba8d26e35418ec5a0584774514a2d7
-      size: 3111
+      md5: 3af60a8efc60031b4770b33cedf5fea6
+      size: 2189
     params:
       params.yaml:
         base:
@@ -24,6 +24,7 @@ stages:
           test_split: 20
           train_split: 80
           val_split: 25
+          modelData_path: data/train/modelData.pkl
           X_train: data/train/X_train.pkl
           y_train: data/train/y_train.pkl
           X_test: data/train/X_test.pkl
@@ -163,6 +164,7 @@ stages:
           test_split: 20
           train_split: 80
           val_split: 25
+          modelData_path: data/train/modelData.pkl
           X_train: data/train/X_train.pkl
           y_train: data/train/y_train.pkl
           X_test: data/train/X_test.pkl
@@ -285,6 +287,7 @@ stages:
           test_split: 20
           train_split: 80
           val_split: 25
+          modelData_path: data/train/modelData.pkl
           X_train: data/train/X_train.pkl
           y_train: data/train/y_train.pkl
           X_test: data/train/X_test.pkl
@@ -334,5 +337,5 @@ stages:
     outs:
     - path: models/model.joblib
       hash: md5
-      md5: a8abbfc9cb6b3664a0a2899c87b7ec7e
+      md5: 5586eeb4761b7b95cc600562601f4f23
       size: 2638002

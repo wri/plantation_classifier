@@ -1,11 +1,11 @@
-import pickle
+import copy
 import numpy as np
 from sklearn.model_selection import train_test_split
 from utils.preprocessing import reshape_arr
 from sklearn.utils.class_weight import compute_class_weight
 
 
-class ModelData(params_path):
+class ModelData:
     def __init__(self, X_data_array, y_data_array, params):
         self.X_data_array = X_data_array
         self.y_data_array = y_data_array
@@ -19,23 +19,23 @@ class ModelData(params_path):
             train_size=((self.params["data_condition"]["train_split"] / 100)),
             random_state=self.params["base"]["random_state"],
         )
-        self.class_names = np.unique(self.y_train)
-        self.class_weights = compute_class_weight(
-            class_weight="balanced", classes=self.class_names, y=self.y_train
-        )
 
     def reshape_data_arr(self):
         self.X_train_reshaped = reshape_arr(self.X_train)
         self.X_test_reshaped = reshape_arr(self.X_test)
-        self.y_train_reshaped = reshape_arr(self.y_train)
-        self.y_test_reshaped = reshape_arr(self.y_test)
+        self.y_train_reshaped = (reshape_arr(self.y_train)).astype(int)
+        self.y_test_reshaped = (reshape_arr(self.y_test)).astype(int)
+        self.class_names = np.unique(self.y_train_reshaped)
+        self.class_weights = compute_class_weight(
+            class_weight="balanced", classes=self.class_names, y=self.y_train_reshaped
+        )
 
     def scale_X_arrays(self):
         """
         Performs manual scaling of training data
         """
-        X_train_tmp = self.X_train.deepcopy()
-        X_test_tmp = self.X_test.deepcopy()
+        X_train_tmp = copy.deepcopy(self.X_train)
+        X_test_tmp = copy.deepcopy(self.X_test)
         for band in range(0, self.X_train.shape[-1]):
             mins = np.percentile(self.X_train[..., band], 1)
             maxs = np.percentile(self.X_train[..., band], 99)
