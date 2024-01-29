@@ -20,20 +20,9 @@ stages:
     deps:
       - src/features/create_xy.py
       - src/stage_prep_features.py
+      - src/features/ModelData.py
     outs:
-      - ${data_condition.X_train}:
-          persist: True
-      - ${data_condition.X_train_scaled}:
-          persist: True
-      - ${data_condition.X_test_scaled}:
-          persist: True
-      - ${data_condition.X_test}:
-          persist: True
-      - ${data_condition.y_train}:
-          persist: True
-      - ${data_condition.y_test}:
-          persist: True
-      - ${data_condition.class_weights}:
+      - ${data_condition.modelData_path}:
           persist: True
 
   select_features_hyperparams:
@@ -44,19 +33,13 @@ stages:
       - train
       - select
     deps:
-      - ${data_condition.X_train}
-      - ${data_condition.X_train_scaled}
-      - ${data_condition.X_test_scaled}
-      - ${data_condition.X_test}
-      - ${data_condition.y_train}
-      - ${data_condition.y_test}
-      - ${data_condition.class_weights}
+      - ${data_condition.modelData_path}
       - src/features/feature_selection.py
     outs:
-      - ${select.selected_features_path}
-      - ${select.X_train_selected}
-      - ${select.X_test_selected}
-      - ${tune.best_params}
+      - ${tune.best_params}:
+          persist: True
+      - ${select.selected_features_path}:
+          persist: True
 
   train_model:
     cmd: python src/stage_train_model.py --params=params.yaml
@@ -65,13 +48,9 @@ stages:
       - data_condition
       - train
     deps:
-      - ${data_condition.y_train}
-      - ${data_condition.y_test}
+      - ${data_condition.modelData_path}
       - ${select.selected_features_path}
-      - ${select.X_train_selected}
-      - ${select.X_test_selected}
       - ${tune.best_params}
-      - ${data_condition.class_weights}
       - src/model/train.py
       - src/stage_train_model.py
     outs:
@@ -85,7 +64,9 @@ stages:
       - train
       - evaluate
     deps:
-      - ${data_condition.y_test}
+      - ${data_condition.modelData_path}
+      - ${select.selected_features_path}
+      - ${tune.best_params}
       - ${train.model_name}
       - src/evaluation/validation_visuals.py
       - src/stage_evaluate_model.py

@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 from utils.logs import get_logger
 import model.train as train
+from features import ModelData
 
 
 def train_model(param_path: Text) -> None:
@@ -16,33 +17,30 @@ def train_model(param_path: Text) -> None:
         params = yaml.safe_load(file)
     logger = get_logger("TRAIN", log_level=params["base"]["log_level"])
     logger.info("Importing training data")
-    with open(params["data_condition"]["X_train"], "rb") as fp:
-        X_train = pickle.load(fp)
-    logger.debug(f"X_train shape: {X_train.shape}")
-    with open(params["data_condition"]["X_test"], "rb") as fp:
-        X_test = pickle.load(fp)
-    logger.debug(f"X_test shape: {X_test.shape}")
-    with open(params["data_condition"]["y_train"], "rb") as fp:
-        y_train = pickle.load(fp)
-    logger.debug(f"y_train shape: {y_train.shape}")
-    with open(params["data_condition"]["y_test"], "rb") as fp:
-        y_test = pickle.load(fp)
-    logger.debug(f"y_test shape: {y_test.shape}")
-    with open(params["data_condition"]["class_weights"]) as fp:
-        class_weights = json.load(fp)
-    logger.info("Training and testing data loaded.")
+    with open(params["data_condition"]["modelData_path"], "rb") as fp:
+        model_data = pickle.load(fp)
+    with open(params["select"]["selected_features_path"], "r") as fp:
+        selected_features = json.load(fp)
+    with open(params["tune"]["best_params"], "r") as fp:
+        hyperparameters = json.load(fp)
+    logger.info("All data loaded")
 
     estimator_name = params["train"]["estimator_name"]
     model_path = f"{params['train']['model_name']}"
-    model_params = params["train"]["estimators"][estimator_name]["param_grid"]
-    model_params["class_weights"] = class_weights
+
+    model_data.filter_features(selected_features)
+    if "None" in hyperparameters.keys():
+        model_params = params["train"]["estimators"][estimator_name]["param_grid"]
+    else:
+        model_params = hyperparameters
+    model_params["class_weights"] = model_data.class_weights
 
     logger.info(f"Training model..")
-    metric, model, X_test = train.fit_estimator(
-        X_train,
-        X_test,
-        y_train,
-        y_test,  # at this stage they are ints
+    metric, model = train.fit_estimator(
+        model_data.X_train_reshaped,
+        model_data.X_test_reshaped,
+        model_data.y_train_reshaped,
+        model_data.y_test_reshaped,  # at this stage they are ints
         estimator_name,
         params["train"]["tuning_metric"],
         model_params,

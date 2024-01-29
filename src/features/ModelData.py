@@ -53,7 +53,7 @@ class ModelData:
         self.X_train_scaled = reshape_arr(X_train_tmp)
         self.X_test_scaled = reshape_arr(X_test_tmp)
 
-    def select_features(self, feature_index_list):
+    def filter_features(self, feature_index_list):
         n_feats = len(feature_index_list)
         # create output arrays
         X_train_fs = np.zeros(
@@ -72,11 +72,11 @@ class ModelData:
                 n_feats,
             )
         )
-        for i in range(X_train.shape[0]):
+        for i in range(self.X_train.shape[0]):
             X_train_fs[i : i + 1, ...] = self.X_train[
                 i : i + 1, :, :, feature_index_list
             ]
-        for i in range(X_train.shape[0]):
+        for i in range(self.X_train.shape[0]):
             X_test_fs[i : i + 1, ...] = self.X_test[i : i + 1, :, :, feature_index_list]
 
         self.X_train_reshaped = reshape_arr(X_train_fs)

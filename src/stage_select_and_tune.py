@@ -19,49 +19,21 @@ def perform_selection_and_tuning(param_path: Text) -> None:
     )
 
     # load all data
-    with open(params["data_condition"]["X_train_scaled"], "rb") as fp:
-        X_train_scaled = pickle.load(fp)
-    logger.debug(f"X_train_scaled shape: {X_train_scaled.shape}")
-    with open(params["data_condition"]["X_train"], "rb") as fp:
-        X_train = pickle.load(fp)
-    logger.debug(f"X_train shape: {X_train.shape}")
-    with open(params["data_condition"]["y_train"], "rb") as fp:
-        y_train = pickle.load(fp)
-    logger.debug(f"y_train shape: {y_train.shape}")
-    with open(params["data_condition"]["X_test_scaled"], "rb") as fp:
-        X_test_scaled = pickle.load(fp)
-    logger.debug(f"X_test_scaled shape: {X_test_scaled.shape}")
-    with open(params["data_condition"]["X_test"], "rb") as fp:
-        X_test = pickle.load(fp)
-    logger.debug(f"X_test shape: {X_test.shape}")
-    with open(params["data_condition"]["y_test"], "rb") as fp:
-        y_test = pickle.load(fp)
-    with open(params["data_condition"]["class_weights"]) as fp:
-        class_weights = json.load(fp)
-    logger.debug(f"y_test shape: {y_test.shape}")
-    logger.info("Training and testing data loaded.")
+    with open(params["data_condition"]["modelData_path"], "rb") as fp:
+        model_data = pickle.load(fp)
+    logger.info("Model data loaded")
+    final_hyperparams = {"None": None}
+    top_feats = list(range(0, (model_data.X_train_reshaped.shape[1])))
 
     if (params["select"]["select_features"] == False) and (
         params["tune"]["tune_hyperparameters"] == False
     ):
         logger.info("Using all features and default hyperparameters")
-        df = pd.DataFrame(list(range(0, (X_train.shape[1]))))
-        df.to_csv(params["select"]["selected_features_path"], index=False)
-        with open(params["select"]["X_train_selected"], "wb") as fp:
-            pickle.dump(X_train, fp)
-        with open(params["select"]["X_test_selected"], "wb") as fp:
-            pickle.dump(X_test, fp)
-        with open(params["tune"]["best_params"], "w") as fp:
-            json.dump(obj="None", fp=fp)
-
     else:
         if params["select"]["select_features"]:
-            estimator_name = params["train"]["estimator_name"]
-
             # define parameters for feature selection
             feature_analysis = params["select"]["fs_analysis"]
             max_features = params["select"]["max_features"]
-            assert max_features <= 81
             logger.info(f"Max features for feature selection: {max_features}")
 
             if feature_analysis == "feat_imp":
@@ -70,28 +42,28 @@ def perform_selection_and_tuning(param_path: Text) -> None:
                 )
                 model_params = params["train"]["estimators"]["cat"]["param_grid"]
                 model = train.fit_estimator(
-                    X_train_scaled,
-                    X_test_scaled,
-                    y_train,
-                    y_test,
+                    model_data.X_train_scaled,
+                    model_data.X_test_scaled,
+                    model_data.y_train_reshaped,
+                    model_data.y_test_reshaped,
                     "cat",
                     params["train"]["tuning_metric"],
                     model_params,
                     logger,
                 )
                 top_feats = fsl.feature_importance(model, logger, max_features)
-                logger.info(f"Writing features to file")
-                df = pd.DataFrame(top_feats, columns=["feature_index"])
-                df.to_csv(params["data_condition"]["selected_features"], index=False)
+                logger.debug(f"Top features identified, count: {len(top_feats)}")
                 final_hyperparams = model.get_all_params()
-
+        # if tuning hyperparameters
         if params["tune"]["tune_hyperparameters"]:
+            # update features selection (in reshaped data arrays)
+            model_data.filter_features(top_feats)
             logger.info(
                 f"Starting random search with {params['tune']['n_iter']} samples"
             )
             tuning_params, tuned_model = tune.random_search_cat(
-                X_train,
-                y_train,
+                model_data.X_train_reshaped,
+                model_data.y_train_reshaped,
                 params["train"]["estimator_name"],
                 params["train"]["tuning_metric"],
                 param_path,
@@ -100,9 +72,10 @@ def perform_selection_and_tuning(param_path: Text) -> None:
             logger.debug(f"Returned params: {tuning_params}")
             logger.debug(f"Final params: {final_params}")
 
-        final_hyperparams["class_weights"] = class_weights
-        with open(params["tune"]["best_params"], "w") as fp:
-            json.dump(obj=final_hyperparams, fp=fp)
+    with open(params["select"]["selected_features_path"], "w") as fp:
+        json.dump(obj=top_feats, fp=fp)
+    with open(params["tune"]["best_params"], "w") as fp:
+        json.dump(obj=final_hyperparams, fp=fp)
 
 
 if __name__ == "__main__":

@@ -3,6 +3,10 @@ stages:
   prep_features:
     cmd: python src/stage_prep_features.py --params=params.yaml
     deps:
+    - path: src/features/ModelData.py
+      hash: md5
+      md5: 5572337e158d124e7f3f0b20877caad4
+      size: 3309
     - path: src/features/create_xy.py
       hash: md5
       md5: 2543c85221c5cff45c75d3a14e2a3a9d
@@ -25,15 +29,6 @@ stages:
           train_split: 80
           val_split: 25
           modelData_path: data/train/modelData.pkl
-          X_train: data/train/X_train.pkl
-          y_train: data/train/y_train.pkl
-          X_test: data/train/X_test.pkl
-          y_test: data/train/y_test.pkl
-          X_train_scaled: data/train/X_train_sc.pkl
-          X_test_scaled: data/train/X_test_sc.pkl
-          mins: data/train/mins.npy
-          maxs: data/train/maxs.npy
-          class_weights: data/train/class_weights.json
         data_load:
           download_data: false
           bucket_name: restoration-monitoring
@@ -55,34 +50,10 @@ stages:
           - ard
           - features-ard
     outs:
-    - path: data/train/X_test.pkl
+    - path: data/train/modelData.pkl
       hash: md5
-      md5: 4a18d497017be0d100998c73dae89cda
-      size: 1179298
-    - path: data/train/X_test_sc.pkl
-      hash: md5
-      md5: 3f8e115478bf27fca1a68f251d71279a
-      size: 1179298
-    - path: data/train/X_train.pkl
-      hash: md5
-      md5: 52a59606bf873e9ed044b4ba5ef05e73
-      size: 4569314
-    - path: data/train/X_train_sc.pkl
-      hash: md5
-      md5: 3cd77a0a56b46854adccd6278a2a82d1
-      size: 4569314
-    - path: data/train/class_weights.json
-      hash: md5
-      md5: 2622683eb9b0ded2042c3dbe2b3b0c2a
-      size: 108
-    - path: data/train/y_test.pkl
-      hash: md5
-      md5: 83927f6e882bb6daf941bbbd244eac98
-      size: 12695
-    - path: data/train/y_train.pkl
-      hash: md5
-      md5: 6b10627d0d512ed6cbe7acb1c33c63e0
-      size: 48759
+      md5: b253b4eaa39a932f5cec98b6da5b1c02
+      size: 235334843
   load_data:
     cmd: python src/stage_load_data.py --params=params.yaml
     deps:
@@ -119,38 +90,14 @@ stages:
   select_features_hyperparams:
     cmd: python src/stage_select_and_tune.py --params=params.yaml
     deps:
-    - path: data/train/X_test.pkl
+    - path: data/train/modelData.pkl
       hash: md5
-      md5: 4a18d497017be0d100998c73dae89cda
-      size: 1179298
-    - path: data/train/X_test_sc.pkl
-      hash: md5
-      md5: 3f8e115478bf27fca1a68f251d71279a
-      size: 1179298
-    - path: data/train/X_train.pkl
-      hash: md5
-      md5: 52a59606bf873e9ed044b4ba5ef05e73
-      size: 4569314
-    - path: data/train/X_train_sc.pkl
-      hash: md5
-      md5: 3cd77a0a56b46854adccd6278a2a82d1
-      size: 4569314
-    - path: data/train/class_weights.json
-      hash: md5
-      md5: 2622683eb9b0ded2042c3dbe2b3b0c2a
-      size: 108
-    - path: data/train/y_test.pkl
-      hash: md5
-      md5: 83927f6e882bb6daf941bbbd244eac98
-      size: 12695
-    - path: data/train/y_train.pkl
-      hash: md5
-      md5: 6b10627d0d512ed6cbe7acb1c33c63e0
-      size: 48759
+      md5: b253b4eaa39a932f5cec98b6da5b1c02
+      size: 235334843
     - path: src/features/feature_selection.py
       hash: md5
-      md5: 5def28987c4bfbe450d3ec9fa31c7de2
-      size: 5884
+      md5: f016e7dc2af2ef5cd069f452327665ea
+      size: 5845
     params:
       params.yaml:
         base:
@@ -165,22 +112,11 @@ stages:
           train_split: 80
           val_split: 25
           modelData_path: data/train/modelData.pkl
-          X_train: data/train/X_train.pkl
-          y_train: data/train/y_train.pkl
-          X_test: data/train/X_test.pkl
-          y_test: data/train/y_test.pkl
-          X_train_scaled: data/train/X_train_sc.pkl
-          X_test_scaled: data/train/X_test_sc.pkl
-          mins: data/train/mins.npy
-          maxs: data/train/maxs.npy
-          class_weights: data/train/class_weights.json
         select:
           select_features: false
-          selected_features_path: data/train/selected_features.csv
+          selected_features_path: data/train/selected_features.json
           max_features: 40
           fs_analysis: feat_imp
-          X_train_selected: data/train/X_train_selected.pkl
-          X_test_selected: data/train/X_test_selected.pkl
         train:
           model_dir: models/
           model_name: models/model.joblib
@@ -219,61 +155,37 @@ stages:
                 random_state: 121
                 logging_level: Silent
     outs:
-    - path: data/train/X_test_selected.pkl
+    - path: data/train/selected_features.json
       hash: md5
-      md5: 4a18d497017be0d100998c73dae89cda
-      size: 1179298
-    - path: data/train/X_train_selected.pkl
-      hash: md5
-      md5: 52a59606bf873e9ed044b4ba5ef05e73
-      size: 4569314
-    - path: data/train/selected_features.csv
-      hash: md5
-      md5: 98d7c1bbe340fe4bc737e9e6c9ccba28
-      size: 274
+      md5: 2df8d99ccf7b6ee08df0912143f7f9ed
+      size: 366
     - path: src/evaluation/best_params.json
       hash: md5
-      md5: fa1f59a407fd23ceb39da5c4351ecbc5
-      size: 6
+      md5: 5627006a412d769b1b1c112ff2ed8079
+      size: 14
   train_model:
     cmd: python src/stage_train_model.py --params=params.yaml
     deps:
-    - path: data/train/X_test_selected.pkl
+    - path: data/train/modelData.pkl
       hash: md5
-      md5: 4a18d497017be0d100998c73dae89cda
-      size: 1179298
-    - path: data/train/X_train_selected.pkl
+      md5: b253b4eaa39a932f5cec98b6da5b1c02
+      size: 235334843
+    - path: data/train/selected_features.json
       hash: md5
-      md5: 52a59606bf873e9ed044b4ba5ef05e73
-      size: 4569314
-    - path: data/train/class_weights.json
-      hash: md5
-      md5: 2622683eb9b0ded2042c3dbe2b3b0c2a
-      size: 108
-    - path: data/train/selected_features.csv
-      hash: md5
-      md5: 98d7c1bbe340fe4bc737e9e6c9ccba28
-      size: 274
-    - path: data/train/y_test.pkl
-      hash: md5
-      md5: 83927f6e882bb6daf941bbbd244eac98
-      size: 12695
-    - path: data/train/y_train.pkl
-      hash: md5
-      md5: 6b10627d0d512ed6cbe7acb1c33c63e0
-      size: 48759
+      md5: 2df8d99ccf7b6ee08df0912143f7f9ed
+      size: 366
     - path: src/evaluation/best_params.json
       hash: md5
-      md5: fa1f59a407fd23ceb39da5c4351ecbc5
-      size: 6
+      md5: 5627006a412d769b1b1c112ff2ed8079
+      size: 14
     - path: src/model/train.py
       hash: md5
-      md5: a69219e996b6431f0ba70c6da0c4db10
-      size: 3581
+      md5: 5035f7b40783e0dfe03a284ec31961fe
+      size: 3575
     - path: src/stage_train_model.py
       hash: md5
-      md5: 85333cf509e9078dff282e8457f9c627
-      size: 2013
+      md5: 441d970ca549b5e40e755de2beac2a99
+      size: 1877
     params:
       params.yaml:
         base:
@@ -288,15 +200,6 @@ stages:
           train_split: 80
           val_split: 25
           modelData_path: data/train/modelData.pkl
-          X_train: data/train/X_train.pkl
-          y_train: data/train/y_train.pkl
-          X_test: data/train/X_test.pkl
-          y_test: data/train/y_test.pkl
-          X_train_scaled: data/train/X_train_sc.pkl
-          X_test_scaled: data/train/X_test_sc.pkl
-          mins: data/train/mins.npy
-          maxs: data/train/maxs.npy
-          class_weights: data/train/class_weights.json
         train:
           model_dir: models/
           model_name: models/model.joblib
@@ -337,5 +240,5 @@ stages:
     outs:
     - path: models/model.joblib
       hash: md5
-      md5: 5586eeb4761b7b95cc600562601f4f23
-      size: 2638002
+      md5: 6fd196f6fd41acdd8831449e3326e92f
+      size: 2643107

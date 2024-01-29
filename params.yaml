@@ -33,23 +33,12 @@ data_condition:
   train_split: 80
   val_split: 25
   modelData_path: data/train/modelData.pkl
-  X_train: data/train/X_train.pkl
-  y_train: data/train/y_train.pkl
-  X_test: data/train/X_test.pkl
-  y_test: data/train/y_test.pkl
-  X_train_scaled: data/train/X_train_sc.pkl
-  X_test_scaled: data/train/X_test_sc.pkl
-  mins: data/train/mins.npy
-  maxs: data/train/maxs.npy
-  class_weights: data/train/class_weights.json
 
 select:
   select_features: False
-  selected_features_path: data/train/selected_features.csv
+  selected_features_path: data/train/selected_features.json
   max_features: 40 # number of feats to use in feature selection
   fs_analysis: feat_imp # this is where you specify fs analysis using shap or feature importance
-  X_train_selected: data/train/X_train_selected.pkl
-  X_test_selected: data/train/X_test_selected.pkl
 
 tune:
   tune_hyperparameters: False

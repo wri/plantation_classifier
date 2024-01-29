@@ -111,7 +111,7 @@ def fit_estimator(
     logger.debug(
         f"X_train type: {X_train.dtype}, X_test type: {X_test.dtype}, y_train type: {y_train.dtype}, y_test type: {y_test.dtype}"
     )
-    y_test = y_test.astype("str")
+    # y_test = y_test.astype("str")
 
     # metric fun creates the function for the specified metric, cool!
     metric_func = metrics[metric_name]
@@ -120,4 +120,4 @@ def fit_estimator(
     preds = model.predict(X_test)
     metric = metric_func(y_test, preds)
 
-    return metric, model, X_test
+    return metric, model
