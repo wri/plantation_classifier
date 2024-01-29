@@ -18,7 +18,7 @@ import pickle
 
 from utils.logs import get_logger
 from evaluation.validation_visuals import plot_confusion_matrix
-from features import ModelData
+from features import PlantationsData
 
 
 def convert_to_labels(indexes, labels):

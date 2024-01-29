@@ -22,8 +22,16 @@ def perform_selection_and_tuning(param_path: Text) -> None:
     with open(params["data_condition"]["modelData_path"], "rb") as fp:
         model_data = pickle.load(fp)
     logger.info("Model data loaded")
-    final_hyperparams = {"None": None}
-    top_feats = list(range(0, (model_data.X_train_reshaped.shape[1])))
+    try:
+        with open(params["tune"]["best_params"], "r") as fp:
+            final_hyperparams = json.load(fp)
+    except IOError:
+        final_hyperparams = {"None": None}
+    try:
+        with open(params["select"]["selected_features_path"], "r") as fp:
+            top_feats = json.load(fp)
+    except IOError:
+        top_feats = list(range(0, (model_data.X_train_reshaped.shape[1])))
 
     if (params["select"]["select_features"] == False) and (
         params["tune"]["tune_hyperparameters"] == False

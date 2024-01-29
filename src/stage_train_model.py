@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from utils.logs import get_logger
 import model.train as train
-from features import ModelData
+from features import PlantationsData
 
 
 def train_model(param_path: Text) -> None:

@@ -5,7 +5,7 @@ import yaml
 import numpy as np
 import pandas as pd
 from utils.logs import get_logger
-from features import create_xy, ModelData
+from features import create_xy, PlantationsData
 
 
 def featurize(param_path: Text) -> None:
@@ -27,7 +27,7 @@ def featurize(param_path: Text) -> None:
     logger.debug("X and y loaded")
     logger.debug(f"X and y shape: {X.shape, y.shape}")
 
-    model_data = ModelData.ModelData(X, y, params)
+    model_data = PlantationsData.PlantationsData(X, y, params)
     logger.info("Initialized ModelData object")
     model_data.split_data()
     logger.info(f"Split data")

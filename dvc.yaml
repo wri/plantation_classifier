@@ -20,7 +20,7 @@ stages:
     deps:
       - src/features/create_xy.py
       - src/stage_prep_features.py
-      - src/features/ModelData.py
+      - src/features/PlantationsData.py
     outs:
       - ${data_condition.modelData_path}:
           persist: True

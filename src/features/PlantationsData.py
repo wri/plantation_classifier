@@ -5,7 +5,7 @@ from utils.preprocessing import reshape_arr
 from sklearn.utils.class_weight import compute_class_weight
 
 
-class ModelData:
+class PlantationsData:
     def __init__(self, X_data_array, y_data_array, params):
         self.X_data_array = X_data_array
         self.y_data_array = y_data_array

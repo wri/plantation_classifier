@@ -3,18 +3,18 @@ stages:
   prep_features:
     cmd: python src/stage_prep_features.py --params=params.yaml
     deps:
-    - path: src/features/ModelData.py
+    - path: src/features/PlantationsData.py
       hash: md5
-      md5: 5572337e158d124e7f3f0b20877caad4
-      size: 3309
+      md5: 3f68553fe491bb2092ad3e40e4c7ef82
+      size: 3315
     - path: src/features/create_xy.py
       hash: md5
-      md5: 2543c85221c5cff45c75d3a14e2a3a9d
-      size: 19693
+      md5: f202de5a5f3d14ad23811d00a26d7f87
+      size: 14604
     - path: src/stage_prep_features.py
       hash: md5
-      md5: 3af60a8efc60031b4770b33cedf5fea6
-      size: 2189
+      md5: 5f9f26d6d9cad08141d8f52ce1a93534
+      size: 2207
     params:
       params.yaml:
         base:
@@ -52,8 +52,8 @@ stages:
     outs:
     - path: data/train/modelData.pkl
       hash: md5
-      md5: b253b4eaa39a932f5cec98b6da5b1c02
-      size: 235334843
+      md5: 6088f4a28ae56e393be70f26a2952352
+      size: 235334855
   load_data:
     cmd: python src/stage_load_data.py --params=params.yaml
     deps:
@@ -92,8 +92,8 @@ stages:
     deps:
     - path: data/train/modelData.pkl
       hash: md5
-      md5: b253b4eaa39a932f5cec98b6da5b1c02
-      size: 235334843
+      md5: 6088f4a28ae56e393be70f26a2952352
+      size: 235334855
     - path: src/features/feature_selection.py
       hash: md5
       md5: f016e7dc2af2ef5cd069f452327665ea
@@ -168,8 +168,8 @@ stages:
     deps:
     - path: data/train/modelData.pkl
       hash: md5
-      md5: b253b4eaa39a932f5cec98b6da5b1c02
-      size: 235334843
+      md5: 6088f4a28ae56e393be70f26a2952352
+      size: 235334855
     - path: data/train/selected_features.json
       hash: md5
       md5: 2df8d99ccf7b6ee08df0912143f7f9ed
@@ -184,8 +184,8 @@ stages:
       size: 3575
     - path: src/stage_train_model.py
       hash: md5
-      md5: 29adeda09d7e9762b2dc6a24545ed7a9
-      size: 1846
+      md5: 5d2d71cb66409adc84c6f9752bcafd55
+      size: 1852
     params:
       params.yaml:
         base:
@@ -240,22 +240,22 @@ stages:
     outs:
     - path: models/model.joblib
       hash: md5
-      md5: 0b3827361f6d85646403df5d3c0c2e21
+      md5: 90117ba6870e6daad078685a2f2b794d
       size: 2643107
   evaluate_model:
     cmd: python src/stage_evaluate_model.py --params=params.yaml
     deps:
     - path: data/train/modelData.pkl
       hash: md5
-      md5: b253b4eaa39a932f5cec98b6da5b1c02
-      size: 235334843
+      md5: 6088f4a28ae56e393be70f26a2952352
+      size: 235334855
     - path: data/train/selected_features.json
       hash: md5
       md5: 2df8d99ccf7b6ee08df0912143f7f9ed
       size: 366
     - path: models/model.joblib
       hash: md5
-      md5: 0b3827361f6d85646403df5d3c0c2e21
+      md5: 90117ba6870e6daad078685a2f2b794d
       size: 2643107
     - path: src/evaluation/best_params.json
       hash: md5
@@ -267,8 +267,8 @@ stages:
       size: 2913
     - path: src/stage_evaluate_model.py
       hash: md5
-      md5: ee25bf90f1ea1234c850d06fa47df731
-      size: 4463
+      md5: 516baf85cf9e4d4e85636ff04afed00a
+      size: 4469
     params:
       params.yaml:
         base:
