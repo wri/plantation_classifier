@@ -40,7 +40,7 @@ def train_model(param_path: Text) -> None:
         model_data.X_train_reshaped,
         model_data.X_test_reshaped,
         model_data.y_train_reshaped,
-        model_data.y_test_reshaped,  # at this stage they are ints
+        model_data.y_test_reshaped,
         estimator_name,
         params["train"]["tuning_metric"],
         model_params,

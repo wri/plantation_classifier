@@ -18,6 +18,7 @@ import pickle
 
 from utils.logs import get_logger
 from evaluation.validation_visuals import plot_confusion_matrix
+from features import ModelData
 
 
 def convert_to_labels(indexes, labels):
@@ -56,23 +57,33 @@ def evaluate_model(params_path: Text) -> None:
     model_path = f"{params['train']['model_name']}"
     model = joblib.load(f"{model_path}")
 
-    with open(params["data_condition"]["X_test"], "rb") as fp:
-        X_test = pickle.load(fp)
+    with open(params["data_condition"]["modelData_path"], "rb") as fp:
+        model_data = pickle.load(fp)
+    with open(params["select"]["selected_features_path"], "r") as fp:
+        selected_features = json.load(fp)
 
-    with open(params["data_condition"]["y_test"], "rb") as fp:
-        y_test = pickle.load(fp)
+    model_data.filter_features(selected_features)
+    #   model_params["class_weights"] = model_data.class_weights
 
     logger.info("Evaluating (building report)")
-    y_test = y_test.astype("str")
+    #  y_test = y_test.astype("str")
 
-    prediction = model.predict(X_test)
-    accuracy = accuracy_score(y_true=y_test, y_pred=prediction)
-    balanced_accuracy = balanced_accuracy_score(y_true=y_test, y_pred=prediction)
-    f1 = f1_score(y_true=y_test, y_pred=prediction, average="weighted")
-    precision = precision_score(y_true=y_test, y_pred=prediction, average="weighted")
-    recall = recall_score(y_true=y_test, y_pred=prediction, average="weighted")
+    prediction = model.predict(model_data.X_test_reshaped)
+    accuracy = accuracy_score(y_true=model_data.y_test_reshaped, y_pred=prediction)
+    balanced_accuracy = balanced_accuracy_score(
+        y_true=model_data.y_test_reshaped, y_pred=prediction
+    )
+    f1 = f1_score(
+        y_true=model_data.y_test_reshaped, y_pred=prediction, average="weighted"
+    )
+    precision = precision_score(
+        y_true=model_data.y_test_reshaped, y_pred=prediction, average="weighted"
+    )
+    recall = recall_score(
+        y_true=model_data.y_test_reshaped, y_pred=prediction, average="weighted"
+    )
 
-    cm = confusion_matrix(y_test, prediction)
+    cm = confusion_matrix(model_data.y_test_reshaped, prediction)
 
     report = {
         "accuracy": accuracy,
@@ -81,7 +92,7 @@ def evaluate_model(params_path: Text) -> None:
         "recall": recall,
         "f1": f1,
         "cm": cm,
-        "actual": y_test,
+        "actual": model_data.y_test_reshaped,
         "predicted": prediction,
     }
     metrics_path = f'{params["evaluate"]["metrics_file"]}.json'
@@ -100,7 +111,7 @@ def evaluate_model(params_path: Text) -> None:
 
     # converts ['0.0', '2.0', '3.0', '1.0'] to [0, 2, 3, 1]
     logger.info("Creating confusion matrix")
-    labels = list(set(y_test))
+    labels = list(set(model_data.y_test_reshaped))
     labels = [int(float(fl)) for fl in labels]
 
     # save confusion_matrix.png and data
@@ -110,7 +121,7 @@ def evaluate_model(params_path: Text) -> None:
     logger.info(f"Confusion matrix saved to : {confusion_matrix_png_path}")
 
     confusion_matrix_data_path = f'{params["evaluate"]["cm_data"]}.csv'
-    y_test = [int(float(fl)) for fl in y_test]
+    y_test = [int(float(fl)) for fl in model_data.y_test_reshaped]
     prediction = [int(float(fl)) for fl in prediction]
     write_confusion_matrix_data(
         y_test, prediction, labels=labels, filename=confusion_matrix_data_path
