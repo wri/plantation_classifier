@@ -53,6 +53,8 @@ class PlantationsData:
         self.X_train_scaled = reshape_arr(X_train_tmp)
         self.X_test_scaled = reshape_arr(X_test_tmp)
 
+    # TODO: save xmins and maxs
+
     def filter_features(self, feature_index_list):
         n_feats = len(feature_index_list)
         # create output arrays
