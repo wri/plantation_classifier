@@ -28,7 +28,7 @@ def fast_glcm_output(txt):
     assert txt.dtype == np.float32
 
 
-def train_output_range_dtype(s2, dem, s1, feats, feature_select):
+def train_output_range_dtype(s2, dem, s1, feats):
     '''
     Sentinel-1, float32, range from 0-1 (divided by 65535), unscaled decibels >-22
     Sentinel-2, float32, range from 0-1 (divided by 65535), unscaled
@@ -44,13 +44,9 @@ def train_output_range_dtype(s2, dem, s1, feats, feature_select):
     assert np.logical_and(s1.min() >= 0, s1.max() <= 1), print(s1.min(), s1.max())
     assert np.logical_and(s2.min() >= 0, s2.max() <= 1), print(s2.min(), s2.max())
 
-    # if there is no feature selection, assert feats meet logic
-    # this only checks ttc feats and not txt feats
-    if len(feature_select) < 1:
-        assert np.logical_and(feats[..., 1:65].min() >= -32.768, feats[..., 1:65].max() <= 32.768), print(feats[..., 1:65].min(), feats[..., 1:65].max())
-        assert np.logical_and(feats[..., 0].min() >= 0, feats[..., 0].max() <= 1), print(feats[..., 0].min(), feats[..., 0].max())
-   
-    # TODO: enable validation when feature selection used
+    assert np.logical_and(feats[..., 1:65].min() >= -32.768, feats[..., 1:65].max() <= 32.768), print(feats[..., 1:65].min(), feats[..., 1:65].max())
+    assert np.logical_and(feats[..., 0].min() >= 0, feats[..., 0].max() <= 1), print(feats[..., 0].min(), feats[..., 0].max())
+
 
     
 ### DEPLOYMENT ###
