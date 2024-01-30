@@ -9,15 +9,17 @@ from sklearn.metrics import (
     recall_score,
     f1_score,
     roc_auc_score,
-    log_loss
+    log_loss,
 )
 from sklearn.svm import SVC
 from sklearn.utils.class_weight import compute_class_weight
+
 # from lightgbm import LGBMClassifier
 # from xgboost import XGBClassifier
 from catboost import CatBoostClassifier
 import pickle
 import json
+
 
 class UnsupportedClassifier(Exception):
     def __init__(self, estimator_name):
@@ -58,19 +60,21 @@ def get_supported_metrics():
         "recall": recall_score,
         "f1": f1_score,
         "roc_auc": roc_auc_score,
-        "log_loss": log_loss
+        "log_loss": log_loss,
     }
 
-def fit_estimator(X_train,
-                X_test,
-                y_train,
-                y_test,
-                estimator_name,
-                metric_name,
-                model_params_dict,
-                logger):
 
-    '''
+def fit_estimator(
+    X_train,
+    X_test,
+    y_train,
+    y_test,
+    estimator_name,
+    metric_name,
+    model_params_dict,
+    logger,
+):
+    """
     Train a machine learning model, evaluate its performance, and return the results. Raises UnsupportedClassifier
     or UnsupportedMetric if the specified estimator or classifier is not supported.
         ** means receive variable arguments as dictionary
@@ -90,13 +94,13 @@ def fit_estimator(X_train,
     - metric (float): Evaluation metric value on the testing set.
     - model: Trained machine learning model.
     - X_test: Testing features (useful for further analysis).
-    '''
+    """
 
     estimators = get_supported_estimator()
 
     if estimator_name not in estimators.keys():
         raise UnsupportedClassifier(estimator_name)
-    
+
     estimator = estimators[estimator_name]
 
     # Fit the model and calculate metric
@@ -104,14 +108,16 @@ def fit_estimator(X_train,
     if metric_name not in metrics.keys():
         raise UnsupportedMetric(metric_name)
 
-    print(X_train.dtype, X_test.dtype, y_train.dtype, y_test.dtype)
-    y_test = y_test.astype('str')
-    
+    logger.debug(
+        f"X_train type: {X_train.dtype}, X_test type: {X_test.dtype}, y_train type: {y_train.dtype}, y_test type: {y_test.dtype}"
+    )
+    # y_test = y_test.astype("str")
+
     # metric fun creates the function for the specified metric, cool!
     metric_func = metrics[metric_name]
     model = estimator(**model_params_dict)
-    model.fit(X_train, y_train) 
+    model.fit(X_train, y_train)
     preds = model.predict(X_test)
     metric = metric_func(y_test, preds)
 
-    return metric, model, X_test
+    return metric, model

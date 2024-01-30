@@ -20,14 +20,26 @@ stages:
     deps:
       - src/features/create_xy.py
       - src/stage_prep_features.py
+      - src/features/PlantationsData.py
     outs:
-      - data/train/X_train_sc.pkl
-      - data/train/X_test_sc.pkl
-      - data/train/X_train.pkl
-      - data/train/X_test.pkl     
-      - data/train/y_train.pkl
-      - data/train/y_test.pkl
-      - data/train/class_weights.json
+      - ${data_condition.modelData_path}:
+          persist: True
+
+  select_features_hyperparams:
+    cmd: python src/stage_select_and_tune.py --params=params.yaml
+    params:
+      - base
+      - data_condition
+      - train
+      - select
+    deps:
+      - ${data_condition.modelData_path}
+      - src/features/feature_selection.py
+    outs:
+      - ${tune.best_params}:
+          persist: True
+      - ${select.selected_features_path}:
+          persist: True
 
   train_model:
     cmd: python src/stage_train_model.py --params=params.yaml
@@ -36,33 +48,13 @@ stages:
       - data_condition
       - train
     deps:
-      - data/train/X_train_sc.pkl
-      - data/train/X_test_sc.pkl
-      - data/train/y_train.pkl
-      - data/train/y_test.pkl
-      - data/train/class_weights.json
+      - ${data_condition.modelData_path}
+      - ${select.selected_features_path}
+      - ${tune.best_params}
       - src/model/train.py
       - src/stage_train_model.py
     outs:
-      - models/model.joblib
-
-  select_features_hyperparams:
-    cmd: python src/stage_select_features.py --params=params.yaml
-    params:
-      - base
-      - data_condition
-      - train
-      - select
-    deps:
-      - data/train/X_train_sc.pkl
-      - data/train/X_test_sc.pkl
-      - data/train/y_train.pkl
-      - data/train/y_test.pkl
-      - models/model.joblib
-      - src/features/feature_selection.py
-      - src/stage_select_features.py
-    outs:
-      - data/train/selected_features.csv
+      - ${train.model_name}
 
   evaluate_model:
     cmd: python src/stage_evaluate_model.py --params=params.yaml
@@ -72,9 +64,10 @@ stages:
       - train
       - evaluate
     deps:
-      - data/train/X_test_sc.pkl 
-      - data/train/y_test.pkl
-      - models/model.joblib 
+      - ${data_condition.modelData_path}
+      - ${select.selected_features_path}
+      - ${tune.best_params}
+      - ${train.model_name}
       - src/evaluation/validation_visuals.py
       - src/stage_evaluate_model.py
     metrics:

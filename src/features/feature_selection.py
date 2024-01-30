@@ -21,7 +21,7 @@ def feature_importance(model_path,
                        logger,
                        max_features=None,
                         ):
-    
+
     '''
     Calculates the feature importance score for a given model
     using CatBoost's default feature importance score - FeatureImportance
@@ -30,8 +30,8 @@ def feature_importance(model_path,
     '''
     logger.info("Loading model and calculating feature importance")
     model = joblib.load(f'{model_path}')
-    
-    # calculate the feature importance 
+
+    # calculate the feature importance
     df = model.get_feature_importance(prettified=True)
     df = df.astype({'Feature Id': int})
 
@@ -40,7 +40,7 @@ def feature_importance(model_path,
     feats_df = df[df['Feature Id'] >= 13]
     top_feats = feats_df.sort_values(by='Importances', ascending=False)[:max_features]
     top_feats_indices = [i - 13 for i in sorted(list(top_feats['Feature Id']))]
-    print(top_feats_indices)
+#    print(top_feats_indices)
     return top_feats_indices
 
 
@@ -48,10 +48,10 @@ def least_imp_feature(model, X_test, logger):
     '''
     Get the least important feature based on SHAP values.
 
-    This function uses SHAP (SHapley Additive exPlanations) 
-    values to explain the output of the model and identify the 
-    least important feature. The SHAP values are calculated for each feature 
-    in the test set, and the least important feature is determined 
+    This function uses SHAP (SHapley Additive exPlanations)
+    values to explain the output of the model and identify the
+    least important feature. The SHAP values are calculated for each feature
+    in the test set, and the least important feature is determined
     based on the mean absolute SHAP values.
 
     Returns:
@@ -63,12 +63,12 @@ def least_imp_feature(model, X_test, logger):
     shap_values = explainer(X_test)
     # logger.debug("SHAP values calculated")
     # shap value shape will be (28420, num_feats, 4)
-    # logger.debug(f'Shap values shape: {shap_values.shape}') 
+    # logger.debug(f'Shap values shape: {shap_values.shape}')
 
      # Calculate the mean absolute SHAP values across instances and features
     feature_importance = shap_values.abs.mean(0).mean(1).values
     logger.debug(f'columns:{X_test.columns}')
-    importance_df = pd.DataFrame({"features": X_test.columns, 
+    importance_df = pd.DataFrame({"features": X_test.columns,
                                   "importance": feature_importance}
                                   )
     importance_df.sort_values(by="importance", ascending=False, inplace=True)
@@ -87,8 +87,8 @@ def backward_selection(X_train,
                         max_features=None):
     """
     This function uses the SHAP importance from a model
-    to incrementally remove features from the training set until the metric 
-    no longer improves. This function returns the dataframe with the features 
+    to incrementally remove features from the training set until the metric
+    no longer improves. This function returns the dataframe with the features
     that give the best metric. Return at most max_features.
 
     Requires scaled, full set of 94 features in X_train, X_test
@@ -117,7 +117,7 @@ def backward_selection(X_train,
         max_features = total_features - 1
 
     for num_features in range(total_features - 1, 1, -1):
-        
+
         # only keep features > index 13 (ignore s1, s2, dem)
         select_X_test = select_X_test[select_X_test['features'] >= 13]
         logger.debug(f"select X test shape: {select_X_test.shape} (should be 81)")
@@ -139,7 +139,7 @@ def backward_selection(X_train,
             logger
         )
         logger.info(f"{round(metric, 4)} with {tmp_X_train.shape[1]} features")
-        
+
         # so for balanced accuracy, we want metric to decrease
         if (num_features < max_features) and (metric < last_metric):
             # metric decreased, return last dataframe
@@ -147,7 +147,7 @@ def backward_selection(X_train,
             select_X_train = [i - 13 for i in select_X_train]
             select_X_test = [i - 13 for i in select_X_test]
             return select_X_train, select_X_test, model
-        
+
         else:
             # metric improved, continue dropping features
             last_metric = metric
