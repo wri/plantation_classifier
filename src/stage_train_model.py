@@ -22,20 +22,28 @@ def train_model(param_path: Text) -> None:
     with open(params["select"]["selected_features_path"], "r") as fp:
         selected_features = json.load(fp)
     with open(params["tune"]["best_params"], "r") as fp:
-        hyperparameters = json.load(fp)
+        best_params = json.load(fp)
     logger.info("All data loaded")
 
     estimator_name = params["train"]["estimator_name"]
     model_path = f"{params['train']['model_name']}"
-
+    basic_params = params["train"]["estimators"][estimator_name]["param_grid"]
     model_data.filter_features(selected_features)
-    if "None" in hyperparameters.keys():
-        model_params = params["train"]["estimators"][estimator_name]["param_grid"]
-    else:
-        model_params = hyperparameters
-    model_params["class_weights"] = model_data.class_weights
 
-    logger.info(f"Training model..")
+    # if best params is empty use what's in params.yaml
+    # otherwise use results of hyperparam tuning 
+    if "None" in best_params.keys():
+        logger.info("Using default param grid")
+        model_params = basic_params
+    else:
+        model_params = best_params['params']
+        model_params["loss_function"] = basic_params['loss_function']
+        model_params["logging_level"] = basic_params['logging_level']
+    
+    model_params["class_weights"] = model_data.class_weights
+    logger.info(f"Model params: {model_params}")
+    logger.info(f"Training model...")
+
     metric, model = train.fit_estimator(
         model_data.X_train_reshaped,
         model_data.X_test_reshaped,
