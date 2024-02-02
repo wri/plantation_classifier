@@ -17,7 +17,7 @@ import model.train as trn
 from utils.logs import get_logger
 import joblib
 
-def feature_importance(model_path,
+def feature_importance(model,
                        logger,
                        max_features=None,
                         ):
@@ -28,8 +28,8 @@ def feature_importance(model_path,
     Returns df containing importance score for each feature and
     top n (feat_count) most important features
     '''
-    logger.info("Loading model and calculating feature importance")
-    model = joblib.load(f'{model_path}')
+    logger.info("Calculating feature importance")
+    #model = joblib.load(f'{model_path}')
 
     # calculate the feature importance
     df = model.get_feature_importance(prettified=True)
@@ -57,11 +57,12 @@ def least_imp_feature(model, X_test, logger):
     Returns:
     - str: The least important feature based on SHAP values.
     '''
-    # create shap explainer
+    # create the explainer interface for SHAP with 
+    # my model as input
     explainer = shap.Explainer(model)
-    # logger.debug("SHAP explainer calculated")
+    logger.debug("SHAP explainer calculated")
     shap_values = explainer(X_test)
-    # logger.debug("SHAP values calculated")
+    logger.debug(f"SHAP values calculated with shape {shap_values.shape}")
     # shap value shape will be (28420, num_feats, 4)
     # logger.debug(f'Shap values shape: {shap_values.shape}')
 
@@ -75,41 +76,40 @@ def least_imp_feature(model, X_test, logger):
 
     return importance_df["features"].iloc[-1]
 
-
-def backward_selection(X_train,
-                        X_test,
-                        y_train,
-                        y_test,
-                        estimator_name,
-                        metric_name,
-                        model_params_dict,
-                        logger,
-                        max_features=None):
+def backward_selection(
+    X_train,
+    X_test,
+    y_train,
+    y_test,
+    estimator_name,
+    metric_name,
+    model_params_dict,
+    fit_params_dict,
+    logger,
+    max_features=None,
+    ):
     """
     This function uses the SHAP importance from a model
-    to incrementally remove features from the training set until the metric
-    no longer improves. This function returns the dataframe with the features
-    that give the best metric. Return at most max_features.
-
-    Requires scaled, full set of 94 features in X_train, X_test
-    Metric being used here is balanced accuracy
+    to incrementally remove features from the training set until the metric no longer improves.
+    This function returns the dataframe with the features that give the best metric.
+    Return at most max_features.
     """
     # get baseline metric
     total_features = X_train.shape[1]
     select_X_train = pd.DataFrame(X_train.copy())
     select_X_test = pd.DataFrame(X_test.copy())
     metric, model, X_test = trn.fit_estimator(
-        X_train,
-        X_test,
-        y_train,
-        y_test,
-        estimator_name,
-        metric_name,
-        model_params_dict,
-        logger,
-    )
+                                        X_train,
+                                        X_test,
+                                        y_train,
+                                        y_test,
+                                        estimator_name,
+                                        metric_name,
+                                        model_params_dict,
+                                        fit_params_dict,
+                                    )
     logger.debug(f"X_test shape: {X_test.shape}")
-    logger.info(f"BASELINE: {round(metric, 4)} with {select_X_train.shape[1]} features")
+    logger.info(f"{metric} with {select_X_train.shape[1]} features")
     last_metric = metric
 
     # Drop least important feature and recalculate model peformance
@@ -117,17 +117,14 @@ def backward_selection(X_train,
         max_features = total_features - 1
 
     for num_features in range(total_features - 1, 1, -1):
-
-        # only keep features > index 13 (ignore s1, s2, dem)
-        select_X_test = select_X_test[select_X_test['features'] >= 13]
-        logger.debug(f"select X test shape: {select_X_test.shape} (should be 81)")
-
         # Trim features
+        logger.debug(f"select X test shape: {select_X_test.shape}")
         dropped_feature = least_imp_feature(model, select_X_test, logger)
         logger.info(f"Removing feature {dropped_feature}")
         tmp_X_train = select_X_train.drop(columns=[dropped_feature])
         tmp_X_test = select_X_test.drop(columns=[dropped_feature])
 
+        # Rerun modeling
         metric, model, X_test = trn.fit_estimator(
             tmp_X_train,
             tmp_X_test,
@@ -136,27 +133,16 @@ def backward_selection(X_train,
             estimator_name,
             metric_name,
             model_params_dict,
-            logger
+            fit_params_dict,
         )
-        logger.info(f"{round(metric, 4)} with {tmp_X_train.shape[1]} features")
-
-        # so for balanced accuracy, we want metric to decrease
+        logger.info(f"{metric} with {tmp_X_train.shape[1]} features")
         if (num_features < max_features) and (metric < last_metric):
             # metric decreased, return last dataframe
-            # first calculate appropriate indices
-            select_X_train = [i - 13 for i in select_X_train]
-            select_X_test = [i - 13 for i in select_X_test]
-            return select_X_train, select_X_test, model
-
+            return select_X_train, select_X_test
         else:
             # metric improved, continue dropping features
             last_metric = metric
             select_X_train = tmp_X_train
             select_X_test = tmp_X_test
 
-    select_X_train = [i - 13 for i in select_X_train]
-    select_X_test = [i - 13 for i in select_X_test]
-    logger.info(f"Selected X_train: {select_X_train}")
-    logger.info(f"Selected X_test: {select_X_train}")
-
-    return select_X_train, select_X_test, model
+    return select_X_train, select_X_test
