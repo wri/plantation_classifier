@@ -9,7 +9,9 @@ from features import create_xy, PlantationsData
 
 
 def featurize(param_path: Text) -> None:
-    """ """
+    """ 
+    TODO: docstring 
+    """
     with open(param_path) as file:
         params = yaml.safe_load(file)
 

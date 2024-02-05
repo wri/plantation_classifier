@@ -53,8 +53,8 @@ stages:
     outs:
     - path: data/train/modelData.pkl
       hash: md5
-      md5: 94dfe6195841699ca97de4471224f257
-      size: 429665996
+      md5: 0bfaa54bd9cd96ad67ea6d606d4167fe
+      size: 429665013
   load_data:
     cmd: python src/stage_load_data.py --params=params.yaml
     deps:
@@ -94,12 +94,12 @@ stages:
     deps:
     - path: data/train/modelData.pkl
       hash: md5
-      md5: 94dfe6195841699ca97de4471224f257
-      size: 429665996
+      md5: 0bfaa54bd9cd96ad67ea6d606d4167fe
+      size: 429665013
     - path: src/features/feature_selection.py
       hash: md5
-      md5: ec4631127d9c9a6120fd58f584f5e481
-      size: 5823
+      md5: 9505963ba70f0fb7e724e09300456a57
+      size: 5625
     params:
       params.yaml:
         base:
@@ -115,10 +115,10 @@ stages:
           val_split: 25
           modelData_path: data/train/modelData.pkl
         select:
-          select_features: false
+          select_features: true
           selected_features_path: data/train/selected_features.json
-          max_features: 40
-          fs_analysis: feat_imp
+          max_features: 80
+          fs_analysis: shap
         train:
           use_best_params: false
           model_dir: models/
@@ -129,26 +129,6 @@ stages:
           testing_metrics: accuracy balanced_accuracy precision recall f1 roc_auc
             log_loss
           estimators:
-            rfc:
-              importance_metric: shap
-              use_class_weights: true
-              param_grid:
-            svm:
-              importance_metric: shap
-              use_class_weights: true
-              param_grid:
-            lgbm:
-              importance_metric: shap
-              use_class_weights: true
-              param_grid:
-            xgb:
-              importance_metric: shap
-              use_class_weights: true
-              param_grid:
-            logreg:
-              importance_metric: shap
-              use_class_weights: true
-              param_grid:
             cat:
               importance_metric: shap
               use_class_weights: true
@@ -156,11 +136,9 @@ stages:
                 loss_function: MultiClass
                 random_state: 121
                 logging_level: Silent
-                iterations: 811
         tune:
           tune_hyperparameters: false
           n_iter: 20
-          cv: 3
           plot: false
           verbose: false
           estimators:
@@ -186,8 +164,8 @@ stages:
     outs:
     - path: data/train/selected_features.json
       hash: md5
-      md5: 0e9fc4e5939b49c2e2cff51a1229c3fb
-      size: 157
+      md5: dee24b82f7bbb9179b819705d0fa492a
+      size: 358
     - path: src/evaluation/best_params.json
       hash: md5
       md5: cf78d06c4e033cebed6e025682b56c0f
@@ -197,12 +175,12 @@ stages:
     deps:
     - path: data/train/modelData.pkl
       hash: md5
-      md5: 94dfe6195841699ca97de4471224f257
-      size: 429665996
+      md5: 0bfaa54bd9cd96ad67ea6d606d4167fe
+      size: 429665013
     - path: data/train/selected_features.json
       hash: md5
-      md5: 0e9fc4e5939b49c2e2cff51a1229c3fb
-      size: 157
+      md5: dee24b82f7bbb9179b819705d0fa492a
+      size: 358
     - path: src/evaluation/best_params.json
       hash: md5
       md5: cf78d06c4e033cebed6e025682b56c0f
@@ -239,26 +217,6 @@ stages:
           testing_metrics: accuracy balanced_accuracy precision recall f1 roc_auc
             log_loss
           estimators:
-            rfc:
-              importance_metric: shap
-              use_class_weights: true
-              param_grid:
-            svm:
-              importance_metric: shap
-              use_class_weights: true
-              param_grid:
-            lgbm:
-              importance_metric: shap
-              use_class_weights: true
-              param_grid:
-            xgb:
-              importance_metric: shap
-              use_class_weights: true
-              param_grid:
-            logreg:
-              importance_metric: shap
-              use_class_weights: true
-              param_grid:
             cat:
               importance_metric: shap
               use_class_weights: true
@@ -266,27 +224,26 @@ stages:
                 loss_function: MultiClass
                 random_state: 121
                 logging_level: Silent
-                iterations: 811
     outs:
     - path: models/model.joblib
       hash: md5
-      md5: 9003f9660f2f922cb8fb66a53c97b708
-      size: 2143465
+      md5: bb2c0db714627fa3f3aa78bcd71a6e89
+      size: 2644357
   evaluate_model:
     cmd: python src/stage_evaluate_model.py --params=params.yaml
     deps:
     - path: data/train/modelData.pkl
       hash: md5
-      md5: 94dfe6195841699ca97de4471224f257
-      size: 429665996
+      md5: 0bfaa54bd9cd96ad67ea6d606d4167fe
+      size: 429665013
     - path: data/train/selected_features.json
       hash: md5
-      md5: 0e9fc4e5939b49c2e2cff51a1229c3fb
-      size: 157
+      md5: dee24b82f7bbb9179b819705d0fa492a
+      size: 358
     - path: models/model.joblib
       hash: md5
-      md5: 9003f9660f2f922cb8fb66a53c97b708
-      size: 2143465
+      md5: bb2c0db714627fa3f3aa78bcd71a6e89
+      size: 2644357
     - path: src/evaluation/best_params.json
       hash: md5
       md5: cf78d06c4e033cebed6e025682b56c0f
@@ -318,7 +275,6 @@ stages:
           cm_image: src/evaluation/confusion_matrix
           cm_data: src/evaluation/confusion_matrix_data
           tile_id_loc: data
-          tile_s3_bucket: tof-output
         train:
           use_best_params: false
           model_dir: models/
@@ -329,26 +285,6 @@ stages:
           testing_metrics: accuracy balanced_accuracy precision recall f1 roc_auc
             log_loss
           estimators:
-            rfc:
-              importance_metric: shap
-              use_class_weights: true
-              param_grid:
-            svm:
-              importance_metric: shap
-              use_class_weights: true
-              param_grid:
-            lgbm:
-              importance_metric: shap
-              use_class_weights: true
-              param_grid:
-            xgb:
-              importance_metric: shap
-              use_class_weights: true
-              param_grid:
-            logreg:
-              importance_metric: shap
-              use_class_weights: true
-              param_grid:
             cat:
               importance_metric: shap
               use_class_weights: true
@@ -356,17 +292,16 @@ stages:
                 loss_function: MultiClass
                 random_state: 121
                 logging_level: Silent
-                iterations: 811
     outs:
     - path: src/evaluation/confusion_matrix.png
       hash: md5
-      md5: 087f43ad2f5c548d86e6a66638cfa985
-      size: 31056
+      md5: 39c2db5eadfb4828ede2493ea96aecaa
+      size: 31521
     - path: src/evaluation/confusion_matrix_data.csv
       hash: md5
-      md5: 7a96f7fdb872b5f67ff366510b8e7f32
+      md5: b48aa4a59a52892238fa6ccfb083df9c
       size: 113697
     - path: src/evaluation/metrics.json
       hash: md5
-      md5: a54b169aa6c64e116eefdc27e29cc59f
+      md5: 24c8e86a7374a4a827f8a3c32bfca861
       size: 192

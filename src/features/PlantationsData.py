@@ -36,6 +36,11 @@ class PlantationsData:
         """
         X_train_tmp = copy.deepcopy(self.X_train)
         X_test_tmp = copy.deepcopy(self.X_test)
+
+        # standardize train/test data 
+        min_all = []
+        max_all = []
+        
         for band in range(0, self.X_train.shape[-1]):
             mins = np.percentile(self.X_train[..., band], 1)
             maxs = np.percentile(self.X_train[..., band], 99)
@@ -50,14 +55,17 @@ class PlantationsData:
                 rng = maxs - mins
                 X_train_tmp[..., band] = (X_train_tmp[..., band] - midrange) / (rng / 2)
                 X_test_tmp[..., band] = (X_test_tmp[..., band] - midrange) / (rng / 2)
+                min_all.append(mins)
+                max_all.append(maxs)
+                
+        self.mins = min_all
+        self.maxs = max_all
         self.X_train_scaled = reshape_arr(X_train_tmp)
         self.X_test_scaled = reshape_arr(X_test_tmp)
 
-    # TODO: save xmins and maxs
-
     def filter_features(self, feature_index_list):
         n_feats = len(feature_index_list)
-        # create output arrays
+    
         X_train_fs = np.zeros(
             shape=(
                 self.X_train.shape[0],
@@ -75,9 +83,7 @@ class PlantationsData:
             )
         )
         for i in range(self.X_train.shape[0]):
-            X_train_fs[i : i + 1, ...] = self.X_train[
-                i : i + 1, :, :, feature_index_list
-            ]
+            X_train_fs[i : i + 1, ...] = self.X_train[i : i + 1, :, :, feature_index_list]
         for i in range(self.X_train.shape[0]):
             X_test_fs[i : i + 1, ...] = self.X_test[i : i + 1, :, :, feature_index_list]
 

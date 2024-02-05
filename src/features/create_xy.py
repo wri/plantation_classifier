@@ -260,7 +260,7 @@ def load_label(idx, ttc, classes, local_dir):
     For binary (2 class) classification, update labels by converting
     AF to 1. For 3 class classification, leave labels as is. For
     4 class classification, use the ttc data to update labels
-    for any vegetation >= 20% tree cover as natural trees.
+    for any pixel labeled 0 with >= 20% TTC tree cover as natural trees.
 
     0: no tree
     1: monoculture
