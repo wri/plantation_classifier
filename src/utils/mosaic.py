@@ -13,7 +13,7 @@ import boto3
 import glob
 import gc
 
-def mosaic_tif(location: list, model: str, compile_from: str):
+def mosaic_tif(location: list, compile_from: str):
 
     ''''
     Takes in a list of tiles and merges them to form a single tif.
@@ -66,7 +66,7 @@ def mosaic_tif(location: list, model: str, compile_from: str):
     date = datetime.today().strftime('%Y-%m-%d')
     
     # outpath will be the new filename 
-    outpath = f'tmp/{location[0]}/preds/mosaic/{location[1]}_{model}_{date}_mrgd.tif'
+    outpath = f'tmp/{location[0]}/preds/mosaic/{location[1]}_cat_{date}_mrgd.tif'
     out_meta = src.meta.copy()  
     out_meta.update({'driver': "GTiff",
                      'dtype': 'uint8',
@@ -80,15 +80,15 @@ def mosaic_tif(location: list, model: str, compile_from: str):
 
     return None
 
-def clip_it(location: list, model: str, shapefile: str):
+def clip_it(location: list, shapefile: str):
     ''''
     imports a mosaic tif and clips it to the extent of a 
     given shapefile
     '''
     date = datetime.today().strftime('%Y-%m-%d')
-    merged = f'tmp/{location[0]}/preds/mosaic/{location[1]}_{model}_{date}_mrgd.tif'
-    shapefile = gpd.read_file(f'data/{shapefile}')
-    clipped = f'tmp/{location[0]}/preds/mosaic/{location[1]}_{model}_{date}.tif'
+    merged = f'tmp/{location[0]}/preds/mosaic/{location[1]}_cat_{date}_mrgd.tif'
+    shapefile = gpd.read_file(shapefile)
+    clipped = f'tmp/{location[0]}/preds/mosaic/{location[1]}_cat_{date}.tif'
 
     with rs.open(merged) as src:
         shapefile = shapefile.to_crs(src.crs)
@@ -109,14 +109,14 @@ def clip_it(location: list, model: str, shapefile: str):
     return None
 
 
-def upload_mosaic(location: list, model: str, aws_access_key: str, aws_secret_key: str):
+def upload_mosaic(location: list, aws_access_key: str, aws_secret_key: str):
     '''
     Uploads the combined tif to an s3 bucket
     '''
     date = datetime.today().strftime('%Y-%m-%d')
     
     # outpath will be the new filename
-    suffix = f'{location[0]}_{model}_{date}.tif'
+    suffix = f'{location[0]}_cat_{date}.tif'
     mosaic_filepath = f'tmp/{location[0]}/preds/mosaic/{suffix}'
 
     s3 = boto3.resource('s3',
