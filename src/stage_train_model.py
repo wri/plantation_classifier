@@ -30,12 +30,13 @@ def train_model(param_path: Text) -> None:
     basic_params = params["train"]["estimators"][estimator_name]["param_grid"]
     model_data.filter_features(selected_features)
 
-    # if best params is empty use what's in params.yaml
-    # otherwise use results of hyperparam tuning 
-    if "None" in best_params.keys():
-        logger.info("Using default param grid")
+    # if "None" in best_params.keys():
+    if not params['train']['use_best_params']:
+        logger.info("Using user provided param grid.")
         model_params = basic_params
+
     else:
+        logger.info("Using random search param grid.")
         model_params = best_params['params']
         model_params["loss_function"] = basic_params['loss_function']
         model_params["logging_level"] = basic_params['logging_level']

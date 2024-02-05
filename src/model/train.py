@@ -108,11 +108,6 @@ def fit_estimator(
     if metric_name not in metrics.keys():
         raise UnsupportedMetric(metric_name)
 
-    logger.debug(
-        f"X_train type: {X_train.dtype}, X_test type: {X_test.dtype}, y_train type: {y_train.dtype}, y_test type: {y_test.dtype}"
-    )
-    # y_test = y_test.astype("str")
-
     # metric fun creates the function for the specified metric, cool!
     metric_func = metrics[metric_name]
     model = estimator(**model_params_dict)

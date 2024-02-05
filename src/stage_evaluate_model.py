@@ -102,7 +102,7 @@ def evaluate_model(params_path: Text) -> None:
             obj={
                 "f1_score": f1,
                 "accuracy_score": accuracy,
-                "balanced_accuracy_socre": balanced_accuracy,
+                "balanced_accuracy_score": balanced_accuracy,
                 "precision_score": precision,
                 "recall_score": recall,
             },

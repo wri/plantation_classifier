@@ -52,9 +52,7 @@ def random_search_cat(X_train, y_train, estimator_name, metric_name, param_path)
     # instantiate the classifier and perform Catboost built in method for random search
     cat = CatBoostClassifier(
         random_state=params["base"]["random_state"],
-        loss_function=params["train"]["estimators"][estimator_name]["param_grid"][
-            "loss_function"
-        ],  # use same as train
+        loss_function=params["train"]["estimators"][estimator_name]["param_grid"]["loss_function"], 
         verbose=params["tune"]["verbose"],
     )
 
@@ -67,5 +65,5 @@ def random_search_cat(X_train, y_train, estimator_name, metric_name, param_path)
         params["tune"]["plot"],
         params["tune"]["verbose"],
     )
-
-    return randomized_search_result, cat
+    print(randomized_search_result)
+    return randomized_search_result
