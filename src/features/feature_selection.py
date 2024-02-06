@@ -44,7 +44,7 @@ def feature_importance(model,
     return top_feats_indices
 
 
-def least_imp_feature(model, X_test, logger, min_index):
+def least_imp_feature(model, X_test, logger):
     '''
     Get the least important feature based on SHAP values.
 
@@ -69,7 +69,8 @@ def least_imp_feature(model, X_test, logger, min_index):
     importance_df = pd.DataFrame({"features": X_test.columns,
                                   "importance": feature_importance}
                                   )
-    importance_df = importance_df[importance_df.features >= min_index]
+    print(f"columns: {importance_df.features}")
+    importance_df = importance_df[importance_df.features >= 13]
     importance_df.sort_values(by="importance", ascending=False, inplace=True)
     
     return importance_df["features"].iloc[-1]
@@ -90,11 +91,10 @@ def backward_selection(
     to incrementally remove features from the training set until the metric no longer improves.
     This function returns the dataframe with the features that give the best metric.
     Return at most max_features.
+    X_test shape: (28420, 94)
     """
-    total_features = X_train.shape[1] # this should be 94
-    min_index = 13
-    select_X_train = pd.DataFrame(X_train.copy())
-    select_X_test = pd.DataFrame(X_test.copy())
+
+    # establish baseline
     baseline_metric, model = trn.fit_estimator(X_train,
                                         X_test,
                                         y_train,
@@ -104,23 +104,26 @@ def backward_selection(
                                         model_params_dict,
                                         logger,
                                     )
-    logger.debug(f"X_test shape: {X_test.shape}")
-    logger.info(f"Baseline: {round(baseline_metric, 5)} with {select_X_train.shape[1]} features")
+    logger.info(f"Baseline: {round(baseline_metric, 5)} with {X_train.shape[1]} features")
     last_metric = baseline_metric
 
-    # if max features is none, evaluate all 94 features
-    if max_features is None:
-        max_features = total_features - 1
-    else:
-        max_features += min_index - 1
-    logger.info(f"Max features updated to: {max_features}")
+    # use all 94 features if max_features is not specified, otherwise
+    # use max_features + 13 ARD features
+    total_features = [94 if max_features is None else max_features + 13]
+    logger.info(f"Performing backward selection for {total_features} features")
+    logger.info(f"{94 - total_features} features will be dropped")
 
     # Drop least important feature and recalculate model peformance
+    select_X_train = pd.DataFrame(X_train) # removed the copy
+    select_X_test = pd.DataFrame(X_test)
     for num_features in range(total_features - 1, 1, -1):
-        dropped_feature = least_imp_feature(model, select_X_test, logger, min_index)
-        tmp_X_train = select_X_train.drop(columns=[dropped_feature])
+        dropped_feature = least_imp_feature(model, select_X_test, logger)
+        # could tmp_X_train be a sliced array instead of df?
+        # can we be sure that the original indices are maintined?
+        tmp_X_train = select_X_train.drop(columns=[dropped_feature]) 
         tmp_X_test = select_X_test.drop(columns=[dropped_feature])
         logger.info(f"Removed feature {dropped_feature}, {tmp_X_train.shape[1]} features remaining")
+        logger.info(f"{tmp_X_train.shape}, {select_X_train.shape}")
 
         # Rerun modeling 
         metric, model = trn.fit_estimator(
@@ -135,7 +138,7 @@ def backward_selection(
         )
         logger.info(f"{round(metric, 5)} with {tmp_X_train.shape[1]} features")
         
-        if (num_features < max_features) and (metric < last_metric):
+        if (num_features < max_features) and (metric < last_metric): # consider that this could exceed max featuers without warning
             # metric decreased, return last dataframe
             top_feats = [int(i) for i in list(select_X_train.columns)]
             return top_feats
@@ -149,3 +152,81 @@ def backward_selection(
     
     top_feats = [int(i) for i in list(select_X_train.columns)]
     return top_feats
+
+
+
+def least_imp_feature_v2(model, X_test, logger):
+
+    # create the explainer interface for SHAP with input model
+    explainer = shap.Explainer(model)
+    shap_values = explainer(X_test)
+    logger.debug(f"SHAP values calculated with shape {shap_values.shape}")
+
+     # Calculate the mean absolute SHAP values across instances and features
+    feature_importance = shap_values.abs.mean(0).mean(1).values
+    importance_df = pd.DataFrame({"features": X_test.columns,
+                                  "importance": feature_importance}
+                                  )
+    print(f"columns: {importance_df.features}")
+    importance_df = importance_df[importance_df.features >= 13]
+    importance_df.sort_values(by="importance", ascending=False, inplace=True)
+    
+    return importance_df["features"].iloc[-1]
+
+def backward_selection_v2(X_train,
+                                    X_test,
+                                    y_train,
+                                    y_test,
+                                    estimator_name,
+                                    metric_name,
+                                    model_params_dict,
+                                    logger,
+                                    max_features=None,
+                                    ):
+
+    # use all 94 features if max_features is not specified, otherwise
+    # use max_features + 13 ARD features
+    total_features = [94 if max_features is None else max_features + 13]
+    logger.info(f"Performing backward selection for {total_features} features")
+    logger.info(f"{94 - total_features} features will be dropped")
+
+    # creats an empty list to hold the least imp features
+    # think this has to be a Dataframe that preserves the original indices
+    # and flags which ones will be drop
+    least_imp_list = []
+
+    # X_train and X_test will be updated based on feature list
+    for num_features in range(total_features - 1, 1, -1):
+        if len(least_imp_list) > 0:
+            # assert values 0-13 not present
+            select_X_train = X_train[..., [least_imp_list]]
+            select_X_test = X_test[..., [least_imp_list]]
+        else:
+            select_X_train = X_train
+            select_X_test = X_test
+
+        # get the baseline metric for comparison
+        metric, model = trn.fit_estimator(select_X_train,
+                                        select_X_test,
+                                        y_train,
+                                        y_test,
+                                        estimator_name,
+                                        metric_name,
+                                        model_params_dict,
+                                        logger,
+                                        )
+
+        # calculates the least important feature 
+        drop_me = least_imp_feature_v2(model, select_X_test, logger)
+        least_imp_list.append(drop_me)
+        logger.info(f"Removed feature {drop_me}")
+
+    # applies list to original X_train and fits model again
+
+    # once the list reaches max features, returns the list
+    
+    return None 
+
+
+
+
