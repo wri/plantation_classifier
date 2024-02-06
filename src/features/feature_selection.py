@@ -208,7 +208,9 @@ def backward_selection_v2(X_train,
     # update baseline features using index of dropped features
     for i in range(total_features - 1, -1, -1):
         dropped_feature = least_imp_feature(model, X_test, logger)
-        # get the original index of the dropped feature
+        
+        # index the original location and append to a list of
+        # least important feats
         original_feat_idx = baseline_features[dropped_feature]
         least_imp_list.append(original_feat_idx)
         logger.info(f"Removed feature {dropped_feature}, {X_train.shape[1]} features remaining")
@@ -228,17 +230,16 @@ def backward_selection_v2(X_train,
 
         # Note: this will proceed w/o warning if max feats exceeded but not metric
         if (i < max_features) and (metric < last_metric): 
-            # now remove elements from baseline features 
-            baseline_features = np.delete(baseline_features, dropped_feature)
+            # now remove all elements from baseline features 
+            baseline_features = np.delete(baseline_features, least_imp_list)
+            return baseline_features
+        
+        else:
+            # update X_train and X_test and keep fitting
+            last_metric = metric
             X_train = np.delete(X_train, dropped_feature, 1)
             X_test = np.delete(X_test, dropped_feature, 1)
 
-            # need to get the indices are not in least_imp_list?
-            return X_train, X_test ## UPDATE
-        
-        else:
-            last_metric = metric
-
-
-    return X_train, X_test
+    baseline_features = np.delete(baseline_features, least_imp_list)
+    return baseline_features
 
