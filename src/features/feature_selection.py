@@ -2,6 +2,7 @@
 
 import pickle
 import pandas as pd
+import numpy as np
 from catboost import CatBoostClassifier
 from sklearn.metrics import (
     accuracy_score,
@@ -154,35 +155,45 @@ def backward_selection(
     return top_feats
 
 
-
 def least_imp_feature_v2(model, X_test, logger):
 
-    # create the explainer interface for SHAP with input model
     explainer = shap.Explainer(model)
     shap_values = explainer(X_test)
     logger.debug(f"SHAP values calculated with shape {shap_values.shape}")
-
-     # Calculate the mean absolute SHAP values across instances and features
-    feature_importance = shap_values.abs.mean(0).mean(1).values
-    importance_df = pd.DataFrame({"features": X_test.columns,
-                                  "importance": feature_importance}
-                                  )
-    print(f"columns: {importance_df.features}")
-    importance_df = importance_df[importance_df.features >= 13]
-    importance_df.sort_values(by="importance", ascending=False, inplace=True)
     
-    return importance_df["features"].iloc[-1]
+    # calculate importance and focus on non ARD features 
+    feature_importance = shap_values.abs.mean(0).mean(1).values
+    feature_importance = feature_importance[13:]
+    
+    # get a list of indices that would sort the array in ascending order
+    ranked = np.argsort(feature_importance)
+    explainer = None
+    return ranked[0]
+
 
 def backward_selection_v2(X_train,
-                                    X_test,
-                                    y_train,
-                                    y_test,
-                                    estimator_name,
-                                    metric_name,
-                                    model_params_dict,
-                                    logger,
-                                    max_features=None,
-                                    ):
+                        X_test,
+                        y_train,
+                        y_test,
+                        estimator_name,
+                        metric_name,
+                        model_params_dict,
+                        logger,
+                        max_features=None,
+                        ):
+    
+    # establish baseline
+    baseline_metric, model = trn.fit_estimator(X_train,
+                                        X_test,
+                                        y_train,
+                                        y_test,
+                                        estimator_name,
+                                        metric_name,
+                                        model_params_dict,
+                                        logger,
+                                    )
+    logger.info(f"Baseline: {round(baseline_metric, 5)} with {X_train.shape[1]} features")
+    last_metric = baseline_metric
 
     # use all 94 features if max_features is not specified, otherwise
     # use max_features + 13 ARD features
@@ -190,43 +201,44 @@ def backward_selection_v2(X_train,
     logger.info(f"Performing backward selection for {total_features} features")
     logger.info(f"{94 - total_features} features will be dropped")
 
-    # creats an empty list to hold the least imp features
-    # think this has to be a Dataframe that preserves the original indices
-    # and flags which ones will be drop
+    baseline_features = np.arange(total_features)
     least_imp_list = []
 
-    # X_train and X_test will be updated based on feature list
-    for num_features in range(total_features - 1, 1, -1):
-        if len(least_imp_list) > 0:
-            # assert values 0-13 not present
-            select_X_train = X_train[..., [least_imp_list]]
-            select_X_test = X_test[..., [least_imp_list]]
+    # counts down from total features to 0
+    # update baseline features using index of dropped features
+    for i in range(total_features - 1, -1, -1):
+        dropped_feature = least_imp_feature(model, X_test, logger)
+        # get the original index of the dropped feature
+        original_feat_idx = baseline_features[dropped_feature]
+        least_imp_list.append(original_feat_idx)
+        logger.info(f"Removed feature {dropped_feature}, {X_train.shape[1]} features remaining")
+
+        # Rerun modeling 
+        metric, model = trn.fit_estimator(
+            X_train,
+            X_test,
+            y_train,
+            y_test,
+            estimator_name,
+            metric_name,
+            model_params_dict,
+            logger
+        )
+        logger.info(f"{round(metric, 5)} with {X_train.shape[1]} features")
+
+        # Note: this will proceed w/o warning if max feats exceeded but not metric
+        if (i < max_features) and (metric < last_metric): 
+            # now remove elements from baseline features 
+            baseline_features = np.delete(baseline_features, dropped_feature)
+            X_train = np.delete(X_train, dropped_feature, 1)
+            X_test = np.delete(X_test, dropped_feature, 1)
+
+            # need to get the indices are not in least_imp_list?
+            return X_train, X_test ## UPDATE
+        
         else:
-            select_X_train = X_train
-            select_X_test = X_test
-
-        # get the baseline metric for comparison
-        metric, model = trn.fit_estimator(select_X_train,
-                                        select_X_test,
-                                        y_train,
-                                        y_test,
-                                        estimator_name,
-                                        metric_name,
-                                        model_params_dict,
-                                        logger,
-                                        )
-
-        # calculates the least important feature 
-        drop_me = least_imp_feature_v2(model, select_X_test, logger)
-        least_imp_list.append(drop_me)
-        logger.info(f"Removed feature {drop_me}")
-
-    # applies list to original X_train and fits model again
-
-    # once the list reaches max features, returns the list
-    
-    return None 
+            last_metric = metric
 
 
-
+    return X_train, X_test
 
