@@ -22,7 +22,7 @@ data_load:
   local_prefix: data/
   ceo_survey:
     - v08
-    - v14
+    #  - v14
     - v15
     - v18
     - v19
@@ -47,14 +47,14 @@ data_condition:
   modelData_path: data/train/modelData.pkl
 
 select:
-  select_features: True       # Update
+  select_features: True # Update
   max_features: 40
   selected_features_path: data/train/selected_features.json
-  fs_analysis: shap 
+  fs_analysis: shap
 
 tune:
-  tune_hyperparameters: False   # Update
-  n_iter: 20 
+  tune_hyperparameters: False # Update
+  n_iter: 20
   plot: False
   verbose: False
   estimators:
@@ -79,8 +79,8 @@ tune:
   best_params: src/evaluation/best_params.json
 
 train:
-  use_best_params: False        # Update
-  model_dir: models/ 
+  use_best_params: False # Update
+  model_dir: models/
   model_name: models/model.joblib
   estimator_name: cat
   cv: 3

@@ -36,7 +36,6 @@ stages:
           local_prefix: data/
           ceo_survey:
           - v08
-          - v14
           - v15
           - v18
           - v19
@@ -53,8 +52,8 @@ stages:
     outs:
     - path: data/train/modelData.pkl
       hash: md5
-      md5: 0bfaa54bd9cd96ad67ea6d606d4167fe
-      size: 429665013
+      md5: d80cd965d8f52007595ce3552281eea5
+      size: 235338254
   load_data:
     cmd: python src/stage_load_data.py --params=params.yaml
     deps:
@@ -75,7 +74,6 @@ stages:
           local_prefix: data/
           ceo_survey:
           - v08
-          - v14
           - v15
           - v18
           - v19
@@ -94,12 +92,12 @@ stages:
     deps:
     - path: data/train/modelData.pkl
       hash: md5
-      md5: 0bfaa54bd9cd96ad67ea6d606d4167fe
-      size: 429665013
+      md5: d80cd965d8f52007595ce3552281eea5
+      size: 235338254
     - path: src/features/feature_selection.py
       hash: md5
-      md5: 9505963ba70f0fb7e724e09300456a57
-      size: 5625
+      md5: f470dce8f944baa18bfef6cfab0431bf
+      size: 9613
     params:
       params.yaml:
         base:
@@ -116,8 +114,8 @@ stages:
           modelData_path: data/train/modelData.pkl
         select:
           select_features: true
+          max_features: 40
           selected_features_path: data/train/selected_features.json
-          max_features: 80
           fs_analysis: shap
         train:
           use_best_params: false
@@ -136,55 +134,30 @@ stages:
                 loss_function: MultiClass
                 random_state: 121
                 logging_level: Silent
-        tune:
-          tune_hyperparameters: false
-          n_iter: 20
-          plot: false
-          verbose: false
-          estimators:
-            cat:
-              param_grid:
-                iter_min: 700
-                iter_max: 900
-                iter_step: 2
-                depth_min: 6
-                depth_max: 12
-                depth_step: 3
-                leaf_reg_min: 2
-                leaf_reg_max: 30
-                leaf_reg_step: 3
-                min_data_leaf_min: 20
-                min_data_leaf_max: 100
-                min_data_leaf_step: 3
-                learn_rate:
-                - 0.02
-                - 0.03
-                - 0.04
-          best_params: src/evaluation/best_params.json
     outs:
     - path: data/train/selected_features.json
       hash: md5
-      md5: dee24b82f7bbb9179b819705d0fa492a
-      size: 358
+      md5: 05c720170981f42d886b252fb3f76be2
+      size: 150
     - path: src/evaluation/best_params.json
       hash: md5
-      md5: cf78d06c4e033cebed6e025682b56c0f
-      size: 110
+      md5: 5627006a412d769b1b1c112ff2ed8079
+      size: 14
   train_model:
     cmd: python src/stage_train_model.py --params=params.yaml
     deps:
     - path: data/train/modelData.pkl
       hash: md5
-      md5: 0bfaa54bd9cd96ad67ea6d606d4167fe
-      size: 429665013
+      md5: d80cd965d8f52007595ce3552281eea5
+      size: 235338254
     - path: data/train/selected_features.json
       hash: md5
-      md5: dee24b82f7bbb9179b819705d0fa492a
-      size: 358
+      md5: 05c720170981f42d886b252fb3f76be2
+      size: 150
     - path: src/evaluation/best_params.json
       hash: md5
-      md5: cf78d06c4e033cebed6e025682b56c0f
-      size: 110
+      md5: 5627006a412d769b1b1c112ff2ed8079
+      size: 14
     - path: src/model/train.py
       hash: md5
       md5: 3b8af3616962af8636a74d7dc406c446
@@ -227,27 +200,27 @@ stages:
     outs:
     - path: models/model.joblib
       hash: md5
-      md5: bb2c0db714627fa3f3aa78bcd71a6e89
-      size: 2644357
+      md5: 5970fc65fae0e17889694fa32b14295d
+      size: 2638905
   evaluate_model:
     cmd: python src/stage_evaluate_model.py --params=params.yaml
     deps:
     - path: data/train/modelData.pkl
       hash: md5
-      md5: 0bfaa54bd9cd96ad67ea6d606d4167fe
-      size: 429665013
+      md5: d80cd965d8f52007595ce3552281eea5
+      size: 235338254
     - path: data/train/selected_features.json
       hash: md5
-      md5: dee24b82f7bbb9179b819705d0fa492a
-      size: 358
+      md5: 05c720170981f42d886b252fb3f76be2
+      size: 150
     - path: models/model.joblib
       hash: md5
-      md5: bb2c0db714627fa3f3aa78bcd71a6e89
-      size: 2644357
+      md5: 5970fc65fae0e17889694fa32b14295d
+      size: 2638905
     - path: src/evaluation/best_params.json
       hash: md5
-      md5: cf78d06c4e033cebed6e025682b56c0f
-      size: 110
+      md5: 5627006a412d769b1b1c112ff2ed8079
+      size: 14
     - path: src/evaluation/validation_visuals.py
       hash: md5
       md5: 03c3bd6638b24739b369000fefd1fdfd
@@ -295,13 +268,13 @@ stages:
     outs:
     - path: src/evaluation/confusion_matrix.png
       hash: md5
-      md5: 39c2db5eadfb4828ede2493ea96aecaa
-      size: 31521
+      md5: 6ae56a02c8393b5d7c00bbfd9ab3c4ac
+      size: 26453
     - path: src/evaluation/confusion_matrix_data.csv
       hash: md5
-      md5: b48aa4a59a52892238fa6ccfb083df9c
-      size: 113697
+      md5: ada9d0ba9652af0e725d34b99dcc1559
+      size: 62737
     - path: src/evaluation/metrics.json
       hash: md5
-      md5: 24c8e86a7374a4a827f8a3c32bfca861
-      size: 192
+      md5: ec43a2dfda9aab7142bb12e36d0932d6
+      size: 190
