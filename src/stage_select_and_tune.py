@@ -38,49 +38,23 @@ def perform_selection_and_tuning(param_path: Text) -> None:
     if not perform_fs and not perform_tuning:
         logger.info("Skipping feature selection and tuning.")
     else:
-        if perform_fs:
+        if perform_fs: 
             # define parameters for feature selection
             model_params = params["train"]["estimators"]["cat"]["param_grid"]
-            feature_analysis = params["select"]["fs_analysis"]
             max_features = params["select"]["max_features"]
             logger.info(f"Max features for feature selection: {max_features}")
-
-            if feature_analysis == "feat_imp":
-                logger.info(
-                    f"Performing feature selection with CatBoost feature importance"
-                )
-                metric, model = train.fit_estimator(
-                    model_data.X_train_scaled,
-                    model_data.X_test_scaled,
-                    model_data.y_train_reshaped,
-                    model_data.y_test_reshaped,
-                    "cat",
-                    params["train"]["tuning_metric"],
-                    model_params,
-                    logger,
-                )
-                top_feats = fsl.feature_importance(model, logger, max_features)
-                logger.debug(f"Top features identified: {top_feats}")
-            
-            if feature_analysis == 'shap':
-                logger.info(
-                    f"Performing feature selection with SHAP analysis"
-                )
-                # update this to return top feats
-                top_feats = fsl.backward_selection(
-                                       model_data.X_train_scaled,
-                                       model_data.X_test_scaled,
-                                       model_data.y_train_reshaped,
-                                       model_data.y_test_reshaped,
-                                       "cat",
-                                       params["train"]["tuning_metric"],
-                                       model_params,
-                                       logger,
-                                       max_features)
-                logger.debug(f"Top features identified: {top_feats}")
-                # does the class need to be updated or just return top feats?
-
-
+            top_feats = fsl.backward_selection(
+                                    model_data.X_train_scaled,
+                                    model_data.X_test_scaled,
+                                    model_data.y_train_reshaped,
+                                    model_data.y_test_reshaped,
+                                    "cat",
+                                    params["train"]["tuning_metric"],
+                                    model_params,
+                                    logger,
+                                    max_features)
+            logger.debug(f"Top features identified: {top_feats}")
+               
         if perform_tuning:
             # use model data to create feature selected and reshaped X_train
             model_data.filter_features(top_feats)
