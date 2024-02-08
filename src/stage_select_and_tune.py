@@ -12,7 +12,11 @@ from json.decoder import JSONDecodeError
 
 def perform_selection_and_tuning(param_path: Text) -> None:
     '''
-    
+    References optional feature selection and tuning stage
+    from the params file. If true, perfoms feature selection to identify
+    and save the top [max_features] features.
+    Performs optional random seach to identify and save the best parameters.
+    If both options are set to false, saves empty json files.
     '''
     with open(param_path) as file:
         params = yaml.safe_load(file)

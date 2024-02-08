@@ -4,21 +4,16 @@ import pickle
 import pandas as pd
 import numpy as np
 from catboost import CatBoostClassifier
-import json
 import shap
 import model.train as trn
 from utils.logs import get_logger
-import joblib
 
 def least_imp_feature(model, X_test, logger):
     """
-    Get the least important feature based on SHAP values.
-
     This function uses feature importance values to explain the output 
     of the model and identify the least important feature. 
-    The values are calculated for each feature
-    in the test set, and the least important feature is removed
-    from the returned dataframe.
+    The values are calculated for each feature in the test set, 
+    and the least important feature is returned.
 
     Returns:
     - str: The least important feature based on feature importance
@@ -54,11 +49,11 @@ def backward_selection(
     max_features=None,
 ):
     """
-    This function uses the SHAP importance from a model
-    to incrementally remove features from the training set until the metric no longer improves.
-    This function returns the dataframe with the features that give the best metric.
-    Return at most max_features.
-    X_test shape: (28420, 94)
+    This function uses Catboost's build in feature_importance method
+    to incrementally remove features from the training set until the 
+    provided accuracy metric no longer improves.
+    This function returns a list of at most [max_features] features 
+    that provide the best metric.
     """
 
     # establish baseline
@@ -150,6 +145,9 @@ def backward_selection(
 
 
 def least_imp_feature_v2(model, X_test, logger):
+    '''
+    alternative using array indexing.
+    '''
 
     explainer = shap.Explainer(model)
     shap_values = explainer(X_test)
