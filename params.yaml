@@ -50,7 +50,6 @@ select:
   select_features: True       # Update
   max_features: 40
   selected_features_path: data/train/selected_features.json
-  fs_analysis: shap 
 
 tune:
   tune_hyperparameters: False   # Update
