@@ -20,6 +20,7 @@ data_load:
   bucket_name: restoration-monitoring
   folder_prefix: plantation-mapping/data/train/
   local_prefix: data/
+  ttc_feats_dir: train-features-ard/
   ceo_survey:
     - v08
     - v14
@@ -29,6 +30,7 @@ data_load:
     - v20
 
 data_condition:
+  total_feature_count: 94
   classes: 4
   ard_subsample: 4
   subset_fraction: 0.1 # set to 1.0 for all data
