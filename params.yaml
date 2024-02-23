@@ -27,15 +27,6 @@ data_load:
     - v18
     - v19
     - v20
-  data_prefix_list:
-    - slope
-    - s1
-    - s2
-    - dem
-    - features-ckpt-2023-02-09
-    - labels
-    - ard
-    - features-ard
 
 data_condition:
   classes: 4
