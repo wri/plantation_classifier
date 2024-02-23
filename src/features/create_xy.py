@@ -13,95 +13,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.utils.class_weight import compute_class_weight
 import json
 
-
-def load_slope(idx, local_dir):
-    """
-    Slope is stored as a 32 x 32 float32 array with border information.
-    Needs to be converted to 1 x 14 x 14 array to match the labels w/ new axis.
-    """
-    directory = f"{local_dir}train-slope/"
-
-    # Remove axes of length one with .squeeze (32 x 32 x 1)
-    x = np.load(directory + str(idx) + ".npy").squeeze()
-
-    # slice out border information
-    border_x = (x.shape[0] - 14) // 2
-    border_y = (x.shape[1] - 14) // 2
-    slope = x[border_x:-border_x, border_y:-border_y]
-
-    # explicitly convert array to a row vector, adding axis (1 x 14 x 14)
-    # slope = slope[np.newaxis]
-    slope = slope[..., np.newaxis]
-
-    return slope
-
-
-def load_s1(idx, local_dir):
-    """
-    S1 is stored as a (12, 32, 32, 2) float64 array with border information.
-    Needs to be converted from monthly mosaics to an annual median,
-    and remove border information to match labels.
-    Dtype needs to be converted to float32.
-    """
-    directory = f"{local_dir}train-s1/"
-
-    # since s1 is a float64, can't use to_float32()
-    s1 = hkl.load(directory + str(idx) + ".hkl")
-
-    # convert to decible
-    s1[..., -1] = preprocess.convert_to_db(s1[..., -1], 22)
-    s1[..., -2] = preprocess.convert_to_db(s1[..., -2], 22)
-
-    # get the median across flattened array
-    if len(s1.shape) == 4:
-        s1 = np.median(s1, axis=0, overwrite_input=True)
-
-    # just convert (removed /65535) keep here
-    s1 = np.float32(s1)
-
-    # slice out border information (32, 32, 2) -> (14, 14, 2)
-    border_x = (s1.shape[0] - 14) // 2
-    border_y = (s1.shape[1] - 14) // 2
-    s1 = s1[border_x:-border_x, border_y:-border_y]
-
-    return s1
-
-
-def load_s2(idx, local_dir):
-    """
-    S2 is stored as a (12, 28, 28, 11) uint16 array.
-    Remove the last axis index - the date of the imagery.
-    Convert monthly images to an annual median.
-    Remove the border to correspond to the labels.
-    Convert to float32.
-    """
-    directory = f"{local_dir}train-s2/"
-    s2 = hkl.load(directory + str(idx) + ".hkl")
-
-    # remove date of imagery (last axis)
-    if s2.shape[-1] == 11:
-        s2 = np.delete(s2, -1, -1)
-
-    # checks for floating datatype, if not converts to float32
-    # TODO check if this is the same func as in deply pipeline
-    # if so consider moving to utils
-    if not isinstance(s2.flat[0], np.floating):
-        assert np.max(s2) > 1
-        s2 = s2.astype(np.float32) / 65535
-        assert np.max(s2) < 1
-
-    # convert monthly images to annual median
-    if len(s2.shape) == 4:
-        s2 = np.median(s2, axis=0, overwrite_input=True)
-
-    # slice out border information
-    border_x = (s2.shape[0] - 14) // 2
-    border_y = (s2.shape[1] - 14) // 2
-    s2 = s2[border_x:-border_x, border_y:-border_y].astype(np.float32)
-
-    return s2
-
-
 def load_ard(idx, subsample, local_dir):
     """
     Analysis ready data is stored as (12, 28, 28, 13) with
@@ -124,104 +35,79 @@ def load_ard(idx, subsample, local_dir):
         ard = ard.astype(np.float32) / 65535
         assert np.max(ard) < 1
 
-    # convert monthly images to subset median if subsample >0
-    if os.path.exists(f"{local_dir}train-ard-sub/{idx}.npy"):
-        med_ard = np.load(f"{local_dir}train-ard-sub/{idx}.npy")
-    else:
-        if subsample > 0:
+    # convert monthly images to subset median if subsample > 0
+    # if no subset median on file, calculate and save
+    if subsample > 0:
+        if os.path.exists(f"{local_dir}train-ard-sub/{idx}.npy"):
+            varied_median = np.load(f"{local_dir}train-ard-sub/{idx}.npy")
+        else:
             rng = np.arange(12)
             indices = np.random.choice(rng, subsample, replace=False)
-            varied_median = np.zeros(
-                (subsample, ard.shape[1], ard.shape[2], ard.shape[3])
-            )
+            varied_median = np.zeros((subsample, ard.shape[1], ard.shape[2], ard.shape[3]),
+                                      dtype=np.float32)
+            
+            for x, i in zip(range(subsample), indices):
+                varied_median[x, ...] = ard[i, ...]
 
-            for x in range(subsample):
-                for i in indices:
-                    varied_median[x, ...] = ard[i, ...]
+            # calculate median w/ explicit setting to float32
+            varied_median = np.median(np.float32(varied_median), 
+                                        axis = 0, 
+                                        overwrite_input = True)
+            
+            np.save(f"{local_dir}train-ard-sub/{idx}.npy", varied_median)
 
-            med_ard = np.median(varied_median, axis=0).astype(
-                np.float32
-            )  # np.median changes dtype to float64
-            np.save(f"{local_dir}train-ard-sub/{idx}.npy", med_ard)
-
-        else:
-            med_ard = np.median(ard, axis=0)
+    else:
+        varied_median = np.median(np.float32(ard), 
+                                    axis=0, 
+                                    overwrite_input = True)
 
     # slice out border information
-    border_x = (med_ard.shape[0] - 14) // 2
-    border_y = (med_ard.shape[1] - 14) // 2
-    med_ard = med_ard[border_x:-border_x, border_y:-border_y, :]
+    border_x = (varied_median.shape[0] - 14) // 2
+    border_y = (varied_median.shape[1] - 14) // 2
+    varied_median = varied_median[border_x:-border_x, border_y:-border_y, :]
 
-    return med_ard
+    return varied_median
 
 
-def load_txt(idx, use_ard, local_dir):
+def load_txt(idx, local_dir):
     """
     S2 is stored as a (12, 28, 28, 11) uint16 array.
 
     Loads ARD data and filters to s2 indices. Preprocesses
     in order to extract texture features. Outputs the texture analysis
     as a (14, 14, 16) float32 array.
+
+    Note that this will load the ARD median subset
     """
     directory = f"{local_dir}train-texture/"
+    input_dir = f"{local_dir}train-ard-sub/"
 
-    # ARD TEXTURE
-    if use_ard:
-        input_dir = f"{local_dir}train-ard-sub/"
-        # check if subset text has been created
-        if os.path.exists(f"{directory}{idx}_sub.npy"):
-            output = np.load(f"{directory}{idx}_sub.npy")
-        else:
-            ard = np.load(input_dir + str(idx) + ".npy")
-            # if len(ard.shape) == 4:
-            #     ard = np.median(ard, axis = 0, overwrite_input=True)
-            s2 = ard[..., 0:10]
-            s2 = img_as_ubyte(s2)
-            # s2 = ((s2.astype(np.float32) / 65535) * 255).astype(np.uint8)
-            assert s2.dtype == np.uint8, print(s2.dtype)
-            blue = s2[..., 0]
-            green = s2[..., 1]
-            red = s2[..., 2]
-            nir = s2[..., 3]
-            output = np.zeros((14, 14, 16))
-            output[..., 0:4] = slow_txt.extract_texture(blue)
-            output[..., 4:8] = slow_txt.extract_texture(green)
-            output[..., 8:12] = slow_txt.extract_texture(red)
-            output[..., 12:16] = slow_txt.extract_texture(nir)
-            np.save(f"{directory}{idx}_sub.npy", output)
-
-    # S2 TEXTURE
+    # check if texture file has already been created
+    if os.path.exists(f"{directory}{idx}.npy"):
+        output = np.load(f"{directory}{idx}.npy")
     else:
-        input_dir = f"{local_dir}train-s2/"
-        if os.path.exists(f"{directory}{idx}.npy"):
-            output = np.load(f"{directory}{idx}.npy")
-        else:
-            s2 = hkl.load(input_dir + str(idx) + ".hkl")
-            # remove date of imagery (last axis)
-            # and convert monthly images to annual median
-            if s2.shape[-1] == 11:
-                s2 = np.delete(s2, -1, -1)
-            if len(s2.shape) == 4:
-                s2 = np.median(s2, axis=0, overwrite_input=True)
-
-            # this has to be done after median
-            # doesnt work if just calling .astype(np.uint8)
-            s2 = ((s2.astype(np.float32) / 65535) * 255).astype(np.uint8)
-            blue = s2[..., 0]
-            green = s2[..., 1]
-            red = s2[..., 2]
-            nir = s2[..., 3]
-            output = np.zeros((14, 14, 16))
-            output[..., 0:4] = slow_txt.extract_texture(blue)
-            output[..., 4:8] = slow_txt.extract_texture(green)
-            output[..., 8:12] = slow_txt.extract_texture(red)
-            output[..., 12:16] = slow_txt.extract_texture(nir)
-            np.save(f"{directory}{idx}.npy", output)
+        ard = np.load(input_dir + str(idx) + ".npy")
+        # if len(ard.shape) == 4:
+        #     ard = np.median(ard, axis = 0, overwrite_input=True)
+        s2 = ard[..., 0:10]
+        s2 = img_as_ubyte(s2)
+        # s2 = ((s2.astype(np.float32) / 65535) * 255).astype(np.uint8)
+        assert s2.dtype == np.uint8, print(s2.dtype)
+        blue = s2[..., 0]
+        green = s2[..., 1]
+        red = s2[..., 2]
+        nir = s2[..., 3]
+        output = np.zeros((14, 14, 16), dtype=np.float32)
+        output[..., 0:4] = slow_txt.extract_texture(blue)
+        output[..., 4:8] = slow_txt.extract_texture(green)
+        output[..., 8:12] = slow_txt.extract_texture(red)
+        output[..., 12:16] = slow_txt.extract_texture(nir)
+        np.save(f"{directory}{idx}.npy", output)
 
     return output.astype(np.float32)
 
 
-def load_ttc(idx, use_ard, local_dir):
+def load_ttc(idx, ttc_feats_dir, local_dir):
     """
     Features are stored as a 14 x 14 x 65 float64 array. The last axis contains
     the feature dimensions. Dtype needs to be converted to float32. The TML
@@ -236,11 +122,7 @@ def load_ttc(idx, use_ard, local_dir):
     Index 33 - 65 are low level features
     """
 
-    if use_ard:
-        directory = f"{local_dir}train-features-ard/"
-    else:
-        directory = f"{local_dir}train-features-ckpt-2023-02-09/"
-
+    directory = f"{local_dir}{ttc_feats_dir}"
     feats = hkl.load(directory + str(idx) + ".hkl")
 
     # clip all features after indx 0 to specific vals
@@ -361,7 +243,7 @@ def make_sample(sample_shape, s2, slope, s1, txt, ttc):
 
     # define the last dimension of the array
     n_feats = 1 + s1.shape[-1] + s2.shape[-1] + feats.shape[-1]
-    sample = np.empty((sample_shape[0], sample_shape[1], n_feats), dtype=np.float32)
+    sample = np.zeros((sample_shape[0], sample_shape[1], n_feats), dtype=np.float32)
 
     # populate empty array with each feature
     # order: s2, dem, s1, ttc, txt
@@ -385,6 +267,7 @@ def build_training_sample(train_batch, classes, params_path, logger):
         params = yaml.safe_load(file)
 
     train_data_dir = params["data_load"]["local_prefix"]
+    ttc_feats_dir = params["data_load"]["ttc_feats_dir"]
     plot_ids = gather_plot_ids(train_batch, train_data_dir, logger)
     logger.info(f"{len(plot_ids)} plots will be used in training.")
 
@@ -393,14 +276,14 @@ def build_training_sample(train_batch, classes, params_path, logger):
     sample_shape = (14, 14)
     n_feats = 94
     n_samples = len(plot_ids)
-    y_all = np.zeros(shape=(n_samples, sample_shape[0], sample_shape[1]))
-    x_all = np.zeros(shape=(n_samples, sample_shape[0], sample_shape[1], n_feats))
+    y_all = np.zeros(shape=(n_samples, sample_shape[0], sample_shape[1]), dtype=np.float32)
+    x_all = np.zeros(shape=(n_samples, sample_shape[0], sample_shape[1], n_feats), dtype=np.float32)
     med_indices = params["data_condition"]["ard_subsample"]
 
     for num, plot in enumerate(tqdm(plot_ids)):
         ard = load_ard(plot, med_indices, train_data_dir)
-        ttc = load_ttc(plot, True, train_data_dir)
-        txt = load_txt(plot, True, train_data_dir)
+        ttc = load_ttc(plot, ttc_feats_dir, train_data_dir)
+        txt = load_txt(plot, train_data_dir)
         validate.train_output_range_dtype(
             ard[..., 0:10],
             ard[..., 10:11],
