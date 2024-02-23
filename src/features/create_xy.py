@@ -206,12 +206,12 @@ def gather_plot_ids(v_train_data, local_dir, logger):
         str(item).zfill(5) if len(str(item)) < 5 else str(item) for item in plot_ids
     ]
     final_ard = [
-        plot for plot in plot_ids if os.path.exists(f"{local_dir}train-ard/{plot}.npy")
+        plot for plot in plot_ids if os.path.exists(f"{local_dir}train-ard/{plot}.hkl")
     ]
     no_ard = [
         plot
         for plot in plot_ids
-        if not os.path.exists(f"{local_dir}train-ard/{plot}.npy")
+        if not os.path.exists(f"{local_dir}train-ard/{plot}.hkl")
     ]
     final_raw = [
         plot for plot in no_ard if os.path.exists(f"{local_dir}train-s2/{plot}.hkl")
@@ -274,7 +274,7 @@ def build_training_sample(train_batch, classes, params_path, logger):
     # create empty x and y array based on number of plots
     # x.shape is (plots, 14, 14, n_feats) y.shape is (plots, 14, 14)
     sample_shape = (14, 14)
-    n_feats = 94
+    n_feats = params['data_condition']['total_feature_count']
     n_samples = len(plot_ids)
     y_all = np.zeros(shape=(n_samples, sample_shape[0], sample_shape[1]), dtype=np.float32)
     x_all = np.zeros(shape=(n_samples, sample_shape[0], sample_shape[1], n_feats), dtype=np.float32)
