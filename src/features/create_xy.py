@@ -116,7 +116,7 @@ def load_ard(idx, subsample, local_dir):
     (14, 14, 13)
     """
     directory = f"{local_dir}train-ard/"
-    ard = np.load(directory + str(idx) + ".npy")
+    ard = hkl.load(directory + str(idx) + ".hkl") 
 
     # checks for floating datatype, if not converts to float32
     if not isinstance(ard.flat[0], np.floating):
