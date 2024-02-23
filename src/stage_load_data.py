@@ -1,6 +1,3 @@
-
-##### PROTOTYPING ####
-
 import argparse
 from typing import Text
 import yaml
