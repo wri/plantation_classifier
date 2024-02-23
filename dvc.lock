@@ -1,0 +1,269 @@
+schema: '2.0'
+stages:
+  prep_features:
+    cmd: python src/stage_prep_features.py --params=params.yaml
+    deps:
+    - path: src/features/PlantationsData.py
+      hash: md5
+      md5: 44cd1e8472285e9b9f7e3c9dd3be5025
+      size: 3587
+    - path: src/features/create_xy.py
+      hash: md5
+      md5: 62475c9d30bdbb69939b9f95adf3b4ec
+      size: 10971
+    - path: src/stage_prep_features.py
+      hash: md5
+      md5: 306200dc3ff169636bad47afbea0639d
+      size: 2233
+    params:
+      params.yaml:
+        base:
+          log_level: DEBUG
+          random_state: 121
+          config: config.yaml
+        data_condition:
+          total_feature_count: 94
+          classes: 4
+          ard_subsample: 4
+          subset_fraction: 0.1
+          test_split: 20
+          train_split: 80
+          val_split: 25
+          modelData_path: data/train/modelData.pkl
+        data_load:
+          download_data: false
+          bucket_name: restoration-monitoring
+          folder_prefix: plantation-mapping/data/train/
+          local_prefix: data/
+          ttc_feats_dir: train-features-ard/
+          ceo_survey:
+          - v08
+          - v14
+          - v15
+          - v18
+          - v19
+          - v20
+    outs:
+    - path: data/train/modelData.pkl
+      hash: md5
+      md5: 12c91fb25d7d97c93e259337ec1e2d90
+      size: 215402685
+  load_data:
+    cmd: python src/stage_load_data.py --params=params.yaml
+    deps:
+    - path: src/stage_load_data.py
+      hash: md5
+      md5: 43e0c8bb0743c5604ba15cbaf57fb25d
+      size: 1025
+    params:
+      params.yaml:
+        base:
+          log_level: DEBUG
+          random_state: 121
+          config: config.yaml
+        data_load:
+          download_data: false
+          bucket_name: restoration-monitoring
+          folder_prefix: plantation-mapping/data/train/
+          local_prefix: data/
+          ttc_feats_dir: train-features-ard/
+          ceo_survey:
+          - v08
+          - v14
+          - v15
+          - v18
+          - v19
+          - v20
+  select_features_hyperparams:
+    cmd: python src/stage_select_and_tune.py --params=params.yaml
+    deps:
+    - path: data/train/modelData.pkl
+      hash: md5
+      md5: 12c91fb25d7d97c93e259337ec1e2d90
+      size: 215402685
+    - path: src/features/feature_selection.py
+      hash: md5
+      md5: 7debd4c5f85944c84a6e5c0dde0ef630
+      size: 8395
+    params:
+      params.yaml:
+        base:
+          log_level: DEBUG
+          random_state: 121
+          config: config.yaml
+        data_condition:
+          total_feature_count: 94
+          classes: 4
+          ard_subsample: 4
+          subset_fraction: 0.1
+          test_split: 20
+          train_split: 80
+          val_split: 25
+          modelData_path: data/train/modelData.pkl
+        select:
+          select_features: true
+          max_features: 40
+          selected_features_path: data/train/selected_features.json
+        train:
+          use_best_params: false
+          model_dir: models/
+          model_name: models/model.joblib
+          estimator_name: cat
+          cv: 3
+          tuning_metric: balanced_accuracy
+          testing_metrics: accuracy balanced_accuracy precision recall f1 roc_auc
+            log_loss
+          estimators:
+            cat:
+              importance_metric: shap
+              use_class_weights: true
+              param_grid:
+                loss_function: MultiClass
+                random_state: 121
+                logging_level: Silent
+    outs:
+    - path: data/train/selected_features.json
+      hash: md5
+      md5: 2f95643980be7eb2d680971cb392bbb0
+      size: 150
+    - path: src/evaluation/best_params.json
+      hash: md5
+      md5: cf78d06c4e033cebed6e025682b56c0f
+      size: 110
+  train_model:
+    cmd: python src/stage_train_model.py --params=params.yaml
+    deps:
+    - path: data/train/modelData.pkl
+      hash: md5
+      md5: 12c91fb25d7d97c93e259337ec1e2d90
+      size: 215402685
+    - path: data/train/selected_features.json
+      hash: md5
+      md5: 2f95643980be7eb2d680971cb392bbb0
+      size: 150
+    - path: src/evaluation/best_params.json
+      hash: md5
+      md5: cf78d06c4e033cebed6e025682b56c0f
+      size: 110
+    - path: src/model/train.py
+      hash: md5
+      md5: 3b8af3616962af8636a74d7dc406c446
+      size: 3384
+    - path: src/stage_train_model.py
+      hash: md5
+      md5: 90844da15eba7064949e73eba9ccdcb4
+      size: 2237
+    params:
+      params.yaml:
+        base:
+          log_level: DEBUG
+          random_state: 121
+          config: config.yaml
+        data_condition:
+          total_feature_count: 94
+          classes: 4
+          ard_subsample: 4
+          subset_fraction: 0.1
+          test_split: 20
+          train_split: 80
+          val_split: 25
+          modelData_path: data/train/modelData.pkl
+        train:
+          use_best_params: false
+          model_dir: models/
+          model_name: models/model.joblib
+          estimator_name: cat
+          cv: 3
+          tuning_metric: balanced_accuracy
+          testing_metrics: accuracy balanced_accuracy precision recall f1 roc_auc
+            log_loss
+          estimators:
+            cat:
+              importance_metric: shap
+              use_class_weights: true
+              param_grid:
+                loss_function: MultiClass
+                random_state: 121
+                logging_level: Silent
+    outs:
+    - path: models/model.joblib
+      hash: md5
+      md5: f0d1f6b8251ab14e91e6851800a9ceed
+      size: 2639305
+  evaluate_model:
+    cmd: python src/stage_evaluate_model.py --params=params.yaml
+    deps:
+    - path: data/train/modelData.pkl
+      hash: md5
+      md5: 12c91fb25d7d97c93e259337ec1e2d90
+      size: 215402685
+    - path: data/train/selected_features.json
+      hash: md5
+      md5: 2f95643980be7eb2d680971cb392bbb0
+      size: 150
+    - path: models/model.joblib
+      hash: md5
+      md5: f0d1f6b8251ab14e91e6851800a9ceed
+      size: 2639305
+    - path: src/evaluation/best_params.json
+      hash: md5
+      md5: cf78d06c4e033cebed6e025682b56c0f
+      size: 110
+    - path: src/evaluation/validation_visuals.py
+      hash: md5
+      md5: 03c3bd6638b24739b369000fefd1fdfd
+      size: 2913
+    - path: src/stage_evaluate_model.py
+      hash: md5
+      md5: 4e131cd8c94b463942ca90fc0213b4d1
+      size: 4469
+    params:
+      params.yaml:
+        base:
+          log_level: DEBUG
+          random_state: 121
+          config: config.yaml
+        data_condition:
+          total_feature_count: 94
+          classes: 4
+          ard_subsample: 4
+          subset_fraction: 0.1
+          test_split: 20
+          train_split: 80
+          val_split: 25
+          modelData_path: data/train/modelData.pkl
+        evaluate:
+          metrics_file: src/evaluation/metrics
+          cm_image: src/evaluation/confusion_matrix
+          cm_data: src/evaluation/confusion_matrix_data
+          tile_id_loc: data
+        train:
+          use_best_params: false
+          model_dir: models/
+          model_name: models/model.joblib
+          estimator_name: cat
+          cv: 3
+          tuning_metric: balanced_accuracy
+          testing_metrics: accuracy balanced_accuracy precision recall f1 roc_auc
+            log_loss
+          estimators:
+            cat:
+              importance_metric: shap
+              use_class_weights: true
+              param_grid:
+                loss_function: MultiClass
+                random_state: 121
+                logging_level: Silent
+    outs:
+    - path: src/evaluation/confusion_matrix.png
+      hash: md5
+      md5: 8fba5012c91e9c8108032c91059a3072
+      size: 31110
+    - path: src/evaluation/confusion_matrix_data.csv
+      hash: md5
+      md5: 8dadfdaa161fdf8044324674dd935639
+      size: 113697
+    - path: src/evaluation/metrics.json
+      hash: md5
+      md5: f94a6a805a993f28d3d9b7f26122d97f
+      size: 192

@@ -10,6 +10,7 @@ import os
 import boto3
 import botocore
 import rasterio as rs
+from rasterio.plot import reshape_as_raster, reshape_as_image
 import yaml
 from osgeo import gdal
 from skimage.transform import resize
@@ -22,20 +23,8 @@ from skimage.util import img_as_ubyte
 import gc
 import copy
 import subprocess
-from rasterio.plot import reshape_as_raster, reshape_as_image
-
-## import other scripts
-import sys
-sys.path.append('src/')
-
-import mosaic
-import validate_io as validate
-
-
-with open("config.yaml", 'r') as stream:
-    document = (yaml.safe_load(stream))
-    aak = document['aws']['aws_access_key_id']
-    ask = document['aws']['aws_secret_access_key']
+import utils.validate_io as validate
+from utils import mosaic
 
 
 def timer(func):
@@ -60,17 +49,17 @@ def download_tile_ids(location: list, aws_access_key: str, aws_secret_key: str):
     if not downloads the file from s3 and creates
     a list of tiles for processing.
     '''
-
-    dest_file = f'data/{location[1]}.csv'
+    local = params['deploy']['data_dir']
     s3_file = f'2020/databases/{location[1]}.csv'
+    dest_file = f"{local}{location[1]}.csv"
 
     # check if csv exists locally
     # confirm subdirectory exists otherwise download can fail
     if os.path.exists(dest_file):
         print(f'Csv file for {location[1]} exists locally.')
     
-    if not os.path.exists('data/'):
-        os.makedirs('data/')
+    if not os.path.exists(local):
+        os.makedirs(local)
 
     # if csv doesnt exist locally, check if available on s3
     if not os.path.exists(dest_file):
@@ -78,7 +67,7 @@ def download_tile_ids(location: list, aws_access_key: str, aws_secret_key: str):
                             aws_access_key_id=aws_access_key, 
                             aws_secret_access_key=aws_secret_key)
 
-        bucket = s3.Bucket('tof-output')
+        bucket = s3.Bucket(params['deploy']['bucket'])
         
         # turn the bucket + file into a object summary list
         objs = list(bucket.objects.filter(Prefix=s3_file))
@@ -117,7 +106,7 @@ def download_ard(tile_idx: tuple, country: str, aws_access_key: str, aws_secret_
     s3 = boto3.resource('s3',
                     aws_access_key_id=aws_access_key, 
                     aws_secret_access_key=aws_secret_key)
-    bucket = s3.Bucket('tof-output')
+    bucket = s3.Bucket(params['deploy']['bucket'])
 
     if local_ard == False or overwrite == True:
         print(f"Downloading ARD for {(x, y)}")
@@ -165,12 +154,6 @@ def make_bbox(country: str, tile_idx: tuple, expansion: int = 10) -> list:
     """
     bbx_df = pd.read_csv(f"data/{country}.csv", engine="pyarrow")
 
-    # this will remove quotes around x and y tile indexes (not needed for all countries)
-    # data['X_tile'] = data['X_tile'].str.extract('(\d+)', expand=False)
-    # data['X_tile'] = pd.to_numeric(data['X_tile'])
-    # data['Y_tile'] = data['Y_tile'].str.extract('(\d+)', expand=False)
-    # data['Y_tile'] = pd.to_numeric(data['Y_tile'])
-
     # set x/y to the tile IDs
     x = tile_idx[0]
     y = tile_idx[1]
@@ -211,7 +194,6 @@ def process_feats_slow(tile_idx: tuple, country: str, feature_select:list) -> np
     to selected feats
 
     '''
-    
     # prepare inputs
     x = tile_idx[0]
     y = tile_idx[1]
@@ -241,12 +223,6 @@ def process_feats_slow(tile_idx: tuple, country: str, feature_select:list) -> np
     ttc[:, :, [low_feats]] = feats_rolled[:, :, [high_feats]]
     ttc[:, :, [high_feats]] = feats_rolled[:, :, [low_feats]]
 
-    # create no data and no tree flag (boolean mask)
-    # where TML probability is 255 or 0, pass along to preds
-    # note that the feats shape is (x, x, 65)
-    no_data_flag = ttc[...,0] == 255.
-    no_tree_flag = ttc[...,0] <= 0.1
-
     # combine ttc feats and txt into a single array
     output[..., :ttc.shape[-1]] = ttc
     output[..., ttc.shape[-1]:] = txt
@@ -255,9 +231,9 @@ def process_feats_slow(tile_idx: tuple, country: str, feature_select:list) -> np
     if len(feature_select) > 0:
         output = np.squeeze(output[:, :, [feature_select]])
 
-    del feats_raw, feats_rolled, high_feats, low_feats, ttc
+    del feats_raw, feats_rolled, high_feats, low_feats
 
-    return output, no_data_flag, no_tree_flag
+    return output, ttc
 
 def make_sample(tile_idx: tuple, country: str, feats: np.array):
     
@@ -280,7 +256,7 @@ def make_sample(tile_idx: tuple, country: str, feats: np.array):
     # populate empty array with each feature
     # order: s2, dem, s1, ttc, txt
     sample[..., 0:10] = ard[..., 0:10]
-    sample[..., 10:11] = ard[..., 10]
+    sample[..., 10:11] = ard[..., 10:11]
     sample[..., 11:13] = ard[..., 11:13]
     sample[..., 13:] = feats
 
@@ -342,9 +318,6 @@ def reshape_and_scale(v_train_data: str, unseen: np.array, verbose: bool = False
         else:
             print('Warning: mins > maxs')
             pass
-    
-    # if verbose:
-    #     print(f"The data has been scaled. Min {start_min} -> {end_min}, Max {start_max} -> {end_max},")
 
     # now reshape
     unseen_reshaped = np.reshape(unseen, (np.prod(unseen.shape[:-1]), unseen.shape[-1]))
@@ -386,8 +359,9 @@ def predict_regression(arr: np.array, pretrained_model: str, sample_dims: tuple)
 def remove_small_patches(arr, thresh):
     
     '''
-    Label features in an array using ndimage.label() and count 
-    pixels for each lavel. If the count doesn't meet provided
+    Finds patches of of size thresh in a given array.
+    Label these features using ndimage.label() and counts
+    pixels for each label. If the count doesn't meet provided
     threshold, make the label 0. Return an updated array
 
     (option to add a 3x3 structure which considers features connected even 
@@ -408,7 +382,28 @@ def remove_small_patches(arr, thresh):
     
     return arr
 
-def post_process_tile(arr: np.array, feature_select: list, no_data_flag: np.array, no_tree_flag: np.array):
+def cleanup_noisy_zeros1(preds, ttc_treecover):
+    is_fp_zero = np.logical_and(preds == 0, ttc_treecover > 10)
+    preds_flt = ndimage.median_filter(np.copy(preds), 5)
+    preds[is_fp_zero] = preds_flt[is_fp_zero]
+    return preds
+
+def cleanup_noisy_zeros2(preds, ttc_treecover):
+
+    # creates boolean mask in areas where preds is 0 but tree cover is above 10
+    is_fp_zero = np.logical_and(preds == 0, ttc_treecover > .10)
+
+    preds_flt = ndimage.median_filter(np.copy(preds), 5)
+
+    # replace all instances with filtered version of size 5
+    preds[is_fp_zero] = preds_flt[is_fp_zero]
+
+    # sets preds to 0 where tree cover is <10
+    preds = preds * (ttc_treecover > .10)
+
+    return preds
+
+def post_process_tile(arr: np.array, feature_select: list, ttc: np.array):
 
     '''
     Applies the no data and no tree flag if TTC tree cover predictions are used
@@ -417,8 +412,13 @@ def post_process_tile(arr: np.array, feature_select: list, no_data_flag: np.arra
     Performs a connected component analysis to remove positive predictions 
     where the connected pixel count is < thresh. 
     '''
+    # create no data and no tree flag (boolean mask)
+    # where TML probability is 255 or 0, pass along to preds
+    # note that the feats shape is (x, x, 65)
+    no_data_flag = ttc[...,0] == 255.
+    no_tree_flag = ttc[...,0] <= 0.1
 
-    # FLAG: requires feature selection
+    # FLAG: this step requires feature selection
     if 0 in feature_select:
         arr[no_data_flag] = 255.
         arr[no_tree_flag] = 0.
@@ -430,10 +430,13 @@ def post_process_tile(arr: np.array, feature_select: list, no_data_flag: np.arra
     # and keep every True as the original label
     arr[arr == 1] *= postprocess_mono[arr == 1]
     arr[arr == 2] *= postprocess_af[arr == 2]
+
+    # clean up pixels in the non-tree class
+    output = cleanup_noisy_zeros2(arr, ttc[...,0])
   
     del postprocess_af, postprocess_mono
 
-    return arr
+    return output
 
 def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, model_type: str, suffix = "preds") -> str:
     '''
@@ -500,7 +503,7 @@ def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, model_t
 
     return None
 
-def remove_folder(tile_idx: tuple, local_dir: str):
+def remove_folder(tile_idx: tuple, location: str):
     '''
     Deletes temporary raw data files in path_to_tile/raw/*
     after predictions are written to file
@@ -509,7 +512,7 @@ def remove_folder(tile_idx: tuple, local_dir: str):
     x = tile_idx[0]
     y = tile_idx[1]
   
-    path_to_tile = f'{local_dir}/{str(x)}/{str(y)}/'
+    path_to_tile = f'tmp/{location}/{str(x)}/{str(y)}/'
 
     # remove every folder/file in raw/
     for folder in glob(path_to_tile + "raw/*/"):
@@ -531,10 +534,11 @@ def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, feat
         x = tile_idx[0]
         y = tile_idx[1]
         ard = hkl.load(f'tmp/{location[0]}/{str(x)}/{str(y)}/ard/{str(x)}X{str(y)}Y_ard.hkl')
+        validate.input_ard(tile_idx, location[0])
         bbx = make_bbox(location[1], tile_idx)
         validate.output_dtype_and_dimensions(ard[..., 11:13], ard[..., 0:10], ard[..., 10])
         validate.feats_range(tile_idx, location[0])
-        feats, no_data_flag, no_tree_flag = process_feats_slow(tile_idx, location[0], feature_select)
+        feats, ttc = process_feats_slow(tile_idx, location[0], feature_select)
         sample, sample_dims = make_sample(tile_idx, location[0], feats)
         sample_ss = reshape(sample, verbose)
         #sample_ss = reshape_and_scale('v20', sample, verbose)
@@ -542,15 +546,16 @@ def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, feat
         validate.model_inputs(sample_ss)
         if model_type == 'classifier':
             preds = predict_classification(sample_ss, model, sample_dims)
-            preds_final = post_process_tile(preds, feature_select, no_data_flag, no_tree_flag)
+            preds_final = post_process_tile(preds, feature_select, ttc)
             validate.model_outputs(preds, model_type)
         else:
             preds_final = predict_regression(sample_ss, model, sample_dims)
 
         write_tif(preds_final, bbx, tile_idx, location[0], model_type, 'preds')
-        #remove_folder(tile_idx, local_dir)
+        if params['deploy']['cleanup']:
+            remove_folder(tile_idx, location[0])
 
-        del ard, feats, no_data_flag, no_tree_flag, sample, sample_ss, preds_final
+        del ard, feats, sample, sample_ss, preds_final
     
     else:
         print(f'Raw data for {tile_idx} could not be downloaded or does not exist on s3.')
@@ -562,41 +567,51 @@ def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, feat
 if __name__ == '__main__':
    
     import argparse
+    import sys
+    import json
     parser = argparse.ArgumentParser()
     print("Argument List:", str(sys.argv))
-
-    parser.add_argument('--loc', dest='location', nargs='+', type=str)
-    parser.add_argument('--model', dest='model', type=str)
-    parser.add_argument('--verbose', dest='verbose', default=False, type=bool) 
+    
+    parser.add_argument('--params', dest='params', required=True) 
     parser.add_argument('--fs', dest='feature_select', nargs='*', type=int) 
-    parser.add_argument('--shape', dest='shapefile', type=str)
-
     args = parser.parse_args()
+
+    with open(args.params) as param_file:
+        params = yaml.safe_load(param_file)
+    with open(params['base']['config']) as conf_file:
+        config = yaml.safe_load(conf_file)
+        aak = config['aws']['aws_access_key_id']
+        ask = config['aws']['aws_secret_access_key']
     
     # specify tiles HERE
-    tiles_to_process = download_tile_ids(args.location, aak, ask)
+    tiles_to_process = download_tile_ids(args.location, aak, ask) 
     tile_count = len(tiles_to_process)
+    location = params['deploy']['location']
+    with open(params['deploy']['model_path'], 'rb') as file:  
+        loaded_model = pickle.load(file)
+    model_type = params['deploy']['model_type']
+    print(f'Model type is {model_type}.')
+    with open(params["select"]["selected_features_path"], "r") as fp:
+        selected_features = json.load(fp)
     counter = 0
 
-    # load specified model
-    with open(f'models/{args.model}.pkl', 'rb') as file:  
-        loaded_model = pickle.load(file)
-
     print('............................................')
-    print(f'Processing {tile_count} tiles for {args.location[1], args.location[0]}.')
+    print(f'Processing {tile_count} tiles for {location[1], location[0]}.')
     print('............................................')
-    
-    model = 'classifier'
-    print(f'Model type is {model}.')
 
     for tile_idx in tiles_to_process:
         counter += 1
-        execute_per_tile(tile_idx, location=args.location, model=loaded_model, verbose=args.verbose, feature_select=args.feature_select, model_type=model)
+        execute_per_tile(tile_idx, 
+                         location, 
+                         loaded_model, 
+                         params['deploy']['verbose'], 
+                         selected_features, 
+                         model_type)
 
         if counter % 2 == 0:
             print(f'{counter}/{tile_count} tiles processed...')
     
-    mosaic.mosaic_tif(args.location, args.model, compile_from='csv')
-    # mosaic.clip_it(args.location, args.model, args.shapefile)
-    # mosaic.upload_mosaic(args.location, args.model, aak, ask)
+    mosaic.mosaic_tif(location, compile_from='csv')
+    mosaic.clip_it(location, params['deploy']['clip_to'])
+    # mosaic.upload_mosaic(location, aak, ask)
     

@@ -1,0 +1,310 @@
+#! /usr/bin/env python3
+import hickle as hkl
+import yaml
+import pandas as pd
+import numpy as np
+import os
+import utils.preprocessing as preprocess
+import utils.validate_io as validate
+import features.slow_glcm as slow_txt
+from tqdm import tqdm
+from skimage.util import img_as_ubyte
+from sklearn.model_selection import train_test_split
+from sklearn.utils.class_weight import compute_class_weight
+import json
+
+def load_ard(idx, subsample, local_dir):
+    """
+    Analysis ready data is stored as (12, 28, 28, 13) with
+    uint16 dtype, ranging from 0 - 65535 and ordered
+    Sentinel-2, DEM, Sentinel-1.
+
+    Converts to float32, removes border information and
+    calculates median of full array or random subsample.
+
+    (12, 28, 28, 13)
+    (28, 28, 13)
+    (14, 14, 13)
+    """
+    directory = f"{local_dir}train-ard/"
+    ard = hkl.load(directory + str(idx) + ".hkl") 
+
+    # checks for floating datatype, if not converts to float32
+    if not isinstance(ard.flat[0], np.floating):
+        assert np.max(ard) > 1
+        ard = ard.astype(np.float32) / 65535
+        assert np.max(ard) < 1
+
+    # convert monthly images to subset median if subsample > 0
+    # if no subset median on file, calculate and save
+    if subsample > 0:
+        if os.path.exists(f"{local_dir}train-ard-sub/{idx}.npy"):
+            varied_median = np.load(f"{local_dir}train-ard-sub/{idx}.npy")
+        else:
+            rng = np.arange(12)
+            indices = np.random.choice(rng, subsample, replace=False)
+            varied_median = np.zeros((subsample, ard.shape[1], ard.shape[2], ard.shape[3]),
+                                      dtype=np.float32)
+            
+            for x, i in zip(range(subsample), indices):
+                varied_median[x, ...] = ard[i, ...]
+
+            # calculate median w/ explicit setting to float32
+            varied_median = np.median(np.float32(varied_median), 
+                                        axis = 0, 
+                                        overwrite_input = True)
+            
+            np.save(f"{local_dir}train-ard-sub/{idx}.npy", varied_median)
+
+    else:
+        varied_median = np.median(np.float32(ard), 
+                                    axis=0, 
+                                    overwrite_input = True)
+
+    # slice out border information
+    border_x = (varied_median.shape[0] - 14) // 2
+    border_y = (varied_median.shape[1] - 14) // 2
+    varied_median = varied_median[border_x:-border_x, border_y:-border_y, :]
+
+    return varied_median
+
+
+def load_txt(idx, local_dir):
+    """
+    S2 is stored as a (12, 28, 28, 11) uint16 array.
+
+    Loads ARD data and filters to s2 indices. Preprocesses
+    in order to extract texture features. Outputs the texture analysis
+    as a (14, 14, 16) float32 array.
+
+    Note that this will load the ARD median subset
+    """
+    directory = f"{local_dir}train-texture/"
+    input_dir = f"{local_dir}train-ard-sub/"
+
+    # check if texture file has already been created
+    if os.path.exists(f"{directory}{idx}.npy"):
+        output = np.load(f"{directory}{idx}.npy")
+    else:
+        ard = np.load(input_dir + str(idx) + ".npy")
+        # if len(ard.shape) == 4:
+        #     ard = np.median(ard, axis = 0, overwrite_input=True)
+        s2 = ard[..., 0:10]
+        s2 = img_as_ubyte(s2)
+        # s2 = ((s2.astype(np.float32) / 65535) * 255).astype(np.uint8)
+        assert s2.dtype == np.uint8, print(s2.dtype)
+        blue = s2[..., 0]
+        green = s2[..., 1]
+        red = s2[..., 2]
+        nir = s2[..., 3]
+        output = np.zeros((14, 14, 16), dtype=np.float32)
+        output[..., 0:4] = slow_txt.extract_texture(blue)
+        output[..., 4:8] = slow_txt.extract_texture(green)
+        output[..., 8:12] = slow_txt.extract_texture(red)
+        output[..., 12:16] = slow_txt.extract_texture(nir)
+        np.save(f"{directory}{idx}.npy", output)
+
+    return output.astype(np.float32)
+
+
+def load_ttc(idx, ttc_feats_dir, local_dir):
+    """
+    Features are stored as a 14 x 14 x 65 float64 array. The last axis contains
+    the feature dimensions. Dtype needs to be converted to float32. The TML
+    probability/prediction can optionally be dropped.
+
+    ## Update per 2/13/23
+    Features range from -infinity to +infinity
+    and must be clipped to be consistent with the deployed features.
+
+    Index 0 ([...,0]) is the tree cover prediction from the full TML model
+    Index 1 - 33 are high level features
+    Index 33 - 65 are low level features
+    """
+
+    directory = f"{local_dir}{ttc_feats_dir}"
+    feats = hkl.load(directory + str(idx) + ".hkl")
+
+    # clip all features after indx 0 to specific vals
+    feats[..., 1:] = np.clip(feats[..., 1:], a_min=-32.768, a_max=32.767)
+
+    feats = feats.astype(np.float32)
+
+    return feats
+
+
+def load_label(idx, ttc, classes, local_dir):
+    """
+    The labels are stored as a binary 14 x 14 float64 array.
+    Unless they are stored as (196,) and need to be reshaped.
+    Dtype needs to be converted to float32.
+
+    For binary (2 class) classification, update labels by converting
+    AF to 1. For 3 class classification, leave labels as is. For
+    4 class classification, use the ttc data to update labels
+    for any pixel labeled 0 with >= 20% TTC tree cover as natural trees.
+
+    0: no tree
+    1: monoculture
+    2: agroforestry
+    3: natural tree
+    """
+    directory = f"{local_dir}train-labels/"
+
+    labels_raw = np.load(directory + str(idx) + ".npy")
+
+    if len(labels_raw.shape) == 1:
+        labels_raw = labels_raw.reshape(14, 14)
+
+    if classes == 2:
+        labels = labels_raw.copy()
+        labels[labels_raw == 2] = 1
+        labels = labels.astype(np.float32)
+
+    if classes == 4:
+        tree_cover = ttc[..., 0]
+        labels = labels_raw.copy()
+        noplant_mask = np.ma.masked_less(labels, 1)
+        notree_mask = np.ma.masked_greater(tree_cover, 0.20000000)
+        mask = np.logical_and(noplant_mask.mask, notree_mask.mask)
+        labels[mask] = 3
+
+    else:
+        labels = labels_raw.astype(np.float32)
+
+    return labels
+
+
+def gather_plot_ids(v_train_data, local_dir, logger):
+    """
+    Creates a list of plot ids to process from collect earth surveys
+    with multi-class labels (0, 1, 2, 255). Drops all plots with
+    "unknown" labels and plots w/o s2 imagery. Returns list of plot_ids.
+    """
+
+    # use CEO csv to gather plot id numbers
+    plot_ids = []
+    no_labels = []
+
+    for i in v_train_data:
+        df = pd.read_csv(f"{local_dir}ceo-plantations-train-{i}.csv")
+
+        # assert unknown labels are always a full 14x14 (196 points) of unknowns
+        unknowns = df[df.PLANTATION == 255]
+        no_labels.extend(sorted(list(set(unknowns.PLOT_FNAME))))
+        for plot in set(list(unknowns.PLOT_ID)):
+            assert (
+                len(unknowns[unknowns.PLOT_ID == plot]) == 196
+            ), f"WARNING: {plot} has {len(unknowns[unknowns.PLOT_ID == plot])}/196 points labeled unknown."
+
+        # drop unknowns and add to full list
+        labeled = df.drop(unknowns.index)
+        plot_ids += labeled.PLOT_FNAME.drop_duplicates().tolist()
+
+    # add leading 0 to plot_ids that do not have 5 digits
+    plot_ids = [
+        str(item).zfill(5) if len(str(item)) < 5 else str(item) for item in plot_ids
+    ]
+    final_ard = [
+        plot for plot in plot_ids if os.path.exists(f"{local_dir}train-ard/{plot}.hkl")
+    ]
+    no_ard = [
+        plot
+        for plot in plot_ids
+        if not os.path.exists(f"{local_dir}train-ard/{plot}.hkl")
+    ]
+    final_raw = [
+        plot for plot in no_ard if os.path.exists(f"{local_dir}train-s2/{plot}.hkl")
+    ]
+
+    logger.info(f'{len(no_labels)} plots labeled "unknown" were dropped.')
+    logger.info(f"{len(no_ard)} plots did not have ARD.")
+    logger.info(f"Training data batch includes: {len(final_ard)} plots.")
+
+    return final_ard
+
+
+def make_sample(sample_shape, s2, slope, s1, txt, ttc):
+    """
+    Defines dimensions and then combines slope, s1, s2, TML features and
+    texture features from a plot into a sample with shape (14, 14, 94)
+    Feature select is a list of features that will be used, otherwise empty list
+    Prepares sample plots by combining ARD and features
+    and performing feature selection
+    """
+    # prepare the feats (this is done first bc of feature selection)
+    # squeeze extra axis that is added (14,14,1,15) -> (14,14,15)
+    feats = np.zeros(
+        (sample_shape[0], sample_shape[1], ttc.shape[-1] + txt.shape[-1]),
+        dtype=np.float32,
+    )
+    feats[..., : ttc.shape[-1]] = ttc
+    feats[..., ttc.shape[-1] :] = txt
+
+    # define the last dimension of the array
+    n_feats = 1 + s1.shape[-1] + s2.shape[-1] + feats.shape[-1]
+    sample = np.zeros((sample_shape[0], sample_shape[1], n_feats), dtype=np.float32)
+
+    # populate empty array with each feature
+    # order: s2, dem, s1, ttc, txt
+    sample[..., 0:10] = s2
+    sample[..., 10:11] = slope
+    sample[..., 11:13] = s1
+    sample[..., 13:] = feats
+
+    return sample
+
+
+def build_training_sample(train_batch, classes, params_path, logger):
+    """
+    Gathers training data plots from collect earth surveys (v1, v2, v3, etc)
+    and loads data to create a sample for each plot. Removes ids where there is no
+    cloud-free imagery or "unknown" labels.
+
+    Combines samples as X and loads labels as y for input to the model.
+    """
+    with open(params_path) as file:
+        params = yaml.safe_load(file)
+
+    train_data_dir = params["data_load"]["local_prefix"]
+    ttc_feats_dir = params["data_load"]["ttc_feats_dir"]
+    plot_ids = gather_plot_ids(train_batch, train_data_dir, logger)
+    logger.info(f"{len(plot_ids)} plots will be used in training.")
+
+    # create empty x and y array based on number of plots
+    # x.shape is (plots, 14, 14, n_feats) y.shape is (plots, 14, 14)
+    sample_shape = (14, 14)
+    n_feats = params['data_condition']['total_feature_count']
+    n_samples = len(plot_ids)
+    y_all = np.zeros(shape=(n_samples, sample_shape[0], sample_shape[1]), dtype=np.float32)
+    x_all = np.zeros(shape=(n_samples, sample_shape[0], sample_shape[1], n_feats), dtype=np.float32)
+    med_indices = params["data_condition"]["ard_subsample"]
+
+    for num, plot in enumerate(tqdm(plot_ids)):
+        ard = load_ard(plot, med_indices, train_data_dir)
+        ttc = load_ttc(plot, ttc_feats_dir, train_data_dir)
+        txt = load_txt(plot, train_data_dir)
+        validate.train_output_range_dtype(
+            ard[..., 0:10],
+            ard[..., 10:11],
+            ard[..., 11:13],
+            ttc,
+        )
+        X = make_sample(
+            sample_shape,
+            ard[..., 0:10],
+            ard[..., 10:11],
+            ard[..., 11:13],
+            txt,
+            ttc,
+        )
+
+        y = load_label(plot, ttc, classes, train_data_dir)
+        x_all[num] = X
+        y_all[num] = y
+
+    # check class balance
+    labels, counts = np.unique(y_all, return_counts=True)
+    logger.info(f"Class count {dict(zip(labels, counts))}")
+
+    return x_all, y_all

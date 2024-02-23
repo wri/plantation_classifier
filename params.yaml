@@ -1,0 +1,99 @@
+base:
+  log_level: DEBUG
+  random_state: 121
+  config: config.yaml
+
+deploy:
+  verbose: false
+  data_dir: data/
+  bucket: tof-output
+  model_path: models/model.joblib
+  model_type: classifier
+  cleanup: false
+  clip_to: data/abirem.shp
+  location:
+    - ghana
+    - abirem
+
+data_load:
+  download_data: false
+  bucket_name: restoration-monitoring
+  folder_prefix: plantation-mapping/data/train/
+  local_prefix: data/
+  ttc_feats_dir: train-features-ard/
+  ceo_survey:
+    - v08
+    - v14
+    - v15
+    - v18
+    - v19
+    - v20
+
+data_condition:
+  total_feature_count: 94
+  classes: 4
+  ard_subsample: 4
+  subset_fraction: 0.1 # set to 1.0 for all data
+  test_split: 20 # previously used .33 test
+  train_split: 80
+  val_split: 25
+  modelData_path: data/train/modelData.pkl
+
+select:
+  select_features: True       # Update
+  max_features: 40
+  selected_features_path: data/train/selected_features.json
+
+tune:
+  tune_hyperparameters: False   # Update
+  n_iter: 20 
+  plot: False
+  verbose: False
+  estimators:
+    cat:
+      param_grid:
+        iter_min: 700
+        iter_max: 900
+        iter_step: 2
+        depth_min: 6
+        depth_max: 12
+        depth_step: 3
+        leaf_reg_min: 2
+        leaf_reg_max: 30
+        leaf_reg_step: 3
+        min_data_leaf_min: 20
+        min_data_leaf_max: 100
+        min_data_leaf_step: 3
+        learn_rate:
+          - .02
+          - .03
+          - .04
+  best_params: src/evaluation/best_params.json
+
+train:
+  use_best_params: False        # Update
+  model_dir: models/ 
+  model_name: models/model.joblib
+  estimator_name: cat
+  cv: 3
+  tuning_metric: balanced_accuracy
+  testing_metrics: accuracy balanced_accuracy precision recall f1 roc_auc log_loss
+  estimators:
+    cat:
+      importance_metric: shap
+      use_class_weights: true
+      param_grid:
+        loss_function: MultiClass
+        random_state: 121
+        logging_level: Silent
+        #iterations: 811         #default is 500
+        # depth: 10               #default is 6
+        # 12_leaf_reg: 11         #default is 3
+        # min_data_in_leaf: 50    #default is 1
+        # learning_rate: 0.04       #default is 0.1007
+
+evaluate:
+  metrics_file: src/evaluation/metrics
+  cm_image: src/evaluation/confusion_matrix
+  cm_data: src/evaluation/confusion_matrix_data
+  tile_id_loc: data
