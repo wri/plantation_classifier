@@ -5,12 +5,12 @@ stages:
     deps:
     - path: src/features/PlantationsData.py
       hash: md5
-      md5: 5ccdfb18e0355ffb4181be416f140184
-      size: 3497
+      md5: 44cd1e8472285e9b9f7e3c9dd3be5025
+      size: 3587
     - path: src/features/create_xy.py
       hash: md5
-      md5: e94a33399cd50473e8f23058baea7a1f
-      size: 14618
+      md5: 62475c9d30bdbb69939b9f95adf3b4ec
+      size: 10971
     - path: src/stage_prep_features.py
       hash: md5
       md5: 306200dc3ff169636bad47afbea0639d
@@ -22,6 +22,7 @@ stages:
           random_state: 121
           config: config.yaml
         data_condition:
+          total_feature_count: 94
           classes: 4
           ard_subsample: 4
           subset_fraction: 0.1
@@ -34,6 +35,7 @@ stages:
           bucket_name: restoration-monitoring
           folder_prefix: plantation-mapping/data/train/
           local_prefix: data/
+          ttc_feats_dir: train-features-ard/
           ceo_survey:
           - v08
           - v14
@@ -41,27 +43,18 @@ stages:
           - v18
           - v19
           - v20
-          data_prefix_list:
-          - slope
-          - s1
-          - s2
-          - dem
-          - features-ckpt-2023-02-09
-          - labels
-          - ard
-          - features-ard
     outs:
     - path: data/train/modelData.pkl
       hash: md5
-      md5: a6e8e2783c50c26ddb6b1d15434f5d4f
-      size: 429665210
+      md5: 12c91fb25d7d97c93e259337ec1e2d90
+      size: 215402685
   load_data:
     cmd: python src/stage_load_data.py --params=params.yaml
     deps:
     - path: src/stage_load_data.py
       hash: md5
-      md5: b5e6602d43707febb306aa8608238ba1
-      size: 1050
+      md5: 43e0c8bb0743c5604ba15cbaf57fb25d
+      size: 1025
     params:
       params.yaml:
         base:
@@ -73,6 +66,7 @@ stages:
           bucket_name: restoration-monitoring
           folder_prefix: plantation-mapping/data/train/
           local_prefix: data/
+          ttc_feats_dir: train-features-ard/
           ceo_survey:
           - v08
           - v14
@@ -80,26 +74,17 @@ stages:
           - v18
           - v19
           - v20
-          data_prefix_list:
-          - slope
-          - s1
-          - s2
-          - dem
-          - features-ckpt-2023-02-09
-          - labels
-          - ard
-          - features-ard
   select_features_hyperparams:
     cmd: python src/stage_select_and_tune.py --params=params.yaml
     deps:
     - path: data/train/modelData.pkl
       hash: md5
-      md5: a6e8e2783c50c26ddb6b1d15434f5d4f
-      size: 429665210
+      md5: 12c91fb25d7d97c93e259337ec1e2d90
+      size: 215402685
     - path: src/features/feature_selection.py
       hash: md5
-      md5: 62a7d3aed3fcc8dafbef6fc3d3ae87b3
-      size: 8465
+      md5: 7debd4c5f85944c84a6e5c0dde0ef630
+      size: 8395
     params:
       params.yaml:
         base:
@@ -107,6 +92,7 @@ stages:
           random_state: 121
           config: config.yaml
         data_condition:
+          total_feature_count: 94
           classes: 4
           ard_subsample: 4
           subset_fraction: 0.1
@@ -138,8 +124,8 @@ stages:
     outs:
     - path: data/train/selected_features.json
       hash: md5
-      md5: fb5d7ed95c7d0cc7f3047975fd816dd2
-      size: 146
+      md5: 2f95643980be7eb2d680971cb392bbb0
+      size: 150
     - path: src/evaluation/best_params.json
       hash: md5
       md5: cf78d06c4e033cebed6e025682b56c0f
@@ -149,12 +135,12 @@ stages:
     deps:
     - path: data/train/modelData.pkl
       hash: md5
-      md5: a6e8e2783c50c26ddb6b1d15434f5d4f
-      size: 429665210
+      md5: 12c91fb25d7d97c93e259337ec1e2d90
+      size: 215402685
     - path: data/train/selected_features.json
       hash: md5
-      md5: fb5d7ed95c7d0cc7f3047975fd816dd2
-      size: 146
+      md5: 2f95643980be7eb2d680971cb392bbb0
+      size: 150
     - path: src/evaluation/best_params.json
       hash: md5
       md5: cf78d06c4e033cebed6e025682b56c0f
@@ -174,6 +160,7 @@ stages:
           random_state: 121
           config: config.yaml
         data_condition:
+          total_feature_count: 94
           classes: 4
           ard_subsample: 4
           subset_fraction: 0.1
@@ -201,23 +188,23 @@ stages:
     outs:
     - path: models/model.joblib
       hash: md5
-      md5: 1d79c95b454ff6e4ad0aa1f76600b182
-      size: 2639534
+      md5: f0d1f6b8251ab14e91e6851800a9ceed
+      size: 2639305
   evaluate_model:
     cmd: python src/stage_evaluate_model.py --params=params.yaml
     deps:
     - path: data/train/modelData.pkl
       hash: md5
-      md5: a6e8e2783c50c26ddb6b1d15434f5d4f
-      size: 429665210
+      md5: 12c91fb25d7d97c93e259337ec1e2d90
+      size: 215402685
     - path: data/train/selected_features.json
       hash: md5
-      md5: fb5d7ed95c7d0cc7f3047975fd816dd2
-      size: 146
+      md5: 2f95643980be7eb2d680971cb392bbb0
+      size: 150
     - path: models/model.joblib
       hash: md5
-      md5: 1d79c95b454ff6e4ad0aa1f76600b182
-      size: 2639534
+      md5: f0d1f6b8251ab14e91e6851800a9ceed
+      size: 2639305
     - path: src/evaluation/best_params.json
       hash: md5
       md5: cf78d06c4e033cebed6e025682b56c0f
@@ -237,6 +224,7 @@ stages:
           random_state: 121
           config: config.yaml
         data_condition:
+          total_feature_count: 94
           classes: 4
           ard_subsample: 4
           subset_fraction: 0.1
@@ -269,13 +257,13 @@ stages:
     outs:
     - path: src/evaluation/confusion_matrix.png
       hash: md5
-      md5: 26b8487c6f1c7ae6256fcef85730839a
-      size: 31234
+      md5: 8fba5012c91e9c8108032c91059a3072
+      size: 31110
     - path: src/evaluation/confusion_matrix_data.csv
       hash: md5
-      md5: fdbcf34a889bb0702dd05b426ee0d2ae
+      md5: 8dadfdaa161fdf8044324674dd935639
       size: 113697
     - path: src/evaluation/metrics.json
       hash: md5
-      md5: 8340d8901f104572b8917c081c93c5cc
+      md5: f94a6a805a993f28d3d9b7f26122d97f
       size: 192
