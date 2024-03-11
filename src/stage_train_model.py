@@ -12,7 +12,10 @@ from features import PlantationsData
 
 
 def train_model(param_path: Text) -> None:
-    """ """
+    """ 
+    Per criteria in the params.yaml file, imports
+    training data and parameters, filters to selected features
+    """
     with open(param_path) as file:
         params = yaml.safe_load(file)
     logger = get_logger("TRAIN", log_level=params["base"]["log_level"])
@@ -28,11 +31,12 @@ def train_model(param_path: Text) -> None:
     estimator_name = params["train"]["estimator_name"]
     model_path = f"{params['train']['model_name']}"
     basic_params = params["train"]["estimators"][estimator_name]["param_grid"]
+    # features are filtered regardless of whether fs used
     model_data.filter_features(selected_features)
 
-    # if "None" in best_params.keys():
+    # use best params file or params in params.yaml
     if not params['train']['use_best_params']:
-        logger.info("Using user provided param grid.")
+        logger.info("Using provided param grid in params.yaml")
         model_params = basic_params
 
     else:
@@ -41,9 +45,14 @@ def train_model(param_path: Text) -> None:
         model_params["loss_function"] = basic_params['loss_function']
         model_params["logging_level"] = basic_params['logging_level']
     
+    # make sure class weights are added for either option
     model_params["class_weights"] = model_data.class_weights
+    logger.info(f"Model will be trained with the following conditions:")
     logger.info(f"Model params: {model_params}")
-    logger.info(f"Training model...")
+    logger.debug(f"X_train_reshaped: {model_data.X_train_reshaped.shape}")
+    logger.debug(f"X_test_reshaped: {model_data.X_test_reshaped.shape}")
+    logger.debug(f"y_train_reshaped: {model_data.y_train_reshaped.shape}")
+    logger.debug(f"y_test_reshaped: {model_data.y_test_reshaped.shape}")
 
     metric, model = train.fit_estimator(
         model_data.X_train_reshaped,
