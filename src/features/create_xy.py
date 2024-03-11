@@ -13,6 +13,50 @@ from sklearn.model_selection import train_test_split
 from sklearn.utils.class_weight import compute_class_weight
 import json
 
+def reconstruct_images(plot, df):
+    '''
+    Takes a plot ID and subsets the input ceo survey (df) to that plot ID,
+       computes the reverse of a given sequence object (lat) and 
+       returns it in the form of a list.
+       Requires presence of 'PLANTATION', 'LAT', 'LON' and 'PLOT_ID' columns 
+       which should be created in prior processing step.
+       Returns a (14, 14) array-like list with plantation labels.
+    '''
+
+    subs = df[df['PLOT_ID'] == plot]
+    rows = []
+    lats = reversed(sorted(subs['LAT'].unique()))
+
+    for i, val in enumerate(lats):
+
+        # filter to row
+        subs_lat = subs[subs['LAT'] == val]
+        subs_lat = subs_lat.sort_values('LON', axis = 0)
+        rows.append(list(subs_lat['PLANTATION']))
+
+    return rows
+
+def create_label_arrays(v_train_data, local_dir):
+    '''
+    Set up functionality to take in specified
+    versions of training data rather than the full 
+    batch
+    '''
+    directory = f"{local_dir}train-labels/"
+    
+    for i in v_train_data:
+        print(f"Creating label arrays for v{i}")
+        df = pd.read_csv(f"{local_dir}ceo-plantations-train-{i}.csv")
+        plot_ids = sorted(df['PLOT_ID'].unique())
+        plot_fname = sorted(df['PLOT_FNAME'].unique())        
+        for i, x in zip(plot_ids, plot_fname):
+            print(f"plot_ids:{i} plot_fname: {x}")
+            plot = reconstruct_images(i, df)
+            plot = np.array(plot)
+            np.save(f"{directory}{str(x).zfill(5)}.npy", plot)
+    
+    return plot
+
 def load_ard(idx, subsample, local_dir):
     """
     Analysis ready data is stored as (12, 28, 28, 13) with
@@ -270,6 +314,8 @@ def build_training_sample(train_batch, classes, params_path, logger):
     ttc_feats_dir = params["data_load"]["ttc_feats_dir"]
     plot_ids = gather_plot_ids(train_batch, train_data_dir, logger)
     logger.info(f"{len(plot_ids)} plots will be used in training.")
+    if params['data_load']['create_labels']:
+        create_label_arrays(train_batch, train_data_dir)
 
     # create empty x and y array based on number of plots
     # x.shape is (plots, 14, 14, n_feats) y.shape is (plots, 14, 14)
