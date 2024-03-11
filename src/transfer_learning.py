@@ -611,7 +611,7 @@ if __name__ == '__main__':
         if counter % 2 == 0:
             print(f'{counter}/{tile_count} tiles processed...')
     
-    mosaic.mosaic_tif(location, compile_from='csv')
-    mosaic.clip_it(location, params['deploy']['clip_to'])
+    mosaic.mosaic_tif(location, params['deploy']['version'])
+    mosaic.clip_it(location, params['deploy']['version'], params['deploy']['clip_to'])
     # mosaic.upload_mosaic(location, aak, ask)
     
