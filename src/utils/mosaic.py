@@ -13,39 +13,30 @@ import boto3
 import glob
 import gc
 
-def mosaic_tif(location: list, compile_from: str):
+def mosaic_tif(location: list, version: str):
 
     ''''
-    Takes in a list of tiles and merges them to form a single tif.
-    Alternatively... merges all tifs in a folder.
+    Takes in a list of tiles from a csv file and 
+    merges them to form a single tif.
+
     '''
-    
-    if not os.path.exists(f'tmp/{location[0]}/preds/mosaic/'):
-        os.makedirs(f'tmp/{location[0]}/preds/mosaic/')
+    mosaic_dir = f'tmp/{location[0]}/preds/mosaic/'
+    if not os.path.exists(mosaic_dir):
+        os.makedirs(mosaic_dir)
         
     # use the list of tiles to create a list of filenames
     # this will need to be updated to take in a specific list of tiles to mosaic
     tifs_to_mosaic = []
+    
+    database = pd.read_csv(f'data/{location[1]}.csv')
+    tiles = database[['X_tile', 'Y_tile']].to_records(index=False)
 
-    if compile_from == 'csv':
-        database = pd.read_csv(f'data/{location[1]}.csv')
-        tiles = database[['X_tile', 'Y_tile']].to_records(index=False)
-
-        # specify here if there's a specific set of tiles to merge
-        for tile_idx in tiles:
-            x = tile_idx[0]
-            y = tile_idx[1]
-            filename = f'{str(x)}X{str(y)}Y_preds.tif'
-            tifs_to_mosaic.append(filename)
-
-
-    # get a list of files to merge from preds dir
-    # filename slice specific to puntarenas -- update
-    # use this in the event some tiles need to be skipped
-    if compile_from == 'dir':
-        tifs = glob.glob(f'../tmp/{location[0]}/preds/*.tif')  
-        for file in tifs:
-            tifs_to_mosaic.append(file[21:])
+    # specify here if there's a specific set of tiles to merge
+    for tile_idx in tiles:
+        x = tile_idx[0]
+        y = tile_idx[1]
+        filename = f'{str(x)}X{str(y)}Y_preds.tif'
+        tifs_to_mosaic.append(filename)
 
     # now open each item in dataset reader mode (required to merge)
     reader_mode = []
@@ -66,45 +57,53 @@ def mosaic_tif(location: list, compile_from: str):
     date = datetime.today().strftime('%Y-%m-%d')
     
     # outpath will be the new filename 
-    outpath = f'tmp/{location[0]}/preds/mosaic/{location[1]}_cat_{date}_mrgd.tif'
+    outpath = f'{mosaic_dir}{location[1]}_{version}_{date}_mrgd.tif'
     out_meta = src.meta.copy()  
     out_meta.update({'driver': "GTiff",
                      'dtype': 'uint8',
                      'height': mosaic.shape[1],
                      'width': mosaic.shape[2],
                      'transform': out_transform,
-                     'compress':'lzw'})
+                     'compress':'lzw',
+                     'nodata': 255})
 
     with rs.open(outpath, "w", **out_meta) as dest:
         dest.write(mosaic)
 
     return None
 
-def clip_it(location: list, shapefile: str):
+def clip_it(location: list, version: str, shapefile: str):
     ''''
     imports a mosaic tif and clips it to the extent of a 
     given shapefile
     '''
+    mosaic_dir = f'tmp/{location[0]}/preds/mosaic/'
     date = datetime.today().strftime('%Y-%m-%d')
-    merged = f'tmp/{location[0]}/preds/mosaic/{location[1]}_cat_{date}_mrgd.tif'
-    shapefile = gpd.read_file(shapefile)
-    clipped = f'tmp/{location[0]}/preds/mosaic/{location[1]}_cat_{date}.tif'
+    merged = f'{mosaic_dir}{location[1]}_{version}_{date}_mrgd.tif'
+    clipped = f'{mosaic_dir}{location[1]}_{version}_{date}.tif'
+    
+    if os.path.exists(shapefile):
+        shapefile = gpd.read_file(shapefile)
+        with rs.open(merged) as src:
+            shapefile = shapefile.to_crs(src.crs)
+            out_image, out_transform = mask(src, 
+                                            shapefile.geometry, 
+                                            crop=True)
+            out_meta = src.meta.copy() 
 
-    with rs.open(merged) as src:
-        shapefile = shapefile.to_crs(src.crs)
-        out_image, out_transform = mask(src, shapefile.geometry, crop=True)
-        out_meta = src.meta.copy() 
+        out_meta.update({
+            "driver":"Gtiff",
+            "height":out_image.shape[1], # height starts with shape[1]
+            "width":out_image.shape[2], # width starts with shape[2]
+            "transform":out_transform,
+            "nodata": 255,
+        })
 
-    out_meta.update({
-        "driver":"Gtiff",
-        "height":out_image.shape[1], # height starts with shape[1]
-        "width":out_image.shape[2], # width starts with shape[2]
-        "transform":out_transform
-    })
-
-    with rs.open(clipped,'w',**out_meta) as dst:
-        dst.write(out_image)
-    os.remove(merged)
+        with rs.open(clipped,'w',**out_meta) as dst:
+            dst.write(out_image)
+        os.remove(merged)
+    else:
+        print("Shapefile does not exist - skipping clip.")
     
     return None
 
