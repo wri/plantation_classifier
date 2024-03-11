@@ -65,5 +65,4 @@ def random_search_cat(X_train, y_train, estimator_name, metric_name, param_path)
         params["tune"]["plot"],
         params["tune"]["verbose"],
     )
-    print(randomized_search_result)
     return randomized_search_result
