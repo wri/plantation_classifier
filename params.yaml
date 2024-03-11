@@ -10,6 +10,7 @@ deploy:
   model_path: models/model.joblib
   model_type: classifier
   cleanup: false
+  version: 21-1
   clip_to: data/abirem.shp
   location:
     - ghana
@@ -21,6 +22,7 @@ data_load:
   folder_prefix: plantation-mapping/data/train/
   local_prefix: data/
   ttc_feats_dir: train-features-ard/
+  create_labels: false
   ceo_survey:
     - v08
     - v14
@@ -40,7 +42,7 @@ data_condition:
   modelData_path: data/train/modelData.pkl
 
 select:
-  select_features: True       # Update
+  select_features: False       # Update
   max_features: 40
   selected_features_path: data/train/selected_features.json
 
