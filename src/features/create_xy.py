@@ -9,8 +9,6 @@ import utils.validate_io as validate
 import features.slow_glcm as slow_txt
 from tqdm import tqdm
 from skimage.util import img_as_ubyte
-from sklearn.model_selection import train_test_split
-from sklearn.utils.class_weight import compute_class_weight
 import json
 
 def reconstruct_images(plot, df):
@@ -351,6 +349,11 @@ def build_training_sample(train_batch, classes, params_path, logger):
 
     # check class balance
     labels, counts = np.unique(y_all, return_counts=True)
-    logger.info(f"Class count {dict(zip(labels, counts))}")
+    class_dist = dict(zip(labels, counts))
+    logger.info(f"Class count {class_dist}")
+    for key, val in class_dist.items():
+        class_dist[key] = round((val/sum(class_dist.values()))*100,1)
+    for key, val in class_dist.items():
+        logger.info(f"{int(key)}: {val}%")
 
     return x_all, y_all
