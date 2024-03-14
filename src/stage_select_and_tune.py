@@ -24,17 +24,18 @@ def perform_selection_and_tuning(param_path: Text) -> None:
                         log_level=params["base"]["log_level"])
     with open(params["data_condition"]["modelData_path"], "rb") as fp:
         model_data = pickle.load(fp)
-    try:
-        with open(params["tune"]["best_params"], "r") as fp:
-            best_params = json.load(fp)
-    except JSONDecodeError:
-        best_params = {"None": None}
-    try:
-        with open(params["select"]["selected_features_path"], "r") as fp:
-            top_feats = json.load(fp)
-    except IOError:
-        top_feats = list(range(0, (model_data.X_train_reshaped.shape[1])))
-    logger.info("Model data loaded")
+    # try:
+    with open(params["tune"]["best_params"], "r") as fp:
+        best_params = json.load(fp)
+    # except JSONDecodeError:
+    #     best_params = {"None": None}
+    # try:
+    with open(params["select"]["selected_features_path"], "r") as fp:
+        top_feats = json.load(fp)
+    # except IOError:
+    #     top_feats = list(range(0, (model_data.X_train_reshaped.shape[1])))
+    logger.info(f"Best params loaded: {best_params}")
+    logger.info(f"Selected feats loaded: {top_feats}")
         
     perform_fs = params["select"]["select_features"]
     perform_tuning = params["tune"]["tune_hyperparameters"]
@@ -73,7 +74,10 @@ def perform_selection_and_tuning(param_path: Text) -> None:
                 param_path,
             )
             logger.debug(f"Returned params: {best_params}")
-
+    
+    # FLAG: if no fs or tuning performed, this shouldnt overwrite what is
+    # currently on file with blank files
+    logger.info("Writing selected features and best params to file..")
     with open(params["select"]["selected_features_path"], "w") as fp:
         json.dump(obj=top_feats, fp=fp)
     with open(params["tune"]["best_params"], "w") as fp:
