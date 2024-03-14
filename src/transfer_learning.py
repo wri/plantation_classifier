@@ -20,7 +20,7 @@ from time import time, strftime
 from datetime import datetime, timezone
 from scipy import ndimage
 from skimage.util import img_as_ubyte
-import gc
+import joblib
 import copy
 import subprocess
 import utils.validate_io as validate
@@ -569,11 +569,8 @@ if __name__ == '__main__':
     import argparse
     import sys
     import json
-    parser = argparse.ArgumentParser()
-    print("Argument List:", str(sys.argv))
-    
+    parser = argparse.ArgumentParser()    
     parser.add_argument('--params', dest='params', required=True) 
-    parser.add_argument('--fs', dest='feature_select', nargs='*', type=int) 
     args = parser.parse_args()
 
     with open(args.params) as param_file:
@@ -583,22 +580,23 @@ if __name__ == '__main__':
         aak = config['aws']['aws_access_key_id']
         ask = config['aws']['aws_secret_access_key']
     
-    # specify tiles HERE
-    tiles_to_process = download_tile_ids(args.location, aak, ask) 
-    tile_count = len(tiles_to_process)
     location = params['deploy']['location']
-    with open(params['deploy']['model_path'], 'rb') as file:  
-        loaded_model = pickle.load(file)
     model_type = params['deploy']['model_type']
     print(f'Model type is {model_type}.')
+    with open(params['deploy']['model_path'], "rb") as fp:
+        loaded_model = joblib.load(fp)
     with open(params["select"]["selected_features_path"], "r") as fp:
         selected_features = json.load(fp)
-    counter = 0
+
+    # specify tiles HERE
+    tiles_to_process = download_tile_ids(location, aak, ask)[76:84]
+    tile_count = len(tiles_to_process)
 
     print('............................................')
     print(f'Processing {tile_count} tiles for {location[1], location[0]}.')
     print('............................................')
-
+    
+    counter = 0
     for tile_idx in tiles_to_process:
         counter += 1
         execute_per_tile(tile_idx, 
