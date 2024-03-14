@@ -106,7 +106,6 @@ def input_ard(tile_idx, country):
 
     folder = f"tmp/{country}/{x}/{y}/"
     tile_str = f"{x}X{y}Y"
-    print(f"{folder}ard/{tile_str}_ard.hkl")
     ard = hkl.load(f"{folder}ard/{tile_str}_ard.hkl")
 
     assert ard.dtype == np.float32
