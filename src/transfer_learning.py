@@ -227,7 +227,8 @@ def process_feats_slow(tile_idx: tuple, country: str, feature_select:list) -> np
     output[..., :ttc.shape[-1]] = ttc
     output[..., ttc.shape[-1]:] = txt
 
-    # apply feature selection
+    # apply feature selection - filtered to non ARD indices
+    feature_select = [i - 13 for i in feature_select if i >= 13]
     if len(feature_select) > 0:
         output = np.squeeze(output[:, :, [feature_select]])
 
@@ -522,13 +523,13 @@ def remove_folder(tile_idx: tuple, location: str):
         
     return None
 
-def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, feature_select: list, model_type: str):
+def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, feature_select: list, model_type: str, overwrite: bool):
 
     ''' 
     will need to update
     '''
     print(f'Processing tile: {tile_idx}')
-    successful = download_ard(tile_idx, location[0], aak, ask, overwrite=True)
+    successful = download_ard(tile_idx, location[0], aak, ask, overwrite)
 
     if successful:
         x = tile_idx[0]
@@ -591,6 +592,7 @@ if __name__ == '__main__':
     # specify tiles HERE
     tiles_to_process = download_tile_ids(location, aak, ask)[76:84]
     tile_count = len(tiles_to_process)
+    overwrite = params['deploy']['overwrite']
 
     print('............................................')
     print(f'Processing {tile_count} tiles for {location[1], location[0]}.')
@@ -604,7 +606,8 @@ if __name__ == '__main__':
                          loaded_model, 
                          params['deploy']['verbose'], 
                          selected_features, 
-                         model_type)
+                         model_type,
+                         overwrite)
 
         if counter % 2 == 0:
             print(f'{counter}/{tile_count} tiles processed...')
