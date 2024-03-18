@@ -45,11 +45,12 @@ stages:
           - v19
           - v20
           - v21
+          - v22
     outs:
     - path: data/train/modelData.pkl
       hash: md5
-      md5: c00668e15c3207c90fa97b4edaa8bfe0
-      size: 271709718
+      md5: e5be72f18f2146d3ff7ab1bfb3048595
+      size: 321164391
   load_data:
     cmd: python src/stage_load_data.py --params=params.yaml
     deps:
@@ -78,17 +79,18 @@ stages:
           - v19
           - v20
           - v21
+          - v22
   select_features_hyperparams:
     cmd: python src/stage_select_and_tune.py --params=params.yaml
     deps:
     - path: data/train/modelData.pkl
       hash: md5
-      md5: c00668e15c3207c90fa97b4edaa8bfe0
-      size: 271709718
+      md5: e5be72f18f2146d3ff7ab1bfb3048595
+      size: 321164391
     - path: src/features/feature_selection.py
       hash: md5
-      md5: 7debd4c5f85944c84a6e5c0dde0ef630
-      size: 8395
+      md5: d51fa7201f0fb27b59e81589754b413a
+      size: 8446
     params:
       params.yaml:
         base:
@@ -119,18 +121,21 @@ stages:
             log_loss
           estimators:
             cat:
-              importance_metric: shap
               use_class_weights: true
               param_grid:
                 loss_function: MultiClass
                 random_state: 121
                 logging_level: Silent
-                depth: 9
+                depth: 7
+                iterations: 1000
+                l2_leaf_reg: 11
+                min_data_in_leaf: 100
+                learning_rate: 0.04
     outs:
     - path: data/train/selected_features.json
       hash: md5
-      md5: e5ef7f346d5d035f7b1ec521e8234e5a
-      size: 198
+      md5: 2d8a48453d7d4c186977ea539c4bf9b4
+      size: 202
     - path: src/evaluation/best_params.json
       hash: md5
       md5: cf78d06c4e033cebed6e025682b56c0f
@@ -140,12 +145,12 @@ stages:
     deps:
     - path: data/train/modelData.pkl
       hash: md5
-      md5: c00668e15c3207c90fa97b4edaa8bfe0
-      size: 271709718
+      md5: e5be72f18f2146d3ff7ab1bfb3048595
+      size: 321164391
     - path: data/train/selected_features.json
       hash: md5
-      md5: e5ef7f346d5d035f7b1ec521e8234e5a
-      size: 198
+      md5: 2d8a48453d7d4c186977ea539c4bf9b4
+      size: 202
     - path: src/evaluation/best_params.json
       hash: md5
       md5: cf78d06c4e033cebed6e025682b56c0f
@@ -184,33 +189,36 @@ stages:
             log_loss
           estimators:
             cat:
-              importance_metric: shap
               use_class_weights: true
               param_grid:
                 loss_function: MultiClass
                 random_state: 121
                 logging_level: Silent
-                depth: 9
+                depth: 7
+                iterations: 1000
+                l2_leaf_reg: 11
+                min_data_in_leaf: 100
+                learning_rate: 0.04
     outs:
     - path: models/model.joblib
       hash: md5
-      md5: c60d3f203c0a5c0621ecc19ad61e96a0
-      size: 20590789
+      md5: 0c6b8b002c1d57c9436d70454a702d36
+      size: 5209885
   evaluate_model:
     cmd: python src/stage_evaluate_model.py --params=params.yaml
     deps:
     - path: data/train/modelData.pkl
       hash: md5
-      md5: c00668e15c3207c90fa97b4edaa8bfe0
-      size: 271709718
+      md5: e5be72f18f2146d3ff7ab1bfb3048595
+      size: 321164391
     - path: data/train/selected_features.json
       hash: md5
-      md5: e5ef7f346d5d035f7b1ec521e8234e5a
-      size: 198
+      md5: 2d8a48453d7d4c186977ea539c4bf9b4
+      size: 202
     - path: models/model.joblib
       hash: md5
-      md5: c60d3f203c0a5c0621ecc19ad61e96a0
-      size: 20590789
+      md5: 0c6b8b002c1d57c9436d70454a702d36
+      size: 5209885
     - path: src/evaluation/best_params.json
       hash: md5
       md5: cf78d06c4e033cebed6e025682b56c0f
@@ -255,23 +263,26 @@ stages:
             log_loss
           estimators:
             cat:
-              importance_metric: shap
               use_class_weights: true
               param_grid:
                 loss_function: MultiClass
                 random_state: 121
                 logging_level: Silent
-                depth: 9
+                depth: 7
+                iterations: 1000
+                l2_leaf_reg: 11
+                min_data_in_leaf: 100
+                learning_rate: 0.04
     outs:
     - path: src/evaluation/confusion_matrix.png
       hash: md5
-      md5: 40942b6b92891716ee5325bd4faed390
-      size: 29564
+      md5: 66ec93bb6bdf21c345e27ea2043d668a
+      size: 31782
     - path: src/evaluation/confusion_matrix_data.csv
       hash: md5
-      md5: 1167a37bc65fd60dc7017a295d75c201
-      size: 143489
+      md5: 9b226897580d8003abe7b2ff38e728dc
+      size: 169361
     - path: src/evaluation/metrics.json
       hash: md5
-      md5: fe03f5dc6ec969694e6bc8892bdc1736
-      size: 191
+      md5: 0f0a270792f4386df6c3049dc7f7e10d
+      size: 192
