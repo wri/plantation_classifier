@@ -350,9 +350,10 @@ def build_training_sample(train_batch, classes, params_path, logger):
     # check class balance
     labels, counts = np.unique(y_all, return_counts=True)
     class_dist = dict(zip(labels, counts))
+    total = sum(class_dist.values())
     logger.info(f"Class count {class_dist}")
     for key, val in class_dist.items():
-        class_dist[key] = round((val/sum(class_dist.values()))*100,1)
+        class_dist[key] = round((val/total)*100,1)
     for key, val in class_dist.items():
         logger.info(f"{int(key)}: {val}%")
 
