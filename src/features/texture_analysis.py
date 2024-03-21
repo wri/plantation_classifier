@@ -6,18 +6,16 @@ import boto3
 import botocore
 import pandas as pd
 import numpy as np
-from skimage.feature import graycomatrix, graycoprops
 import hickle as hkl
 import itertools
 import functools
-from time import time, strftime
 from datetime import datetime
+from skimage.feature import graycomatrix, graycoprops
 from skimage.util import img_as_ubyte
 import sys
 from glob import glob
 sys.path.append('src/')
-
-import utils.validate_io as validate
+import validate_io as validate
 
 with open("config.yaml", 'r') as stream:
     document = (yaml.safe_load(stream))
@@ -289,15 +287,15 @@ if __name__ == '__main__':
     print('............................................')
 
     for tile_idx in tiles_to_process:
-        exists = file_exists(tile_idx, aak, ask)
-        if not exists:
-            print(f'Processing tile: {tile_idx}')
-            successful = download_ard(tile_idx, args.location, aak, ask)
-            if successful:
-                create_txt_array(tile_idx, args.location, aak, ask)
-                remove_folder(tile_idx, args.location)
-                counter += 1
-                if counter % 2 == 0:
-                    print(f'{counter}/{tile_count} tiles processed...')
-        else: # still add one if exists
+        # exists = file_exists(tile_idx, aak, ask)
+        # if not exists:
+        print(f'Processing tile: {tile_idx}')
+        successful = download_ard(tile_idx, args.location, aak, ask)
+        if successful:
+            create_txt_array(tile_idx, args.location, aak, ask)
+            remove_folder(tile_idx, args.location)
             counter += 1
+            if counter % 2 == 0:
+                print(f'{counter}/{tile_count} tiles processed...')
+        # else: # still add one if exists
+        #     counter += 1
