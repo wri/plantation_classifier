@@ -15,7 +15,10 @@ from skimage.util import img_as_ubyte
 import sys
 from glob import glob
 sys.path.append('src/')
-import validate_io as validate
+# format for docker
+#import validate_io as validate
+#format for local
+import utils.validate_io as validate
 
 with open("config.yaml", 'r') as stream:
     document = (yaml.safe_load(stream))
@@ -276,6 +279,7 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--loc', dest='location', nargs='+', type=str)
+    parser.add_argument('--overwrite', dest='overwrite', type=bool)
     args = parser.parse_args()
 
     tiles_to_process = download_tile_ids(args.location, aak, ask)
@@ -287,15 +291,17 @@ if __name__ == '__main__':
     print('............................................')
 
     for tile_idx in tiles_to_process:
-        # exists = file_exists(tile_idx, aak, ask)
-        # if not exists:
-        print(f'Processing tile: {tile_idx}')
-        successful = download_ard(tile_idx, args.location, aak, ask)
-        if successful:
-            create_txt_array(tile_idx, args.location, aak, ask)
-            remove_folder(tile_idx, args.location)
+        exists = file_exists(tile_idx, aak, ask)
+        if exists == False or args.overwrite == True:
+            print(f'Processing tile: {tile_idx}')
+            successful = download_ard(tile_idx, args.location, aak, ask)
+            if successful:
+                create_txt_array(tile_idx, args.location, aak, ask)
+                remove_folder(tile_idx, args.location)
+                counter += 1
+        else:
+            print(f"Skipping {tile_idx}")
             counter += 1
-            if counter % 2 == 0:
-                print(f'{counter}/{tile_count} tiles processed...')
-        # else: # still add one if exists
-        #     counter += 1
+
+        if counter % 2 == 0:
+            print(f'{counter}/{tile_count} tiles processed...')
