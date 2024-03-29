@@ -207,7 +207,7 @@ def process_feats_slow(tile_idx: tuple, country: str, feature_select:list) -> np
     output = np.zeros((txt.shape[0], txt.shape[1], n_feats), dtype=np.float32)
 
     # adjust TML predictions feats[0] to match training data (0-1)
-    # adjust shape by rolling axis 2x (65, 614, 618) ->  (618, 614, 65) 
+    # adjust shape by rolling axis 2x (65, 614, 618) ->  (614, 618, 65), (618, 614, 65) 
     # feats used for deply are multiplyed by 1000 before saving
     feats_raw[0, ...] = feats_raw[0, ...] / 100 
     feats_raw[1:, ...] = feats_raw[1:, ...] / 1000  
@@ -215,7 +215,7 @@ def process_feats_slow(tile_idx: tuple, country: str, feature_select:list) -> np
     feats_rolled = np.rollaxis(feats_rolled, 0, 2)
     
     # now switch the feats
-    ttc = copy.deepcopy(feats_rolled)
+    ttc = copy.deepcopy(feats_rolled) 
 
     high_feats = [np.arange(1,33)]
     low_feats = [np.arange(33,65)]
@@ -226,7 +226,7 @@ def process_feats_slow(tile_idx: tuple, country: str, feature_select:list) -> np
     # combine ttc feats and txt into a single array
     output[..., :ttc.shape[-1]] = ttc
     output[..., ttc.shape[-1]:] = txt
-
+    
     # apply feature selection - filtered to non ARD indices
     feature_select = [i - 13 for i in feature_select if i >= 13]
     if len(feature_select) > 0:
@@ -249,7 +249,8 @@ def make_sample(tile_idx: tuple, country: str, feats: np.array):
     x = tile_idx[0]
     y = tile_idx[1]
     ard = hkl.load(f'tmp/{country}/{str(x)}/{str(y)}/ard/{str(x)}X{str(y)}Y_ard.hkl')
-
+    ard = np.clip(ard, 0, 1)
+    
     # define number of features and create sample array
     n_feats = ard.shape[-1] + feats.shape[-1] 
     sample = np.zeros((ard.shape[0], ard.shape[1], n_feats), dtype=np.float32)
@@ -439,7 +440,7 @@ def post_process_tile(arr: np.array, feature_select: list, ttc: np.array):
 
     return output
 
-def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, model_type: str, suffix = "preds") -> str:
+def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, model_type: str, suffix = "preds"):
     '''
     Write predictions to a geotiff, using the same bounding box 
     to determine north, south, east, west corners of the tile
@@ -590,7 +591,7 @@ if __name__ == '__main__':
         selected_features = json.load(fp)
 
     # specify tiles HERE
-    tiles_to_process = download_tile_ids(location, aak, ask)[76:84]
+    tiles_to_process = download_tile_ids(location, aak, ask)[73:83]
     tile_count = len(tiles_to_process)
     overwrite = params['deploy']['overwrite']
 
