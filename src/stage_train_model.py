@@ -49,11 +49,12 @@ def train_model(param_path: Text) -> None:
     model_params["class_weights"] = model_data.class_weights
     logger.info(f"Model will be trained with the following conditions:")
     logger.info(f"Model params: {model_params}")
+    logger.info(f"Features: {selected_features}") 
     logger.debug(f"X_train_reshaped: {model_data.X_train_reshaped.shape}")
     logger.debug(f"X_test_reshaped: {model_data.X_test_reshaped.shape}")
     logger.debug(f"y_train_reshaped: {model_data.y_train_reshaped.shape}")
     logger.debug(f"y_test_reshaped: {model_data.y_test_reshaped.shape}")
-
+    logger.info(f"Training..")
     metric, model = train.fit_estimator(
         model_data.X_train_reshaped,
         model_data.X_test_reshaped,
