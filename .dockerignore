@@ -7,6 +7,9 @@ models/*
 __pycache__/*
 fil-result/*
 src/*
+dvc_plots/*
+catboost_info/*
+tests/*
 
 *.pem
 *.ipynb
@@ -16,6 +19,6 @@ src/*
 !models/cat_v20_tuned.pkl
 !src/transfer_learning.py 
 !src/mosaic.py 
-!src/validate_io.py 
-!src/texture_analysis.py
+!src/utils/validate_io.py 
+!src/features/texture_analysis.py
 !src/__init__.py 
