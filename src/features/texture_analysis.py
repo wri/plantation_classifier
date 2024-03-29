@@ -16,9 +16,9 @@ import sys
 from glob import glob
 sys.path.append('src/')
 # format for docker
-#import validate_io as validate
+import validate_io as validate
 #format for local
-import utils.validate_io as validate
+#import utils.validate_io as validate
 
 with open("config.yaml", 'r') as stream:
     document = (yaml.safe_load(stream))
@@ -222,6 +222,8 @@ def create_txt_array(tile_idx: tuple, location: list, aws_access_key: str, aws_s
 
     # prep s2 input
     ard = hkl.load(f'{folder}ard/{tile_str}_ard.hkl') 
+    validate.input_ard(tile_idx, location[0])
+    ard = np.clip(ard, 0, 1)
     s2 = ard[..., 0:10]
     s2 = img_as_ubyte(s2)
     assert s2.dtype == np.uint8, print(s2.dtype)
@@ -282,7 +284,7 @@ if __name__ == '__main__':
     parser.add_argument('--overwrite', dest='overwrite', type=bool)
     args = parser.parse_args()
 
-    tiles_to_process = download_tile_ids(args.location, aak, ask)
+    tiles_to_process = download_tile_ids(args.location, aak, ask)[160:]
     tile_count = len(tiles_to_process)
     counter = 0
 
