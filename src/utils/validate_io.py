@@ -113,7 +113,7 @@ def input_ard(tile_idx, country):
 
     # prior to clipping the ard, assert count of anomolies
     anomolies = np.sum(np.logical_or(ard < 0, ard >= 1))
-    assert len(anomolies) < 10000, print(f"{len(anomolies)} pixels have out of range values.")
+    assert anomolies < 10000, print(f"{anomolies} pixels have out of range values.")
 
     del ard
 
