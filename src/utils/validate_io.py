@@ -96,9 +96,9 @@ def input_ard(tile_idx, country):
     ARD will be between 0-1 in all cases except for SWIR bands, which are
     downloaded at 40-m and super-resolved to 10m. This super-resolution
     process is technically not bounded to the 0-1 range, so could in rare
-    occasions predict a negative value. It appears that here some water
-    pixels get assigned a negative value. Therefore the assertion counts the
-    number of pixels that are out of range and only fails if that exceeds 10,000.
+    occasions predict a value <0 or >1. Some water pixels get assigned a negative value. 
+    Some high reflectance pixels get assigned a >1 value. Therefore the assertion counts 
+    anomolies that are out of range and only fails if the count exceeds 10,000.
     """
 
     x = str(tile_idx[0])
@@ -111,10 +111,9 @@ def input_ard(tile_idx, country):
     assert ard.dtype == np.float32
     assert ard.shape[2] == 13
 
-    pixel_counter = 0
-    if not np.logical_and(ard.min() >= 0, ard.max() <= 1):
-        pixel_counter += 1
-    assert pixel_counter < 10000, print(f"{pixel_counter} pixels have negative values.")
+    # prior to clipping the ard, assert count of anomolies
+    anomolies = np.sum(np.logical_or(ard < 0, ard >= 1))
+    assert len(anomolies) < 10000, print(f"{len(anomolies)} pixels have out of range values.")
 
     del ard
 
