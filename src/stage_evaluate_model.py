@@ -17,7 +17,7 @@ import yaml
 import pickle
 
 from utils.logs import get_logger
-from evaluation.validation_visuals import plot_confusion_matrix
+from evaluation.validation_visuals import plot_confusion_matrix, plot_training_progress
 from features import PlantationsData
 
 
@@ -53,15 +53,14 @@ def evaluate_model(params_path: Text) -> None:
     logger = get_logger("EVALUATE", log_level=params["base"]["log_level"])
 
     logger.info("Loading model and test data")
-    #   pipe = params['base']['pipeline']
-    model_path = f"{params['train']['model_name']}"
-    model = joblib.load(f"{model_path}")
-
+    #   pipe = params['base']['pipeline']  
+    with open(params['train']['model_name'], "rb") as fp:
+        model = joblib.load(fp)
     with open(params["data_condition"]["modelData_path"], "rb") as fp:
         model_data = pickle.load(fp)
     with open(params["select"]["selected_features_path"], "r") as fp:
         selected_features = json.load(fp)
-
+ 
     model_data.filter_features(selected_features)
     #   model_params["class_weights"] = model_data.class_weights
 
@@ -128,6 +127,11 @@ def evaluate_model(params_path: Text) -> None:
     )
     logger.info(f"Confusion matrix data saved to: {confusion_matrix_data_path}")
 
+    # plot training progress
+    # plt = plot_training_progress(model)
+    # train_progress_path = f'{params["evaluate"]["train_progress"]}.png'
+    # plt.savefig(train_progress_path)
+    # logger.info(f"Training progress graph saved to: {train_progress_path}")
 
 if __name__ == "__main__":
     args_parser = argparse.ArgumentParser()
