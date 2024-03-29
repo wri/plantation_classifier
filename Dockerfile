@@ -4,7 +4,7 @@ FROM continuumio/miniconda3
 # install commands for the system dependencies
 RUN apt-get update -y && apt-get install --no-install-recommends -y -q \
     ca-certificates gcc libffi-dev wget unzip git openssh-client gnupg curl \
-    python3-dev python3-setuptools
+    python3-dev python3-setuptools 
 
 WORKDIR /app
 
@@ -26,15 +26,15 @@ RUN apt-get update && apt-get install -y software-properties-common &&\
  	export C_INCLUDE_PATH=/usr/include/gdal &&\
  	pip install GDAL==$(gdal-config --version | awk -F'[.]' '{print $1"."$2}') --global-option=build_ext --global-option="-I/usr/include/gdal"
 
-# transfer learning reqs - make sure to check dockerignore!
+# transfer learning reqs - make sure to check dockerignore
 # COPY src/ /app/src/
 # COPY data/urbanmask.tif /app/data/urbanmask.tif
 # COPY models/cat_v20_tuned.pkl /app/models/cat_v20_tuned.pkl
 # COPY config.yaml /app/config.yaml
 
 # texture reqs
-COPY src/texture_analysis.py /app/src/texture_analysis.py
-COPY src/validate_io.py /app/src/validate_io.py
+COPY src/utils/validate_io.py /app/src/validate_io.py
+COPY src/features/texture_analysis.py /app/src/texture_analysis.py
 COPY config.yaml /app/config.yaml
 
 EXPOSE 8080
