@@ -10,7 +10,7 @@ import os
 import boto3
 import botocore
 import rasterio as rs
-from rasterio.plot import reshape_as_raster, reshape_as_image
+from rasterio.plot import reshape_as_raster
 import yaml
 from osgeo import gdal
 from skimage.transform import resize
@@ -22,10 +22,9 @@ from scipy import ndimage
 from skimage.util import img_as_ubyte
 import joblib
 import copy
-import subprocess
 import utils.validate_io as validate
 from utils import mosaic
-
+import shutil
 
 def timer(func):
     '''
@@ -42,6 +41,35 @@ def timer(func):
         return value
     return wrapper_timer
 
+def download_shape(location: list, aws_access_key: str, aws_secret_key: str):
+    '''
+    Checks to see if the location shapefile exists locally,
+    if not downloads the file from s3
+    '''
+    local = params['deploy']['data_dir']
+    s3_file = f'2020/shapefiles/{location[1]}.shp'
+    dest_file = f"{local}shapefiles/{location[1]}.shp"
+
+    if os.path.exists(dest_file):
+        print(f'Shapefile file for {location[1]} exists locally.')
+    
+    if not os.path.exists(local):
+        os.makedirs(local)
+
+    if not os.path.exists(dest_file):
+        s3 = boto3.resource('s3',
+                            aws_access_key_id=aws_access_key, 
+                            aws_secret_access_key=aws_secret_key)
+
+        bucket = s3.Bucket(params['deploy']['bucket'])
+        objs = list(bucket.objects.filter(Prefix=s3_file))
+        print(s3_file, dest_file)
+
+        if len(objs) > 0:
+            print(f"The s3 resource s3://{bucket.name}/{s3_file} exists.")
+            bucket.download_file(s3_file, dest_file)
+
+    return None
 
 def download_tile_ids(location: list, aws_access_key: str, aws_secret_key: str):
     '''
@@ -250,7 +278,7 @@ def make_sample(tile_idx: tuple, country: str, feats: np.array):
     y = tile_idx[1]
     ard = hkl.load(f'tmp/{country}/{str(x)}/{str(y)}/ard/{str(x)}X{str(y)}Y_ard.hkl')
     ard = np.clip(ard, 0, 1)
-    
+
     # define number of features and create sample array
     n_feats = ard.shape[-1] + feats.shape[-1] 
     sample = np.zeros((ard.shape[0], ard.shape[1], n_feats), dtype=np.float32)
@@ -462,7 +490,6 @@ def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, model_t
     arr = arr.astype(np.uint8)
 
     # create the file based on the size of the array (618, 614, 1)
-    print("Writing", file)
     if model_type == 'classifier':
         transform = rs.transform.from_bounds(west = west, south = south,
                                             east = east, north = north,
@@ -514,13 +541,11 @@ def remove_folder(tile_idx: tuple, location: str):
     x = tile_idx[0]
     y = tile_idx[1]
   
-    path_to_tile = f'tmp/{location}/{str(x)}/{str(y)}/'
-
-    # remove every folder/file in raw/
-    for folder in glob(path_to_tile + "raw/*/"):
-        for file in os.listdir(folder):
-            _file = folder + file
-            os.remove(_file)
+    parent = f'tmp/{location}/{str(x)}/{str(y)}/'
+    raw = os.path.join(parent, 'raw')
+    ard = os.path.join(parent, 'ard')
+    shutil.rmtree(raw)
+    shutil.rmtree(ard)
         
     return None
 
@@ -569,11 +594,13 @@ def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, feat
 if __name__ == '__main__':
    
     import argparse
-    import sys
     import json
     parser = argparse.ArgumentParser()    
     parser.add_argument('--params', dest='params', required=True) 
+    parser.add_argument('--slicer', nargs='+', type=int)
     args = parser.parse_args()
+
+    print(f'Initializing...............................')
 
     with open(args.params) as param_file:
         params = yaml.safe_load(param_file)
@@ -590,13 +617,18 @@ if __name__ == '__main__':
     with open(params["select"]["selected_features_path"], "r") as fp:
         selected_features = json.load(fp)
 
-    # specify tiles HERE
-    tiles_to_process = download_tile_ids(location, aak, ask)[73:83]
+    # specify tiles to process
+    download_shape(location, aak, ask)
+    tile_ids = download_tile_ids(location, aak, ask)
+    indices = tuple(args.slicer)
+    if len(indices) == 1 and indices[0] == -1:
+        tiles_to_process = tile_ids
+    else: 
+        tiles_to_process = tile_ids[slice(*indices)] # unpack tuple with *
     tile_count = len(tiles_to_process)
-    overwrite = params['deploy']['overwrite']
 
     print('............................................')
-    print(f'Processing {tile_count} tiles for {location[1], location[0]}.')
+    print(f'Processing {tile_count} tiles for {location[1]}, {location[0]}')
     print('............................................')
     
     counter = 0
@@ -608,12 +640,12 @@ if __name__ == '__main__':
                          params['deploy']['verbose'], 
                          selected_features, 
                          model_type,
-                         overwrite)
+                         params['deploy']['overwrite'])
 
         if counter % 2 == 0:
             print(f'{counter}/{tile_count} tiles processed...')
     
-    mosaic.mosaic_tif(location, params['deploy']['version'])
-    mosaic.clip_it(location, params['deploy']['version'], params['deploy']['clip_to'])
-    # mosaic.upload_mosaic(location, aak, ask)
+    mosaic.mosaic_tif(location, params['deploy']['version'], tiles_to_process)
+    mosaic.clip_it(location, params['deploy']['version'])
+  
     
