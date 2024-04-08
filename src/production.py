@@ -3,29 +3,25 @@
 import pandas as pd
 import numpy as np
 import hickle as hkl
-import pickle
-import seaborn as sns
+import pickle as pkl
 import copy
 import os
 import boto3
 import botocore
 import rasterio as rs
-from rasterio.plot import reshape_as_raster, reshape_as_image
+from rasterio.plot import reshape_as_raster
 import yaml
 from osgeo import gdal
-from skimage.transform import resize
 from glob import glob
 import functools
 from time import time, strftime
-from datetime import datetime, timezone
+from datetime import datetime
 from scipy import ndimage
-from skimage.util import img_as_ubyte
 import joblib
 import copy
-import subprocess
 import utils.validate_io as validate
 from utils import mosaic
-
+import shutil
 
 def timer(func):
     '''
@@ -42,6 +38,35 @@ def timer(func):
         return value
     return wrapper_timer
 
+def download_shape(location: list, aws_access_key: str, aws_secret_key: str):
+    '''
+    Checks to see if the location shapefile exists locally,
+    if not downloads the file from s3
+    '''
+    local = params['deploy']['data_dir']
+    s3_file = f'2020/shapefiles/{location[1]}.shp'
+    dest_file = f"{local}shapefiles/{location[1]}.shp"
+
+    if os.path.exists(dest_file):
+        print(f'Shapefile file for {location[1]} exists locally.')
+    
+    if not os.path.exists(local):
+        os.makedirs(local)
+
+    if not os.path.exists(dest_file):
+        s3 = boto3.resource('s3',
+                            aws_access_key_id=aws_access_key, 
+                            aws_secret_access_key=aws_secret_key)
+
+        bucket = s3.Bucket(params['deploy']['bucket'])
+        objs = list(bucket.objects.filter(Prefix=s3_file))
+        print(s3_file, dest_file)
+
+        if len(objs) > 0:
+            print(f"The s3 resource s3://{bucket.name}/{s3_file} exists.")
+            bucket.download_file(s3_file, dest_file)
+
+    return None
 
 def download_tile_ids(location: list, aws_access_key: str, aws_secret_key: str):
     '''
@@ -513,13 +538,11 @@ def remove_folder(tile_idx: tuple, location: str):
     x = tile_idx[0]
     y = tile_idx[1]
   
-    path_to_tile = f'tmp/{location}/{str(x)}/{str(y)}/'
-
-    # remove every folder/file in raw/
-    for folder in glob(path_to_tile + "raw/*/"):
-        for file in os.listdir(folder):
-            _file = folder + file
-            os.remove(_file)
+    parent = f'tmp/{location}/{str(x)}/{str(y)}/'
+    raw = os.path.join(parent, 'raw')
+    ard = os.path.join(parent, 'ard')
+    shutil.rmtree(raw)
+    shutil.rmtree(ard)
         
     return None
 
@@ -553,7 +576,7 @@ def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, feat
             preds_final = predict_regression(sample_ss, model, sample_dims)
 
         write_tif(preds_final, bbx, tile_idx, location[0], model_type, 'preds')
-        remove_folder(tile_idx, location[0])
+        #remove_folder(tile_idx, location[0])
 
         del ard, feats, sample, sample_ss, preds_final
     
@@ -574,6 +597,9 @@ if __name__ == '__main__':
     parser.add_argument('--slicer', nargs='+', type=int)
     args = parser.parse_args()
 
+    print(f'Initializing')
+    print('............................................')
+
     with open(args.params) as param_file:
         params = yaml.safe_load(param_file)
     with open(params['base']['config']) as conf_file:
@@ -590,6 +616,7 @@ if __name__ == '__main__':
         selected_features = json.load(fp)
 
     # specify tiles to process
+    download_shape(location, aak, ask)
     tile_ids = download_tile_ids(location, aak, ask)
     indices = tuple(args.slicer)
     if len(indices) == 1 and indices[0] == -1:
@@ -598,7 +625,7 @@ if __name__ == '__main__':
         tiles_to_process = tile_ids[slice(*indices)] # unpack tuple with *
     tile_count = len(tiles_to_process)
 
-    print('............................................')
+    print('............................................') 
     print(f'Processing {tile_count} tiles for {location[1]}, {location[0]}')
     print('............................................')
     
@@ -617,6 +644,6 @@ if __name__ == '__main__':
             print(f'{counter}/{tile_count} tiles processed...')
     
     mosaic.mosaic_tif(location, params['deploy']['version'], tiles_to_process)
-    mosaic.clip_it(location, params['deploy']['version'], params['deploy']['clip_to'])
-    mosaic.upload_mosaic(location, aak, ask)
+    file_to_upload = mosaic.clip_it(location, params['deploy']['version'])
+    mosaic.upload_mosaic(aak, ask, file_to_upload)
     
