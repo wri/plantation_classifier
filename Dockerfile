@@ -30,7 +30,7 @@ RUN apt-get update && apt-get install -y software-properties-common &&\
 # COPY src/ /app/src/
 # COPY data/urbanmask.tif /app/data/urbanmask.tif
 # COPY models/cat_v20_tuned.pkl /app/models/cat_v20_tuned.pkl
-# COPY config.yaml /app/config.yaml
+# COPY config.yaml /app/config.yaml 
 
 # texture reqs
 COPY src/utils/validate_io.py /app/src/validate_io.py
