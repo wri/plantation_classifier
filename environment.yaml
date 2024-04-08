@@ -2,22 +2,19 @@ name: plantations5
 channels:
   - conda-forge
 dependencies:
+- python==3.10
 - boto3==1.26.12
 - botocore==1.29.12
 - Bottleneck==1.3.5
-- catboost==1.1.1
 - confuse==2.0.0
 - GDAL==3.5.0
 - h5py==3.7.0
-- matplotlib==3.6.2
 - natsort==8.2.0
-- numpy==1.23.4
+- numpy==1.25.2
 - pandas==1.5.1
 - PyYAML==6.0
-- rasterio==1.3.0
 - scipy==1.9.3
-- seaborn==0.12.1
-- scikit-image==0.19.3
 - pip
 - pip:
-  - hickle==5.0.2
+  - scikit_image==0.19.3
+  - hickle==5.0.2 
