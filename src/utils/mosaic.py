@@ -10,10 +10,10 @@ import os
 import sys
 from datetime import datetime
 import boto3
-import glob
-import gc
+import hickle as hkl
+import copy
 
-def mosaic_tif(location: list, version: str):
+def mosaic_tif(location: list, version: str, tiles: list):
 
     ''''
     Takes in a list of tiles from a csv file and 
@@ -24,14 +24,7 @@ def mosaic_tif(location: list, version: str):
     if not os.path.exists(mosaic_dir):
         os.makedirs(mosaic_dir)
         
-    # use the list of tiles to create a list of filenames
-    # this will need to be updated to take in a specific list of tiles to mosaic
     tifs_to_mosaic = []
-    
-    database = pd.read_csv(f'data/{location[1]}.csv')
-    tiles = database[['X_tile', 'Y_tile']].to_records(index=False)
-
-    # specify here if there's a specific set of tiles to merge
     for tile_idx in tiles:
         x = tile_idx[0]
         y = tile_idx[1]
@@ -115,7 +108,7 @@ def upload_mosaic(location: list, aws_access_key: str, aws_secret_key: str):
     date = datetime.today().strftime('%Y-%m-%d')
     
     # outpath will be the new filename
-    suffix = f'{location[0]}_cat_{date}.tif'
+    suffix = f'{location[0]}_{version}_{date}.tif'
     mosaic_filepath = f'tmp/{location[0]}/preds/mosaic/{suffix}'
 
     s3 = boto3.resource('s3',
@@ -129,7 +122,6 @@ def upload_mosaic(location: list, aws_access_key: str, aws_secret_key: str):
                               'plantation-mapping/data/samples/' + suffix)
 
     return None
-
 
 if __name__ == '__main__':
    
