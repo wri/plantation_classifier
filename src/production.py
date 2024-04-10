@@ -44,28 +44,32 @@ def download_shape(location: list, aws_access_key: str, aws_secret_key: str):
     if not downloads the file from s3
     '''
     local = params['deploy']['data_dir']
-    s3_file = f'2020/shapefiles/{location[1]}.shp'
-    dest_file = f"{local}shapefiles/{location[1]}.shp"
-
-    if os.path.exists(dest_file):
-        print(f'Shapefile file for {location[1]} exists locally.')
+    s3_dir = f'2020/shapefiles/{location[1]}/'
+    dest_dir = f"{local}shapefiles/"
+    s3 = boto3.resource('s3',
+                aws_access_key_id=aws_access_key, 
+                aws_secret_access_key=aws_secret_key)
+    bucket = s3.Bucket(params['deploy']['bucket'])
     
-    if not os.path.exists(local):
-        os.makedirs(local)
+    # skip if shapefile present
+    if os.path.exists(f"{local}shapefiles/{location[1]}.shp"):
+        print(f'Shapefile for {location[1]} exists locally.')
 
-    if not os.path.exists(dest_file):
-        s3 = boto3.resource('s3',
-                            aws_access_key_id=aws_access_key, 
-                            aws_secret_access_key=aws_secret_key)
+    else:
+        for obj in bucket.objects.filter(Prefix=s3_dir):
+            target = os.path.join(dest_dir, os.path.relpath(obj.key, s3_dir))
+            if not os.path.exists(os.path.dirname(target)):
+                os.makedirs(os.path.dirname(target))
+            if obj.key[-1] == '/':
+                continue
+            try:
+                bucket.download_file(obj.key, target)
 
-        bucket = s3.Bucket(params['deploy']['bucket'])
-        objs = list(bucket.objects.filter(Prefix=s3_file))
-        print(s3_file, dest_file)
-
-        if len(objs) > 0:
-            print(f"The s3 resource s3://{bucket.name}/{s3_file} exists.")
-            bucket.download_file(s3_file, dest_file)
-
+            # if the tiles do not exist on s3, catch the error and return False
+            except botocore.exceptions.ClientError as e:
+                if e.response['Error']['Code'] == "404":
+                    print("Error: shapefile does not exist on s3.")
+    print(f"Shapefile downloaded for {location[1]}.")
     return None
 
 def download_tile_ids(location: list, aws_access_key: str, aws_secret_key: str):
@@ -93,21 +97,19 @@ def download_tile_ids(location: list, aws_access_key: str, aws_secret_key: str):
                             aws_secret_access_key=aws_secret_key)
 
         bucket = s3.Bucket(params['deploy']['bucket'])
-        
         # turn the bucket + file into a object summary list
         objs = list(bucket.objects.filter(Prefix=s3_file))
-        print(s3_file, dest_file)
-
         if len(objs) > 0:
             print(f"The s3 resource s3://{bucket.name}/{s3_file} exists.")
             bucket.download_file(s3_file, dest_file)
-            
+        print(f"Csv downloaded for {location[1]}.")
+
     database = pd.read_csv(dest_file)
 
     # create a list of tiles 
     tiles = database[['X_tile', 'Y_tile']].to_records(index=False)
 
-    return tiles
+    return database, tiles
 
 def download_ard(tile_idx: tuple, country: str, aws_access_key: str, aws_secret_key: str, overwrite: bool):
     ''' 
@@ -165,7 +167,7 @@ def download_ard(tile_idx: tuple, country: str, aws_access_key: str, aws_secret_
                     return False
     return True
 
-def make_bbox(country: str, tile_idx: tuple, expansion: int = 10) -> list:
+def make_bbox(bbx_df, tile_idx: tuple, expansion: int = 10) -> list:
     """
     Makes a (min_x, min_y, max_x, max_y) bounding box that
     is 2 * expansion 300 x 300 meter ESA LULC pixels. 
@@ -177,8 +179,6 @@ def make_bbox(country: str, tile_idx: tuple, expansion: int = 10) -> list:
        Returns:
             bbx (list): expanded [min_x, min_y, max_x, max_y]
     """
-    bbx_df = pd.read_csv(f"data/{country}.csv", engine="pyarrow")
-
     # set x/y to the tile IDs
     x = tile_idx[0]
     y = tile_idx[1]
@@ -541,12 +541,13 @@ def remove_folder(tile_idx: tuple, location: str):
     parent = f'tmp/{location}/{str(x)}/{str(y)}/'
     raw = os.path.join(parent, 'raw')
     ard = os.path.join(parent, 'ard')
+    print(f"Removing raw files for {tile_idx}")
     shutil.rmtree(raw)
     shutil.rmtree(ard)
         
     return None
 
-def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, feature_select: list, model_type: str, overwrite: bool):
+def execute_per_tile(database, tile_idx: tuple, location: list, model, verbose: bool, feature_select: list, model_type: str, overwrite: bool):
 
     ''' 
     will need to update
@@ -559,7 +560,7 @@ def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, feat
         y = tile_idx[1]
         ard = hkl.load(f'tmp/{location[0]}/{str(x)}/{str(y)}/ard/{str(x)}X{str(y)}Y_ard.hkl')
         validate.input_ard(tile_idx, location[0])
-        bbx = make_bbox(location[1], tile_idx)
+        bbx = make_bbox(database, tile_idx)
         validate.output_dtype_and_dimensions(ard[..., 11:13], ard[..., 0:10], ard[..., 10])
         validate.feats_range(tile_idx, location[0])
         feats, ttc = process_feats_slow(tile_idx, location[0], feature_select)
@@ -576,9 +577,9 @@ def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, feat
             preds_final = predict_regression(sample_ss, model, sample_dims)
 
         write_tif(preds_final, bbx, tile_idx, location[0], model_type, 'preds')
-        #remove_folder(tile_idx, location[0])
+        remove_folder(tile_idx, location[0])
 
-        del ard, feats, sample, sample_ss, preds_final
+        del ard, bbx, feats, sample, sample_ss, preds, preds_final
     
     else:
         print(f'Raw data for {tile_idx} could not be downloaded or does not exist on s3.')
@@ -597,8 +598,7 @@ if __name__ == '__main__':
     parser.add_argument('--slicer', nargs='+', type=int)
     args = parser.parse_args()
 
-    print(f'Initializing')
-    print('............................................')
+    print(f'Initializing...............................\n')
 
     with open(args.params) as param_file:
         params = yaml.safe_load(param_file)
@@ -617,7 +617,7 @@ if __name__ == '__main__':
 
     # specify tiles to process
     download_shape(location, aak, ask)
-    tile_ids = download_tile_ids(location, aak, ask)
+    database, tile_ids = download_tile_ids(location, aak, ask)
     indices = tuple(args.slicer)
     if len(indices) == 1 and indices[0] == -1:
         tiles_to_process = tile_ids
@@ -632,7 +632,8 @@ if __name__ == '__main__':
     counter = 0
     for tile_idx in tiles_to_process:
         counter += 1
-        execute_per_tile(tile_idx, 
+        execute_per_tile(database,
+                         tile_idx, 
                          location, 
                          loaded_model, 
                          params['deploy']['verbose'], 
