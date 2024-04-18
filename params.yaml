@@ -10,11 +10,8 @@ deploy:
   model_path: models/model.joblib
   model_type: classifier
   cleanup: false
-  version: 21-1
-  clip_to: data/abirem.shp
-  location:
-    - ghana
-    - abirem
+  overwrite: true
+  version: haze
 
 data_load:
   download_data: false
@@ -31,7 +28,7 @@ data_load:
     - v19
     - v20
     - v21
-
+    - v22
 data_condition:
   total_feature_count: 94
   classes: 4
@@ -43,8 +40,8 @@ data_condition:
   modelData_path: data/train/modelData.pkl
 
 select:
-  select_features: True       # Update
-  max_features: 53
+  select_features: False       # Update
+  max_features: 40
   selected_features_path: data/train/selected_features.json
 
 tune:
@@ -83,20 +80,21 @@ train:
   testing_metrics: accuracy balanced_accuracy precision recall f1 roc_auc log_loss
   estimators:
     cat:
-      importance_metric: shap
       use_class_weights: true
       param_grid:
         loss_function: MultiClass
         random_state: 121
         logging_level: Silent
+        depth: 7
         # iterations: 1000
-        # depth: 10
-        # 12_leaf_reg: 11
+        # l2_leaf_reg: 11
         # min_data_in_leaf: 100
-        # learning_rate: 0.04    
+        # learning_rate: 0.04   
+        # early_stopping_rounds: 10
 
 evaluate:
   metrics_file: src/evaluation/metrics
   cm_image: src/evaluation/confusion_matrix
   cm_data: src/evaluation/confusion_matrix_data
+  train_progress: src/evaluation/train_progress
   tile_id_loc: data
