@@ -3,7 +3,6 @@
 import pandas as pd
 import numpy as np
 import hickle as hkl
-import pickle
 import seaborn as sns
 import copy
 import os
@@ -17,12 +16,11 @@ from skimage.transform import resize
 from glob import glob
 import functools
 from time import time, strftime
-from datetime import datetime, timezone
-from scipy import ndimage
-from skimage.util import img_as_ubyte
+from datetime import datetime
 import joblib
 import copy
 import utils.validate_io as validate
+import utils.postprocess as postprocess
 from utils import mosaic
 import shutil
 
@@ -353,88 +351,6 @@ def predict_regression(arr: np.array, pretrained_model: str, sample_dims: tuple)
 
     return preds
 
-def remove_small_patches(arr, thresh):
-    
-    '''
-    Finds patches of of size thresh in a given array.
-    Label these features using ndimage.label() and counts
-    pixels for each label. If the count doesn't meet provided
-    threshold, make the label 0. Return an updated array
-
-    (option to add a 3x3 structure which considers features connected even 
-    if they touch diagonally - probably dnt want this)
-    
-    '''
-
-    # creates arr where each unique feature (non zero value) has a unique label
-    # num features are the number of connected patches
-    labeled_array, num_features = ndimage.label(arr)
-
-    # get pixel count for each label
-    label_size = [(labeled_array == label).sum() for label in range(num_features + 1)]
-
-    for label,size in enumerate(label_size):
-        if size < thresh:
-            arr[labeled_array == label] = 0
-    
-    return arr
-
-def cleanup_noisy_zeros1(preds, ttc_treecover):
-    is_fp_zero = np.logical_and(preds == 0, ttc_treecover > 10)
-    preds_flt = ndimage.median_filter(np.copy(preds), 5)
-    preds[is_fp_zero] = preds_flt[is_fp_zero]
-    return preds
-
-def cleanup_noisy_zeros2(preds, ttc_treecover):
-
-    # creates boolean mask in areas where preds is 0 but tree cover is above 10
-    is_fp_zero = np.logical_and(preds == 0, ttc_treecover > .10)
-
-    preds_flt = ndimage.median_filter(np.copy(preds), 5)
-
-    # replace all instances with filtered version of size 5
-    preds[is_fp_zero] = preds_flt[is_fp_zero]
-
-    # sets preds to 0 where tree cover is <10
-    preds = preds * (ttc_treecover > .10)
-
-    return preds
-
-def post_process_tile(arr: np.array, feature_select: list, ttc: np.array):
-
-    '''
-    Applies the no data and no tree flag if TTC tree cover predictions are used
-    in feature selection. The NN produces a float32 continuous prediction.
-
-    Performs a connected component analysis to remove positive predictions 
-    where the connected pixel count is < thresh. 
-    '''
-    # create no data and no tree flag (boolean mask)
-    # where TML probability is 255 or 0, pass along to preds
-    # note that the feats shape is (x, x, 65)
-    no_data_flag = ttc[...,0] == 255.
-    no_tree_flag = ttc[...,0] <= 0.1
-
-    # FLAG: this step requires feature selection
-    if 0 in feature_select:
-        arr[no_data_flag] = 255.
-        arr[no_tree_flag] = 0.
-
-    postprocess_mono = remove_small_patches(arr == 1, thresh = 20)
-    postprocess_af = remove_small_patches(arr == 2, thresh = 15)
-    
-    # multiplying by boolean will turn every False into 0 
-    # and keep every True as the original label
-    arr[arr == 1] *= postprocess_mono[arr == 1]
-    arr[arr == 2] *= postprocess_af[arr == 2]
-
-    # clean up pixels in the non-tree class
-    output = cleanup_noisy_zeros2(arr, ttc[...,0])
-  
-    del postprocess_af, postprocess_mono
-
-    return output
-
 def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, model_type: str, suffix = "preds"):
     '''
     Write predictions to a geotiff, using the same bounding box 
@@ -519,7 +435,7 @@ def remove_folder(tile_idx: tuple, location: str):
 def execute_per_tile(database, tile_idx: tuple, location: list, model, verbose: bool, feature_select: list, model_type: str, overwrite: bool):
 
     ''' 
-    will need to update
+    Execute all steps in the pipeline for the given tile.
     '''
     print(f'Processing tile: {tile_idx}')
     successful = download_ard(tile_idx, location[0], aak, ask, overwrite)
@@ -540,7 +456,7 @@ def execute_per_tile(database, tile_idx: tuple, location: list, model, verbose: 
         validate.model_inputs(sample_ss)
         if model_type == 'classifier':
             preds = predict_classification(sample_ss, model, sample_dims)
-            preds_final = post_process_tile(preds, feature_select, ttc)
+            preds_final = postprocess.clean_tile(preds, feature_select, ttc)
             validate.model_outputs(preds, model_type)
         else:
             preds_final = predict_regression(sample_ss, model, sample_dims)
