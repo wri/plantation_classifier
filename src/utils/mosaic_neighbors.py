@@ -1,9 +1,11 @@
+#!/usr/bin/env python
 import numpy as np
 import hickle as hkl
 import rasterio as rs
 from rasterio.merge import merge
 import copy
 import pandas as pd
+import sys
 
 def make_bbox(country: str, tile_idx: tuple, expansion: int = 10) -> list:
     """
@@ -98,12 +100,13 @@ def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str):
                             driver = 'GTiff',
                             width = arr.shape[1], 
                             height = arr.shape[0], 
-                            count = 1,
+                            count = 81,
                             dtype = "int16",
                             compress = 'lzw',
                             crs = '+proj=longlat +datum=WGS84 +no_defs',
                             transform=transform)
-    new_dataset.write(arr, 1)
+  
+    new_dataset.write(arr)
     new_dataset.close()
 
     return None
@@ -154,10 +157,21 @@ def mosaic_neighbors(tile_a, tile_b, country):
                      'width': mosaic.shape[2],
                      'transform': out_transform,
                      'compress':'lzw',
-                     'nodata': 255})
+                     })
 
     with rs.open(outpath, "w", **out_meta) as dest:
         dest.write(mosaic)
 
 
+if __name__ == '__main__':
 
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--country', dest='country', type=str)
+    parser.add_argument('--tile_a', dest='tile_a', nargs='+', type=int)
+    parser.add_argument('--tile_b', dest='tile_b', nargs='+', type=int)
+    args = parser.parse_args()
+    print("Argument List:", args)
+    tile_a = tuple(args.tile_a)
+    tile_b = tuple(args.tile_b)
+    mosaic_neighbors(tile_a, tile_b, args.country)
