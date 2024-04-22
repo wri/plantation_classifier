@@ -60,7 +60,7 @@ def download_tile_ids(location: list, aws_access_key: str, aws_secret_key: str):
     # if csv doesnt exist locally, check if available on s3
     if not os.path.exists(dest_file):
         s3 = boto3.resource('s3',
-                            aws_access_key_id=aws_access_key, 
+                            aws_access_key_id=aws_access_key,
                             aws_secret_access_key=aws_secret_key)
 
         bucket = s3.Bucket(params['deploy']['bucket'])
@@ -424,11 +424,9 @@ def remove_folder(tile_idx: tuple, location: str):
     x = tile_idx[0]
     y = tile_idx[1]
   
-    parent = f'tmp/{location}/{str(x)}/{str(y)}/'
-    raw = os.path.join(parent, 'raw')
-    ard = os.path.join(parent, 'ard')
-    shutil.rmtree(raw)
-    shutil.rmtree(ard)
+    print(f"Removing raw files for {tile_idx}")
+    dir_to_delete = f'tmp/{location}/{str(x)}/{str(y)}/'
+    shutil.rmtree(dir_to_delete)
         
     return None
 
