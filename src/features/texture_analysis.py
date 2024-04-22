@@ -284,7 +284,7 @@ if __name__ == '__main__':
     parser.add_argument('--overwrite', dest='overwrite', type=bool)
     args = parser.parse_args()
 
-    tiles_to_process = download_tile_ids(args.location, aak, ask)[160:]
+    tiles_to_process = download_tile_ids(args.location, aak, ask)
     tile_count = len(tiles_to_process)
     counter = 0
 
