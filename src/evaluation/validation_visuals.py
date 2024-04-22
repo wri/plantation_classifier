@@ -79,3 +79,25 @@ def plot_confusion_matrix(cm: np.array,
         "Predicted label\naccuracy={:0.4f}; misclass={:0.4f}".format(accuracy, misclass)
     )
     return plt.gcf()
+
+
+def plot_training_progress(model):
+    
+    # Extract the loss values from the evals_result_ dictionary
+    evals_result = model.get_evals_result()
+    train_loss = evals_result['learn']['MultiClass']
+    test_loss = evals_result['validation']['MultiClass']
+
+    # Plot the training progress
+    iterations = np.arange(1, len(train_loss) + 1)
+    
+    plt.figure(figsize=(7, 4))
+    plt.plot(iterations, train_loss, label='Training Loss', color='blue')
+    plt.plot(iterations, test_loss, label='Validation Loss', color='green')
+    plt.xlabel('Iteration')
+    plt.ylabel('Loss')
+    plt.title('CatBoost Training Progress')
+    plt.legend()
+    plt.grid()
+    
+    return plt.gcf()

@@ -125,9 +125,9 @@ def backward_selection(
         )
         logger.info(f"{round(metric, 5)} with {tmp_X_train.shape[1]} features")
 
-        if (num_features < max_features) and (
-            metric < last_metric
-        ): 
+        # removing metric < last_metric
+        # because this continues fs past max feature count
+        if (num_features < max_features):  
             # TODO: add a clause for min features in case it gets down to ARD feats
             top_feats = [
                 int(float(i.split("_")[-1])) for i in list(select_X_train.columns)

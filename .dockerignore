@@ -7,15 +7,19 @@ models/*
 __pycache__/*
 fil-result/*
 src/*
+dvc_plots/*
+catboost_info/*
+tests/*
+mydata/*
 
 *.pem
 *.ipynb
 *.tif
 *.md
 
-!models/cat_v20_tuned.pkl
-!src/transfer_learning.py 
-!src/mosaic.py 
-!src/validate_io.py 
-!src/texture_analysis.py
+!models/model.joblib
+!src/utils/validate_io.py 
+!src/utils/mosaic.py 
+!src/production.py 
+!data/train/selected_features.json
 !src/__init__.py 

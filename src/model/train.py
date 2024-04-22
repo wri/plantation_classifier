@@ -111,7 +111,7 @@ def fit_estimator(
     # metric fun creates the function for the specified metric, cool!
     metric_func = metrics[metric_name]
     model = estimator(**model_params_dict)
-    model.fit(X_train, y_train)
+    model.fit(X_train, y_train) #eval_set=(X_test, y_test)
     preds = model.predict(X_test)
     metric = metric_func(y_test, preds)
 

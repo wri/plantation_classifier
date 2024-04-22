@@ -3,29 +3,26 @@
 import pandas as pd
 import numpy as np
 import hickle as hkl
-import pickle
 import seaborn as sns
 import copy
 import os
 import boto3
 import botocore
 import rasterio as rs
-from rasterio.plot import reshape_as_raster, reshape_as_image
+from rasterio.plot import reshape_as_raster
 import yaml
 from osgeo import gdal
 from skimage.transform import resize
 from glob import glob
 import functools
 from time import time, strftime
-from datetime import datetime, timezone
-from scipy import ndimage
-from skimage.util import img_as_ubyte
-import gc
+from datetime import datetime
+import joblib
 import copy
-import subprocess
 import utils.validate_io as validate
+import utils.postprocess as postprocess
 from utils import mosaic
-
+import shutil
 
 def timer(func):
     '''
@@ -42,7 +39,6 @@ def timer(func):
         return value
     return wrapper_timer
 
-
 def download_tile_ids(location: list, aws_access_key: str, aws_secret_key: str):
     '''
     Checks to see if a country csv file exists locally,
@@ -51,7 +47,7 @@ def download_tile_ids(location: list, aws_access_key: str, aws_secret_key: str):
     '''
     local = params['deploy']['data_dir']
     s3_file = f'2020/databases/{location[1]}.csv'
-    dest_file = f"{local}{location[1]}.csv"
+    dest_file = f"{local}database/{location[1]}.csv"
 
     # check if csv exists locally
     # confirm subdirectory exists otherwise download can fail
@@ -64,7 +60,7 @@ def download_tile_ids(location: list, aws_access_key: str, aws_secret_key: str):
     # if csv doesnt exist locally, check if available on s3
     if not os.path.exists(dest_file):
         s3 = boto3.resource('s3',
-                            aws_access_key_id=aws_access_key, 
+                            aws_access_key_id=aws_access_key,
                             aws_secret_access_key=aws_secret_key)
 
         bucket = s3.Bucket(params['deploy']['bucket'])
@@ -82,7 +78,7 @@ def download_tile_ids(location: list, aws_access_key: str, aws_secret_key: str):
     # create a list of tiles 
     tiles = database[['X_tile', 'Y_tile']].to_records(index=False)
 
-    return tiles
+    return database, tiles
 
 def download_ard(tile_idx: tuple, country: str, aws_access_key: str, aws_secret_key: str, overwrite: bool):
     ''' 
@@ -140,7 +136,7 @@ def download_ard(tile_idx: tuple, country: str, aws_access_key: str, aws_secret_
                     return False
     return True
 
-def make_bbox(country: str, tile_idx: tuple, expansion: int = 10) -> list:
+def make_bbox(bbx_df, tile_idx: tuple, expansion: int = 10) -> list:
     """
     Makes a (min_x, min_y, max_x, max_y) bounding box that
     is 2 * expansion 300 x 300 meter ESA LULC pixels. 
@@ -152,8 +148,6 @@ def make_bbox(country: str, tile_idx: tuple, expansion: int = 10) -> list:
        Returns:
             bbx (list): expanded [min_x, min_y, max_x, max_y]
     """
-    bbx_df = pd.read_csv(f"data/{country}.csv", engine="pyarrow")
-
     # set x/y to the tile IDs
     x = tile_idx[0]
     y = tile_idx[1]
@@ -177,7 +171,6 @@ def make_bbox(country: str, tile_idx: tuple, expansion: int = 10) -> list:
     bbx[2] += expansion * multiplier
     bbx[3] += expansion * multiplier
     
-    # return the dataframe and the array
     return bbx
 
 def process_feats_slow(tile_idx: tuple, country: str, feature_select:list) -> np.ndarray:
@@ -207,7 +200,7 @@ def process_feats_slow(tile_idx: tuple, country: str, feature_select:list) -> np
     output = np.zeros((txt.shape[0], txt.shape[1], n_feats), dtype=np.float32)
 
     # adjust TML predictions feats[0] to match training data (0-1)
-    # adjust shape by rolling axis 2x (65, 614, 618) ->  (618, 614, 65) 
+    # adjust shape by rolling axis 2x (65, 614, 618) ->  (614, 618, 65), (618, 614, 65) 
     # feats used for deply are multiplyed by 1000 before saving
     feats_raw[0, ...] = feats_raw[0, ...] / 100 
     feats_raw[1:, ...] = feats_raw[1:, ...] / 1000  
@@ -215,7 +208,7 @@ def process_feats_slow(tile_idx: tuple, country: str, feature_select:list) -> np
     feats_rolled = np.rollaxis(feats_rolled, 0, 2)
     
     # now switch the feats
-    ttc = copy.deepcopy(feats_rolled)
+    ttc = copy.deepcopy(feats_rolled) 
 
     high_feats = [np.arange(1,33)]
     low_feats = [np.arange(33,65)]
@@ -226,8 +219,9 @@ def process_feats_slow(tile_idx: tuple, country: str, feature_select:list) -> np
     # combine ttc feats and txt into a single array
     output[..., :ttc.shape[-1]] = ttc
     output[..., ttc.shape[-1]:] = txt
-
-    # apply feature selection
+    
+    # apply feature selection - filtered to non ARD indices
+    feature_select = [i - 13 for i in feature_select if i >= 13]
     if len(feature_select) > 0:
         output = np.squeeze(output[:, :, [feature_select]])
 
@@ -248,6 +242,7 @@ def make_sample(tile_idx: tuple, country: str, feats: np.array):
     x = tile_idx[0]
     y = tile_idx[1]
     ard = hkl.load(f'tmp/{country}/{str(x)}/{str(y)}/ard/{str(x)}X{str(y)}Y_ard.hkl')
+    ard = np.clip(ard, 0, 1)
 
     # define number of features and create sample array
     n_feats = ard.shape[-1] + feats.shape[-1] 
@@ -356,89 +351,7 @@ def predict_regression(arr: np.array, pretrained_model: str, sample_dims: tuple)
 
     return preds
 
-def remove_small_patches(arr, thresh):
-    
-    '''
-    Finds patches of of size thresh in a given array.
-    Label these features using ndimage.label() and counts
-    pixels for each label. If the count doesn't meet provided
-    threshold, make the label 0. Return an updated array
-
-    (option to add a 3x3 structure which considers features connected even 
-    if they touch diagonally - probably dnt want this)
-    
-    '''
-
-    # creates arr where each unique feature (non zero value) has a unique label
-    # num features are the number of connected patches
-    labeled_array, num_features = ndimage.label(arr)
-
-    # get pixel count for each label
-    label_size = [(labeled_array == label).sum() for label in range(num_features + 1)]
-
-    for label,size in enumerate(label_size):
-        if size < thresh:
-            arr[labeled_array == label] = 0
-    
-    return arr
-
-def cleanup_noisy_zeros1(preds, ttc_treecover):
-    is_fp_zero = np.logical_and(preds == 0, ttc_treecover > 10)
-    preds_flt = ndimage.median_filter(np.copy(preds), 5)
-    preds[is_fp_zero] = preds_flt[is_fp_zero]
-    return preds
-
-def cleanup_noisy_zeros2(preds, ttc_treecover):
-
-    # creates boolean mask in areas where preds is 0 but tree cover is above 10
-    is_fp_zero = np.logical_and(preds == 0, ttc_treecover > .10)
-
-    preds_flt = ndimage.median_filter(np.copy(preds), 5)
-
-    # replace all instances with filtered version of size 5
-    preds[is_fp_zero] = preds_flt[is_fp_zero]
-
-    # sets preds to 0 where tree cover is <10
-    preds = preds * (ttc_treecover > .10)
-
-    return preds
-
-def post_process_tile(arr: np.array, feature_select: list, ttc: np.array):
-
-    '''
-    Applies the no data and no tree flag if TTC tree cover predictions are used
-    in feature selection. The NN produces a float32 continuous prediction.
-
-    Performs a connected component analysis to remove positive predictions 
-    where the connected pixel count is < thresh. 
-    '''
-    # create no data and no tree flag (boolean mask)
-    # where TML probability is 255 or 0, pass along to preds
-    # note that the feats shape is (x, x, 65)
-    no_data_flag = ttc[...,0] == 255.
-    no_tree_flag = ttc[...,0] <= 0.1
-
-    # FLAG: this step requires feature selection
-    if 0 in feature_select:
-        arr[no_data_flag] = 255.
-        arr[no_tree_flag] = 0.
-
-    postprocess_mono = remove_small_patches(arr == 1, thresh = 20)
-    postprocess_af = remove_small_patches(arr == 2, thresh = 15)
-    
-    # multiplying by boolean will turn every False into 0 
-    # and keep every True as the original label
-    arr[arr == 1] *= postprocess_mono[arr == 1]
-    arr[arr == 2] *= postprocess_af[arr == 2]
-
-    # clean up pixels in the non-tree class
-    output = cleanup_noisy_zeros2(arr, ttc[...,0])
-  
-    del postprocess_af, postprocess_mono
-
-    return output
-
-def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, model_type: str, suffix = "preds") -> str:
+def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, model_type: str, suffix = "preds"):
     '''
     Write predictions to a geotiff, using the same bounding box 
     to determine north, south, east, west corners of the tile
@@ -460,7 +373,6 @@ def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, model_t
     arr = arr.astype(np.uint8)
 
     # create the file based on the size of the array (618, 614, 1)
-    print("Writing", file)
     if model_type == 'classifier':
         transform = rs.transform.from_bounds(west = west, south = south,
                                             east = east, north = north,
@@ -512,30 +424,26 @@ def remove_folder(tile_idx: tuple, location: str):
     x = tile_idx[0]
     y = tile_idx[1]
   
-    path_to_tile = f'tmp/{location}/{str(x)}/{str(y)}/'
-
-    # remove every folder/file in raw/
-    for folder in glob(path_to_tile + "raw/*/"):
-        for file in os.listdir(folder):
-            _file = folder + file
-            os.remove(_file)
+    print(f"Removing raw files for {tile_idx}")
+    dir_to_delete = f'tmp/{location}/{str(x)}/{str(y)}/'
+    shutil.rmtree(dir_to_delete)
         
     return None
 
-def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, feature_select: list, model_type: str):
+def execute_per_tile(database, tile_idx: tuple, location: list, model, verbose: bool, feature_select: list, model_type: str, overwrite: bool):
 
     ''' 
-    will need to update
+    Execute all steps in the pipeline for the given tile.
     '''
     print(f'Processing tile: {tile_idx}')
-    successful = download_ard(tile_idx, location[0], aak, ask, overwrite=True)
+    successful = download_ard(tile_idx, location[0], aak, ask, overwrite)
 
     if successful:
         x = tile_idx[0]
         y = tile_idx[1]
         ard = hkl.load(f'tmp/{location[0]}/{str(x)}/{str(y)}/ard/{str(x)}X{str(y)}Y_ard.hkl')
         validate.input_ard(tile_idx, location[0])
-        bbx = make_bbox(location[1], tile_idx)
+        bbx = make_bbox(database, tile_idx)
         validate.output_dtype_and_dimensions(ard[..., 11:13], ard[..., 0:10], ard[..., 10])
         validate.feats_range(tile_idx, location[0])
         feats, ttc = process_feats_slow(tile_idx, location[0], feature_select)
@@ -546,7 +454,7 @@ def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, feat
         validate.model_inputs(sample_ss)
         if model_type == 'classifier':
             preds = predict_classification(sample_ss, model, sample_dims)
-            preds_final = post_process_tile(preds, feature_select, ttc)
+            preds_final = postprocess.clean_tile(preds, feature_select, ttc)
             validate.model_outputs(preds, model_type)
         else:
             preds_final = predict_regression(sample_ss, model, sample_dims)
@@ -567,14 +475,14 @@ def execute_per_tile(tile_idx: tuple, location: list, model, verbose: bool, feat
 if __name__ == '__main__':
    
     import argparse
-    import sys
     import json
-    parser = argparse.ArgumentParser()
-    print("Argument List:", str(sys.argv))
-    
+    parser = argparse.ArgumentParser()    
     parser.add_argument('--params', dest='params', required=True) 
-    parser.add_argument('--fs', dest='feature_select', nargs='*', type=int) 
+    parser.add_argument('--loc', dest='location', nargs='+', type=str)
+    parser.add_argument('--slicer', nargs='+', type=int)
     args = parser.parse_args()
+
+    print(f'Initializing...............................\n')
 
     with open(args.params) as param_file:
         params = yaml.safe_load(param_file)
@@ -583,35 +491,48 @@ if __name__ == '__main__':
         aak = config['aws']['aws_access_key_id']
         ask = config['aws']['aws_secret_access_key']
     
-    # specify tiles HERE
-    tiles_to_process = download_tile_ids(args.location, aak, ask) 
-    tile_count = len(tiles_to_process)
-    location = params['deploy']['location']
-    with open(params['deploy']['model_path'], 'rb') as file:  
-        loaded_model = pickle.load(file)
+    location = args.location
     model_type = params['deploy']['model_type']
     print(f'Model type is {model_type}.')
+    with open(params['deploy']['model_path'], "rb") as fp:
+        loaded_model = joblib.load(fp)
     with open(params["select"]["selected_features_path"], "r") as fp:
         selected_features = json.load(fp)
+
+    # specify tiles to process
+    database, tile_ids = download_tile_ids(location, aak, ask)
+    indices = tuple(args.slicer)
+    if len(indices) == 1 and indices[0] == -1:
+        tiles_to_process = tile_ids
+    else: 
+        tiles_to_process = tile_ids[slice(*indices)] # unpack tuple with *
+    tile_count = len(tiles_to_process)
+
+    print('............................................')
+    print(f'Processing {tile_count} tiles for {location[1]}, {location[0]}')
+    print('............................................')
+    
     counter = 0
-
-    print('............................................')
-    print(f'Processing {tile_count} tiles for {location[1], location[0]}.')
-    print('............................................')
-
     for tile_idx in tiles_to_process:
         counter += 1
-        execute_per_tile(tile_idx, 
+        execute_per_tile(database,
+                         tile_idx, 
                          location, 
                          loaded_model, 
                          params['deploy']['verbose'], 
                          selected_features, 
-                         model_type)
+                         model_type,
+                         params['deploy']['overwrite'])
 
         if counter % 2 == 0:
             print(f'{counter}/{tile_count} tiles processed...')
     
-    mosaic.mosaic_tif(location, compile_from='csv')
-    mosaic.clip_it(location, params['deploy']['clip_to'])
-    # mosaic.upload_mosaic(location, aak, ask)
+    mosaic.mosaic_tif(location, params['deploy']['version'], tiles_to_process)
+    file_to_upload = mosaic.clip_it(aak, ask, 
+                                    location, 
+                                    params['deploy']['version'], 
+                                    params['deploy']['data_dir'],
+                                    params['deploy']['bucket'])
+    mosaic.upload_mosaic(aak, ask, file_to_upload)
+  
     

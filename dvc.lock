@@ -5,12 +5,12 @@ stages:
     deps:
     - path: src/features/PlantationsData.py
       hash: md5
-      md5: 44cd1e8472285e9b9f7e3c9dd3be5025
-      size: 3587
+      md5: 2dcd21e889bcd7023eb52852a4b257bf
+      size: 3123
     - path: src/features/create_xy.py
       hash: md5
-      md5: 62475c9d30bdbb69939b9f95adf3b4ec
-      size: 10971
+      md5: 569a96713efea8056be4dd0d0920c6c1
+      size: 12708
     - path: src/stage_prep_features.py
       hash: md5
       md5: 306200dc3ff169636bad47afbea0639d
@@ -36,6 +36,7 @@ stages:
           folder_prefix: plantation-mapping/data/train/
           local_prefix: data/
           ttc_feats_dir: train-features-ard/
+          create_labels: false
           ceo_survey:
           - v08
           - v14
@@ -43,11 +44,13 @@ stages:
           - v18
           - v19
           - v20
+          - v21
+          - v22
     outs:
     - path: data/train/modelData.pkl
       hash: md5
-      md5: 12c91fb25d7d97c93e259337ec1e2d90
-      size: 215402685
+      md5: e5be72f18f2146d3ff7ab1bfb3048595
+      size: 321164391
   load_data:
     cmd: python src/stage_load_data.py --params=params.yaml
     deps:
@@ -67,6 +70,7 @@ stages:
           folder_prefix: plantation-mapping/data/train/
           local_prefix: data/
           ttc_feats_dir: train-features-ard/
+          create_labels: false
           ceo_survey:
           - v08
           - v14
@@ -74,17 +78,19 @@ stages:
           - v18
           - v19
           - v20
+          - v21
+          - v22
   select_features_hyperparams:
     cmd: python src/stage_select_and_tune.py --params=params.yaml
     deps:
     - path: data/train/modelData.pkl
       hash: md5
-      md5: 12c91fb25d7d97c93e259337ec1e2d90
-      size: 215402685
+      md5: e5be72f18f2146d3ff7ab1bfb3048595
+      size: 321164391
     - path: src/features/feature_selection.py
       hash: md5
-      md5: 7debd4c5f85944c84a6e5c0dde0ef630
-      size: 8395
+      md5: d51fa7201f0fb27b59e81589754b413a
+      size: 8446
     params:
       params.yaml:
         base:
@@ -101,7 +107,7 @@ stages:
           val_split: 25
           modelData_path: data/train/modelData.pkl
         select:
-          select_features: true
+          select_features: false
           max_features: 40
           selected_features_path: data/train/selected_features.json
         train:
@@ -115,16 +121,16 @@ stages:
             log_loss
           estimators:
             cat:
-              importance_metric: shap
               use_class_weights: true
               param_grid:
                 loss_function: MultiClass
                 random_state: 121
                 logging_level: Silent
+                depth: 7
     outs:
     - path: data/train/selected_features.json
       hash: md5
-      md5: 2f95643980be7eb2d680971cb392bbb0
+      md5: 833926d2ab341cf7854e69304d65167e
       size: 150
     - path: src/evaluation/best_params.json
       hash: md5
@@ -135,11 +141,11 @@ stages:
     deps:
     - path: data/train/modelData.pkl
       hash: md5
-      md5: 12c91fb25d7d97c93e259337ec1e2d90
-      size: 215402685
+      md5: e5be72f18f2146d3ff7ab1bfb3048595
+      size: 321164391
     - path: data/train/selected_features.json
       hash: md5
-      md5: 2f95643980be7eb2d680971cb392bbb0
+      md5: 833926d2ab341cf7854e69304d65167e
       size: 150
     - path: src/evaluation/best_params.json
       hash: md5
@@ -147,12 +153,12 @@ stages:
       size: 110
     - path: src/model/train.py
       hash: md5
-      md5: 3b8af3616962af8636a74d7dc406c446
-      size: 3384
+      md5: a5336ed53bcc71cf71937e886d6d7c5e
+      size: 3411
     - path: src/stage_train_model.py
       hash: md5
-      md5: 90844da15eba7064949e73eba9ccdcb4
-      size: 2237
+      md5: 4eda50bc247e53cae05bfd77856a7c33
+      size: 2905
     params:
       params.yaml:
         base:
@@ -179,44 +185,44 @@ stages:
             log_loss
           estimators:
             cat:
-              importance_metric: shap
               use_class_weights: true
               param_grid:
                 loss_function: MultiClass
                 random_state: 121
                 logging_level: Silent
+                depth: 7
     outs:
     - path: models/model.joblib
       hash: md5
-      md5: f0d1f6b8251ab14e91e6851800a9ceed
-      size: 2639305
+      md5: b27bc129b18f8f4903798c7794b0a4ae
+      size: 5209729
   evaluate_model:
     cmd: python src/stage_evaluate_model.py --params=params.yaml
     deps:
     - path: data/train/modelData.pkl
       hash: md5
-      md5: 12c91fb25d7d97c93e259337ec1e2d90
-      size: 215402685
+      md5: e5be72f18f2146d3ff7ab1bfb3048595
+      size: 321164391
     - path: data/train/selected_features.json
       hash: md5
-      md5: 2f95643980be7eb2d680971cb392bbb0
+      md5: 833926d2ab341cf7854e69304d65167e
       size: 150
     - path: models/model.joblib
       hash: md5
-      md5: f0d1f6b8251ab14e91e6851800a9ceed
-      size: 2639305
+      md5: b27bc129b18f8f4903798c7794b0a4ae
+      size: 5209729
     - path: src/evaluation/best_params.json
       hash: md5
       md5: cf78d06c4e033cebed6e025682b56c0f
       size: 110
     - path: src/evaluation/validation_visuals.py
       hash: md5
-      md5: 03c3bd6638b24739b369000fefd1fdfd
-      size: 2913
+      md5: d44607261f09b8de101499bb3ec2e1f7
+      size: 3597
     - path: src/stage_evaluate_model.py
       hash: md5
-      md5: 4e131cd8c94b463942ca90fc0213b4d1
-      size: 4469
+      md5: 3c2299f70773812ef467f87633c32a55
+      size: 4754
     params:
       params.yaml:
         base:
@@ -236,6 +242,7 @@ stages:
           metrics_file: src/evaluation/metrics
           cm_image: src/evaluation/confusion_matrix
           cm_data: src/evaluation/confusion_matrix_data
+          train_progress: src/evaluation/train_progress
           tile_id_loc: data
         train:
           use_best_params: false
@@ -248,22 +255,22 @@ stages:
             log_loss
           estimators:
             cat:
-              importance_metric: shap
               use_class_weights: true
               param_grid:
                 loss_function: MultiClass
                 random_state: 121
                 logging_level: Silent
+                depth: 7
     outs:
     - path: src/evaluation/confusion_matrix.png
       hash: md5
-      md5: 8fba5012c91e9c8108032c91059a3072
-      size: 31110
+      md5: 1ad204fedacad778a7b5d6f546850a5f
+      size: 32462
     - path: src/evaluation/confusion_matrix_data.csv
       hash: md5
-      md5: 8dadfdaa161fdf8044324674dd935639
-      size: 113697
+      md5: dc5c6bde6945264d8fca27886b5fbf45
+      size: 169361
     - path: src/evaluation/metrics.json
       hash: md5
-      md5: f94a6a805a993f28d3d9b7f26122d97f
-      size: 192
+      md5: bb91ec08395b0a7d9ca34f9750b007f3
+      size: 190

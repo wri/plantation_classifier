@@ -10,10 +10,8 @@ deploy:
   model_path: models/model.joblib
   model_type: classifier
   cleanup: false
-  clip_to: data/abirem.shp
-  location:
-    - ghana
-    - abirem
+  overwrite: false
+  version: no_pp
 
 data_load:
   download_data: false
@@ -21,6 +19,7 @@ data_load:
   folder_prefix: plantation-mapping/data/train/
   local_prefix: data/
   ttc_feats_dir: train-features-ard/
+  create_labels: false
   ceo_survey:
     - v08
     - v14
@@ -28,7 +27,8 @@ data_load:
     - v18
     - v19
     - v20
-
+    - v21
+    - v22
 data_condition:
   total_feature_count: 94
   classes: 4
@@ -40,7 +40,7 @@ data_condition:
   modelData_path: data/train/modelData.pkl
 
 select:
-  select_features: True       # Update
+  select_features: False       # Update
   max_features: 40
   selected_features_path: data/train/selected_features.json
 
@@ -52,22 +52,22 @@ tune:
   estimators:
     cat:
       param_grid:
-        iter_min: 700
-        iter_max: 900
-        iter_step: 2
+        iter_min: 500
+        iter_max: 1200
+        iter_step: 10
         depth_min: 6
         depth_max: 12
-        depth_step: 3
+        depth_step: 4
         leaf_reg_min: 2
         leaf_reg_max: 30
-        leaf_reg_step: 3
-        min_data_leaf_min: 20
-        min_data_leaf_max: 100
+        leaf_reg_step: 4
+        min_data_leaf_min: 50
+        min_data_leaf_max: 120
         min_data_leaf_step: 3
         learn_rate:
-          - .02
           - .03
           - .04
+          - .05
   best_params: src/evaluation/best_params.json
 
 train:
@@ -80,20 +80,21 @@ train:
   testing_metrics: accuracy balanced_accuracy precision recall f1 roc_auc log_loss
   estimators:
     cat:
-      importance_metric: shap
       use_class_weights: true
       param_grid:
         loss_function: MultiClass
         random_state: 121
         logging_level: Silent
-        #iterations: 811         #default is 500
-        # depth: 10               #default is 6
-        # 12_leaf_reg: 11         #default is 3
-        # min_data_in_leaf: 50    #default is 1
-        # learning_rate: 0.04       #default is 0.1007
+        depth: 7
+        # iterations: 1000
+        # l2_leaf_reg: 11
+        # min_data_in_leaf: 100
+        # learning_rate: 0.04   
+        # early_stopping_rounds: 10
 
 evaluate:
   metrics_file: src/evaluation/metrics
   cm_image: src/evaluation/confusion_matrix
   cm_data: src/evaluation/confusion_matrix_data
+  train_progress: src/evaluation/train_progress
   tile_id_loc: data

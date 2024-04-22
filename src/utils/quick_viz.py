@@ -98,14 +98,14 @@ def heat_compare_preds(location: str, tile_idx_a: tuple, tile_idx_b: tuple):
     sns.heatmap(preds_a, 
                 xticklabels=False, 
                 yticklabels=False,
-                cbar_kws = {'ticks' : [0, 1, 2]}, 
-                vmin=0, vmax=2).set_title('Tile: ' + str(tile_idx_a))
+                cbar_kws = {'ticks' : [0, 1, 2, 3]}, 
+                vmin=0, vmax=3).set_title('Tile: ' + str(tile_idx_a))
     plt.subplot(1,2,2)
     sns.heatmap(preds_b, 
                 xticklabels=False, 
                 yticklabels=False,
-                cbar_kws = {'ticks' : [0, 1, 2]}, 
-                vmin=0, vmax=2).set_title('Tile: ' + str(tile_idx_b));
+                cbar_kws = {'ticks' : [0, 1, 2, 3]}, 
+                vmin=0, vmax=3).set_title('Tile: ' + str(tile_idx_b));
 
     return None
 
@@ -197,9 +197,35 @@ def hist_compare_s2_byband(location: str, tile_idx_a: tuple, tile_idx_b: tuple, 
     return None
 
 
+def heat_compare_ard(location, tile_idx_a, tile_idx_b):
+    '''
+    Type: Seaborn heatmap
+    Purpose: Compare and visualize two files (could be s2 data, ARD, feats, etc.)
+    
+    '''
+    x_a, y_a = tile_idx_a[0], tile_idx_a[1]
+    x_b, y_b = tile_idx_b[0], tile_idx_b[1]
+    ard_a = hkl.load(f'../tmp/{location}/{str(x_a)}/{str(y_a)}/ard/{str(x_a)}X{str(y_a)}Y_ard.hkl')
+    ard_b = hkl.load(f'../tmp/{location}/{str(x_b)}/{str(y_b)}/ard/{str(x_b)}X{str(y_b)}Y_ard.hkl')
 
+    plt.figure(figsize=(25,20))
+    for plot in range(1, 14):
+        for i in range(0, ard_a.shape[-1]):
+            plt.subplot(3,5,plot)
+            sns.heatmap(ard_a[..., i], 
+                        xticklabels=False, 
+                        yticklabels=False,
+                        cbar_kws = {'ticks' : [ard_a.min(), ard_a.max()]}).set_title(f"index: {i}")
+                
+            # plt.subplot(3,5,2)
+            # sns.heatmap(ard_b, 
+            #             xticklabels=False, 
+            #             yticklabels=False,
+            #             cbar_kws = {'ticks' : [ard_b.min(), ard_b.max()]}).set_title(title_b);
 
-def heat_compare_arrays(arr_a, arr_b, title_a:str, title_b:str):
+    return None
+
+def heat_compare_arrays(arr_a, arr_b, vmin, vmax, title_a, title_b):
     '''
     Type: Seaborn heatmap
     Purpose: Compare and visualize two files (could be s2 data, ARD, feats, etc.)
@@ -211,13 +237,18 @@ def heat_compare_arrays(arr_a, arr_b, title_a:str, title_b:str):
     sns.heatmap(arr_a, 
                 xticklabels=False, 
                 yticklabels=False,
-                cbar_kws = {'ticks' : [arr_a.min(), arr_a.max()]}).set_title(title_a)
+                cbar_kws = {'ticks' : [arr_a.min(), arr_a.max()]},
+                vmin=vmin,
+                vmax=vmax,
+                ).set_title(str(title_a))
         
     plt.subplot(1,2,2)
     sns.heatmap(arr_b, 
                 xticklabels=False, 
                 yticklabels=False,
-                cbar_kws = {'ticks' : [arr_b.min(), arr_b.max()]}).set_title(title_b);
+                vmin=vmin,
+                vmax=vmax,
+                cbar_kws = {'ticks' : [arr_b.min(), arr_b.max()]}).set_title(str(title_b));
 
     return None
 

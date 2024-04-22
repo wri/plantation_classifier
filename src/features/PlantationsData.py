@@ -34,6 +34,9 @@ class PlantationsData:
         """
         Performs manual scaling of training data
         """
+        X_train_tmp = copy.deepcopy(self.X_train)
+        X_test_tmp = copy.deepcopy(self.X_test)
+
         # standardize train/test data 
         min_all = []
         max_all = []
@@ -44,50 +47,31 @@ class PlantationsData:
 
             if maxs > mins:
                 # clip values in each band based on min/max of training dataset
-                self.X_train[..., band] = np.clip(self.X_train[..., band], mins, maxs)
-                self.X_test[..., band] = np.clip(self.X_test[..., band], mins, maxs)
+                X_train_tmp[..., band] = np.clip(X_train_tmp[..., band], mins, maxs)
+                X_test_tmp[..., band] = np.clip(X_test_tmp[..., band], mins, maxs)
 
                 # calculate standardized data
                 midrange = (maxs + mins) / 2
                 rng = maxs - mins
-                self.X_train[..., band] = (self.X_train[..., band] - midrange) / (rng / 2)
-                self.X_test[..., band] = (self.X_test[..., band] - midrange) / (rng / 2)
+                X_train_tmp[..., band] = (X_train_tmp[..., band] - midrange) / (rng / 2)
+                X_test_tmp[..., band] = (X_test_tmp[..., band] - midrange) / (rng / 2)
                 min_all.append(mins)
                 max_all.append(maxs)
                 
         self.mins = min_all
         self.maxs = max_all
-        self.X_train_scaled = reshape_arr(self.X_train)
-        self.X_test_scaled = reshape_arr(self.X_test)
+        self.X_train_scaled = reshape_arr(X_train_tmp)
+        self.X_test_scaled = reshape_arr(X_test_tmp)
 
     def filter_features(self, feature_index_list):
         '''
-        Filters X_train and X_test to identified set of features
-        and reshapes the array for input into model.
+        Filters X_train and X_test with shape (x, 14, 14, 94)
+        to identified set of features and reshapes the array 
+        into 2 dimensions for input into model.
         '''
 
-        n_feats = len(feature_index_list)
+        X_train_reshaped = np.squeeze(self.X_train[:, :, :, [feature_index_list]])
+        X_test_reshaped = np.squeeze(self.X_test[:, :, :, [feature_index_list]])
     
-        X_train_reshaped = np.zeros(
-            shape=(
-                self.X_train.shape[0],
-                self.X_train.shape[1],
-                self.X_train.shape[2],
-                n_feats,
-            )
-        )
-        X_test_reshaped = np.zeros(
-            shape=(
-                self.X_test.shape[0],
-                self.X_test.shape[1],
-                self.X_test.shape[2],
-                n_feats,
-            )
-        )
-        for i in range(self.X_train.shape[0]):
-            X_train_reshaped[i : i + 1, ...] = self.X_train[i : i + 1, :, :, feature_index_list]
-        for i in range(self.X_train.shape[0]):
-            X_test_reshaped[i : i + 1, ...] = self.X_test[i : i + 1, :, :, feature_index_list]
-
         self.X_train_reshaped = reshape_arr(X_train_reshaped)
         self.X_test_reshaped = reshape_arr(X_test_reshaped)
