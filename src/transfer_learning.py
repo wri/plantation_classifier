@@ -47,7 +47,7 @@ def download_tile_ids(location: list, aws_access_key: str, aws_secret_key: str):
     '''
     local = params['deploy']['data_dir']
     s3_file = f'2020/databases/{location[1]}.csv'
-    dest_file = f"{local}{location[1]}.csv"
+    dest_file = f"{local}database/{location[1]}.csv"
 
     # check if csv exists locally
     # confirm subdirectory exists otherwise download can fail
