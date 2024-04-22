@@ -10,8 +10,8 @@ deploy:
   model_path: models/model.joblib
   model_type: classifier
   cleanup: false
-  overwrite: true
-  version: haze
+  overwrite: false
+  version: no_pp
 
 data_load:
   download_data: false
