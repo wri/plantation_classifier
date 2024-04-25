@@ -9,7 +9,7 @@ import yaml
 import model.train as train
 
 
-def random_search_cat(X_train, y_train, estimator_name, metric_name, param_path):
+def random_search_cat(X_train, y_train, estimator_name, metric_name, param_path, logger):
     """
     Performs a randomized search of hyperparameters using Catboost's built in
     random search method and plots the results, then
@@ -40,13 +40,25 @@ def random_search_cat(X_train, y_train, estimator_name, metric_name, param_path)
     mdl_min = param_dist["min_data_leaf_min"]
     mdl_max = param_dist["min_data_leaf_max"]
     mdl_step = param_dist["min_data_leaf_step"]
+   # iterations = [int(x) for x in np.linspace(iter_min, iter_max, iter_step)]
+    iterations = [int(x) for x in np.arange(iter_min, iter_max+1, iter_step)]
+    depth = [int(x) for x in np.linspace(depth_min, depth_max, depth_step)]
+    leaf_reg = [int(x) for x in np.linspace(leaf_min, leaf_max, leaf_step)]
+    learning_rate = param_dist["learn_rate"]
+    mdl = [int(x) for x in np.linspace(mdl_min, mdl_max, mdl_step)]
+
+    logger.debug(f"Iteration values: {iterations}")
+    logger.debug(f"Depth values: {depth}")
+    logger.debug(f"12 leaf reg values: {leaf_reg}")
+    logger.debug(f"Learning rate values: {learning_rate}")
+    logger.debug(f"Min data in leaf values: {mdl}")
 
     rs_params = {
-        "iterations": [int(x) for x in np.linspace(iter_min, iter_max, iter_step)],
-        "depth": [int(x) for x in np.linspace(depth_min, depth_max, depth_step)],
-        "l2_leaf_reg": [int(x) for x in np.linspace(leaf_min, leaf_max, leaf_step)],
-        "learning_rate": param_dist["learn_rate"],
-        "min_data_in_leaf": [int(x) for x in np.linspace(mdl_min, mdl_max, mdl_step)],
+        "iterations": iterations,
+        "depth": depth,
+        "l2_leaf_reg": leaf_reg,
+        "learning_rate": learning_rate,
+        "min_data_in_leaf": mdl,
     }
 
     # instantiate the classifier and perform Catboost built in method for random search
