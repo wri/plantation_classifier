@@ -29,7 +29,7 @@ stages:
           test_split: 20
           train_split: 80
           val_split: 25
-          modelData_path: data/train/modelData.pkl
+          modelData_path: data/train_params/modelData.pkl
         data_load:
           download_data: false
           bucket_name: restoration-monitoring
@@ -41,16 +41,15 @@ stages:
           - v08
           - v14
           - v15
-          - v18
           - v19
           - v20
           - v21
           - v22
     outs:
-    - path: data/train/modelData.pkl
+    - path: data/train_params/modelData.pkl
       hash: md5
-      md5: e5be72f18f2146d3ff7ab1bfb3048595
-      size: 321164391
+      md5: ad076aa4e9f5696b743cf7d647019f24
+      size: 281838893
   load_data:
     cmd: python src/stage_load_data.py --params=params.yaml
     deps:
@@ -75,7 +74,6 @@ stages:
           - v08
           - v14
           - v15
-          - v18
           - v19
           - v20
           - v21
@@ -83,10 +81,10 @@ stages:
   select_features_hyperparams:
     cmd: python src/stage_select_and_tune.py --params=params.yaml
     deps:
-    - path: data/train/modelData.pkl
+    - path: data/train_params/modelData.pkl
       hash: md5
-      md5: e5be72f18f2146d3ff7ab1bfb3048595
-      size: 321164391
+      md5: ad076aa4e9f5696b743cf7d647019f24
+      size: 281838893
     - path: src/features/feature_selection.py
       hash: md5
       md5: d51fa7201f0fb27b59e81589754b413a
@@ -105,11 +103,11 @@ stages:
           test_split: 20
           train_split: 80
           val_split: 25
-          modelData_path: data/train/modelData.pkl
+          modelData_path: data/train_params/modelData.pkl
         select:
-          select_features: false
-          max_features: 40
-          selected_features_path: data/train/selected_features.json
+          select_features: true
+          max_features: 80
+          selected_features_path: data/train_params/selected_features.json
         train:
           use_best_params: false
           model_dir: models/
@@ -128,29 +126,29 @@ stages:
                 logging_level: Silent
                 depth: 7
     outs:
-    - path: data/train/selected_features.json
+    - path: data/train_params/best_params.json
       hash: md5
-      md5: 833926d2ab341cf7854e69304d65167e
-      size: 150
-    - path: src/evaluation/best_params.json
+      md5: 99914b932bd37a50b983c5e7c90ae93b
+      size: 2
+    - path: data/train_params/selected_features.json
       hash: md5
-      md5: cf78d06c4e033cebed6e025682b56c0f
-      size: 110
+      md5: 77049d66e32b038778741c36344bf4cd
+      size: 310
   train_model:
     cmd: python src/stage_train_model.py --params=params.yaml
     deps:
-    - path: data/train/modelData.pkl
+    - path: data/train_params/best_params.json
       hash: md5
-      md5: e5be72f18f2146d3ff7ab1bfb3048595
-      size: 321164391
-    - path: data/train/selected_features.json
+      md5: 99914b932bd37a50b983c5e7c90ae93b
+      size: 2
+    - path: data/train_params/modelData.pkl
       hash: md5
-      md5: 833926d2ab341cf7854e69304d65167e
-      size: 150
-    - path: src/evaluation/best_params.json
+      md5: ad076aa4e9f5696b743cf7d647019f24
+      size: 281838893
+    - path: data/train_params/selected_features.json
       hash: md5
-      md5: cf78d06c4e033cebed6e025682b56c0f
-      size: 110
+      md5: 77049d66e32b038778741c36344bf4cd
+      size: 310
     - path: src/model/train.py
       hash: md5
       md5: a5336ed53bcc71cf71937e886d6d7c5e
@@ -173,7 +171,7 @@ stages:
           test_split: 20
           train_split: 80
           val_split: 25
-          modelData_path: data/train/modelData.pkl
+          modelData_path: data/train_params/modelData.pkl
         train:
           use_best_params: false
           model_dir: models/
@@ -194,35 +192,35 @@ stages:
     outs:
     - path: models/model.joblib
       hash: md5
-      md5: b27bc129b18f8f4903798c7794b0a4ae
-      size: 5209729
+      md5: 94064fae5c076c679ada5c8e417d2612
+      size: 5214321
   evaluate_model:
     cmd: python src/stage_evaluate_model.py --params=params.yaml
     deps:
-    - path: data/train/modelData.pkl
+    - path: data/train_params/best_params.json
       hash: md5
-      md5: e5be72f18f2146d3ff7ab1bfb3048595
-      size: 321164391
-    - path: data/train/selected_features.json
+      md5: 99914b932bd37a50b983c5e7c90ae93b
+      size: 2
+    - path: data/train_params/modelData.pkl
       hash: md5
-      md5: 833926d2ab341cf7854e69304d65167e
-      size: 150
+      md5: ad076aa4e9f5696b743cf7d647019f24
+      size: 281838893
+    - path: data/train_params/selected_features.json
+      hash: md5
+      md5: 77049d66e32b038778741c36344bf4cd
+      size: 310
     - path: models/model.joblib
       hash: md5
-      md5: b27bc129b18f8f4903798c7794b0a4ae
-      size: 5209729
-    - path: src/evaluation/best_params.json
-      hash: md5
-      md5: cf78d06c4e033cebed6e025682b56c0f
-      size: 110
+      md5: 94064fae5c076c679ada5c8e417d2612
+      size: 5214321
     - path: src/evaluation/validation_visuals.py
       hash: md5
       md5: d44607261f09b8de101499bb3ec2e1f7
       size: 3597
     - path: src/stage_evaluate_model.py
       hash: md5
-      md5: 3c2299f70773812ef467f87633c32a55
-      size: 4754
+      md5: 9f50423718bb6237f5ac94e03dffbf97
+      size: 4718
     params:
       params.yaml:
         base:
@@ -237,7 +235,7 @@ stages:
           test_split: 20
           train_split: 80
           val_split: 25
-          modelData_path: data/train/modelData.pkl
+          modelData_path: data/train_params/modelData.pkl
         evaluate:
           metrics_file: src/evaluation/metrics
           cm_image: src/evaluation/confusion_matrix
@@ -264,13 +262,13 @@ stages:
     outs:
     - path: src/evaluation/confusion_matrix.png
       hash: md5
-      md5: 1ad204fedacad778a7b5d6f546850a5f
-      size: 32462
+      md5: 575ddefeab89f01365bb464dcf7c75c0
+      size: 31020
     - path: src/evaluation/confusion_matrix_data.csv
       hash: md5
-      md5: dc5c6bde6945264d8fca27886b5fbf45
-      size: 169361
+      md5: 304b4e13349d13b970ff44ff3946d279
+      size: 148977
     - path: src/evaluation/metrics.json
       hash: md5
-      md5: bb91ec08395b0a7d9ca34f9750b007f3
-      size: 190
+      md5: 6f39ba34707ccbc6a97eb64200721944
+      size: 516
