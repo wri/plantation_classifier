@@ -20,7 +20,6 @@ from utils.logs import get_logger
 from evaluation.validation_visuals import plot_confusion_matrix, plot_training_progress
 from features import PlantationsData
 
-
 def convert_to_labels(indexes, labels):
     result = []
     for i in indexes:
@@ -53,7 +52,6 @@ def evaluate_model(params_path: Text) -> None:
     logger = get_logger("EVALUATE", log_level=params["base"]["log_level"])
 
     logger.info("Loading model and test data")
-    #   pipe = params['base']['pipeline']  
     with open(params['train']['model_name'], "rb") as fp:
         model = joblib.load(fp)
     with open(params["data_condition"]["modelData_path"], "rb") as fp:
@@ -65,8 +63,6 @@ def evaluate_model(params_path: Text) -> None:
     #   model_params["class_weights"] = model_data.class_weights
 
     logger.info("Evaluating (building report)")
-    #  y_test = y_test.astype("str")
-
     prediction = model.predict(model_data.X_test_reshaped)
     accuracy = accuracy_score(y_true=model_data.y_test_reshaped, y_pred=prediction)
     balanced_accuracy = balanced_accuracy_score(
@@ -104,6 +100,7 @@ def evaluate_model(params_path: Text) -> None:
                 "balanced_accuracy_score": balanced_accuracy,
                 "precision_score": precision,
                 "recall_score": recall,
+                "features": selected_features,
             },
             fp=fp,
         )
