@@ -11,7 +11,7 @@ deploy:
   model_type: classifier
   cleanup: false
   overwrite: false
-  version: no_pp
+  version: v23
 
 data_load:
   download_data: false
@@ -24,11 +24,11 @@ data_load:
     - v08
     - v14
     - v15
-    - v18
     - v19
     - v20
     - v21
     - v22
+
 data_condition:
   total_feature_count: 94
   classes: 4
@@ -37,16 +37,17 @@ data_condition:
   test_split: 20 # previously used .33 test
   train_split: 80
   val_split: 25
-  modelData_path: data/train/modelData.pkl
+  modelData_path: data/train_params/modelData.pkl
 
 select:
-  select_features: False       # Update
-  max_features: 40
-  selected_features_path: data/train/selected_features.json
+  select_features: True       # Update
+  max_features: 80
+  selected_features_path: data/train_params/selected_features.json
 
 tune:
   tune_hyperparameters: False   # Update
   n_iter: 20 
+  cv: 3
   plot: False
   verbose: False
   estimators:
@@ -54,7 +55,7 @@ tune:
       param_grid:
         iter_min: 500
         iter_max: 1200
-        iter_step: 10
+        iter_step: 200
         depth_min: 6
         depth_max: 12
         depth_step: 4
@@ -68,7 +69,7 @@ tune:
           - .03
           - .04
           - .05
-  best_params: src/evaluation/best_params.json
+  best_params: data/train_params/best_params.json
 
 train:
   use_best_params: False        # Update
