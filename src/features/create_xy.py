@@ -207,9 +207,11 @@ def load_label(idx, ttc, classes, local_dir):
         tree_cover = ttc[..., 0]
         labels = labels_raw.copy()
         noplant_mask = np.ma.masked_less(labels, 1)
-        notree_mask = np.ma.masked_greater(tree_cover, 0.20000000)
-        mask = np.logical_and(noplant_mask.mask, notree_mask.mask)
+        natree_mask = np.ma.masked_greater(tree_cover, 0.20000000)
+        mask = np.logical_and(noplant_mask.mask, natree_mask.mask)
         labels[mask] = 3
+        no_tree_mask = ttc[...,0] <= 0.1
+        labels[no_tree_mask] = 0
 
     else:
         labels = labels_raw.astype(np.float32)
