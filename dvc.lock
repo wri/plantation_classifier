@@ -9,8 +9,8 @@ stages:
       size: 3123
     - path: src/features/create_xy.py
       hash: md5
-      md5: 569a96713efea8056be4dd0d0920c6c1
-      size: 12708
+      md5: 975c0414d8aaee6bf70afe84fd61e6c6
+      size: 12782
     - path: src/stage_prep_features.py
       hash: md5
       md5: 306200dc3ff169636bad47afbea0639d
@@ -48,8 +48,8 @@ stages:
     outs:
     - path: data/train_params/modelData.pkl
       hash: md5
-      md5: ad076aa4e9f5696b743cf7d647019f24
-      size: 281838893
+      md5: 1bda1e66ef1aea0e0c040bdeeca9d3bf
+      size: 281838883
   load_data:
     cmd: python src/stage_load_data.py --params=params.yaml
     deps:
@@ -83,8 +83,8 @@ stages:
     deps:
     - path: data/train_params/modelData.pkl
       hash: md5
-      md5: ad076aa4e9f5696b743cf7d647019f24
-      size: 281838893
+      md5: 1bda1e66ef1aea0e0c040bdeeca9d3bf
+      size: 281838883
     - path: src/features/feature_selection.py
       hash: md5
       md5: d51fa7201f0fb27b59e81589754b413a
@@ -105,7 +105,7 @@ stages:
           val_split: 25
           modelData_path: data/train_params/modelData.pkl
         select:
-          select_features: false
+          select_features: true
           max_features: 40
           selected_features_path: data/train_params/selected_features.json
         train:
@@ -124,34 +124,29 @@ stages:
                 loss_function: MultiClass
                 random_state: 121
                 logging_level: Silent
-                depth: 10
-                iterations: 900
-                l2_leaf_reg: 11
-                min_data_in_leaf: 120
-                learning_rate: 0.05
     outs:
     - path: data/train_params/best_params.json
       hash: md5
-      md5: 3061d566971eb7238ae2f19393c574dd
-      size: 111
+      md5: 99914b932bd37a50b983c5e7c90ae93b
+      size: 2
     - path: data/train_params/selected_features.json
       hash: md5
-      md5: 387ee6b25408fc5835771bb534294520
+      md5: 9b12d2200a70b21b65f6210ea7865ad1
       size: 150
   train_model:
     cmd: python src/stage_train_model.py --params=params.yaml
     deps:
     - path: data/train_params/best_params.json
       hash: md5
-      md5: 3061d566971eb7238ae2f19393c574dd
-      size: 111
+      md5: 99914b932bd37a50b983c5e7c90ae93b
+      size: 2
     - path: data/train_params/modelData.pkl
       hash: md5
-      md5: ad076aa4e9f5696b743cf7d647019f24
-      size: 281838893
+      md5: 1bda1e66ef1aea0e0c040bdeeca9d3bf
+      size: 281838883
     - path: data/train_params/selected_features.json
       hash: md5
-      md5: 387ee6b25408fc5835771bb534294520
+      md5: 9b12d2200a70b21b65f6210ea7865ad1
       size: 150
     - path: src/model/train.py
       hash: md5
@@ -192,35 +187,30 @@ stages:
                 loss_function: MultiClass
                 random_state: 121
                 logging_level: Silent
-                depth: 10
-                iterations: 900
-                l2_leaf_reg: 11
-                min_data_in_leaf: 120
-                learning_rate: 0.05
     outs:
     - path: models/model.joblib
       hash: md5
-      md5: 1e9f39b51a479964d147e0fe414eb1f5
-      size: 36970926
+      md5: fae6c6ce16ca288d3667358199cbb3cc
+      size: 2639569
   evaluate_model:
     cmd: python src/stage_evaluate_model.py --params=params.yaml
     deps:
     - path: data/train_params/best_params.json
       hash: md5
-      md5: 3061d566971eb7238ae2f19393c574dd
-      size: 111
+      md5: 99914b932bd37a50b983c5e7c90ae93b
+      size: 2
     - path: data/train_params/modelData.pkl
       hash: md5
-      md5: ad076aa4e9f5696b743cf7d647019f24
-      size: 281838893
+      md5: 1bda1e66ef1aea0e0c040bdeeca9d3bf
+      size: 281838883
     - path: data/train_params/selected_features.json
       hash: md5
-      md5: 387ee6b25408fc5835771bb534294520
+      md5: 9b12d2200a70b21b65f6210ea7865ad1
       size: 150
     - path: models/model.joblib
       hash: md5
-      md5: 1e9f39b51a479964d147e0fe414eb1f5
-      size: 36970926
+      md5: fae6c6ce16ca288d3667358199cbb3cc
+      size: 2639569
     - path: src/evaluation/validation_visuals.py
       hash: md5
       md5: d44607261f09b8de101499bb3ec2e1f7
@@ -266,21 +256,16 @@ stages:
                 loss_function: MultiClass
                 random_state: 121
                 logging_level: Silent
-                depth: 10
-                iterations: 900
-                l2_leaf_reg: 11
-                min_data_in_leaf: 120
-                learning_rate: 0.05
     outs:
     - path: src/evaluation/confusion_matrix.png
       hash: md5
-      md5: 9be712be88521ffbc561fec7bf550c6d
-      size: 29628
+      md5: 42f9bed3108412e4ef7546a3575ff63f
+      size: 32438
     - path: src/evaluation/confusion_matrix_data.csv
       hash: md5
-      md5: ed3d780732222bc30a343da2c3502074
+      md5: 2a0d92a417dc6dee7448eb58a95fced4
       size: 148977
     - path: src/evaluation/metrics.json
       hash: md5
-      md5: 6b8923be070922eca6e29a29bb4e8e39
+      md5: 7fbf2eb19d560957171e9cdbf0b2c580
       size: 356
