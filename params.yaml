@@ -40,12 +40,12 @@ data_condition:
   modelData_path: data/train_params/modelData.pkl
 
 select:
-  select_features: True       # Update
+  select_features: False       # Update
   max_features: 40
   selected_features_path: data/train_params/selected_features.json
 
 tune:
-  tune_hyperparameters: False   # Update
+  tune_hyperparameters: True   # Update
   n_iter: 20 
   cv: 3
   plot: False
