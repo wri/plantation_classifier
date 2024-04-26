@@ -11,7 +11,7 @@ deploy:
   model_type: classifier
   cleanup: false
   overwrite: false
-  version: v23
+  version: v24
 
 data_load:
   download_data: false
@@ -40,12 +40,12 @@ data_condition:
   modelData_path: data/train_params/modelData.pkl
 
 select:
-  select_features: False       # Update
+  select_features: True       # Update
   max_features: 40
   selected_features_path: data/train_params/selected_features.json
 
 tune:
-  tune_hyperparameters: True   # Update
+  tune_hyperparameters: False   # Update
   n_iter: 20 
   cv: 3
   plot: False
