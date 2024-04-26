@@ -124,6 +124,11 @@ stages:
                 loss_function: MultiClass
                 random_state: 121
                 logging_level: Silent
+                depth: 10
+                iterations: 900
+                l2_leaf_reg: 11
+                min_data_in_leaf: 120
+                learning_rate: 0.05
     outs:
     - path: data/train_params/best_params.json
       hash: md5
@@ -187,11 +192,16 @@ stages:
                 loss_function: MultiClass
                 random_state: 121
                 logging_level: Silent
+                depth: 10
+                iterations: 900
+                l2_leaf_reg: 11
+                min_data_in_leaf: 120
+                learning_rate: 0.05
     outs:
     - path: models/model.joblib
       hash: md5
-      md5: 6120ee250a4e539e1cb023225458f9c4
-      size: 2640033
+      md5: 1e9f39b51a479964d147e0fe414eb1f5
+      size: 36970926
   evaluate_model:
     cmd: python src/stage_evaluate_model.py --params=params.yaml
     deps:
@@ -209,8 +219,8 @@ stages:
       size: 150
     - path: models/model.joblib
       hash: md5
-      md5: 6120ee250a4e539e1cb023225458f9c4
-      size: 2640033
+      md5: 1e9f39b51a479964d147e0fe414eb1f5
+      size: 36970926
     - path: src/evaluation/validation_visuals.py
       hash: md5
       md5: d44607261f09b8de101499bb3ec2e1f7
@@ -256,16 +266,21 @@ stages:
                 loss_function: MultiClass
                 random_state: 121
                 logging_level: Silent
+                depth: 10
+                iterations: 900
+                l2_leaf_reg: 11
+                min_data_in_leaf: 120
+                learning_rate: 0.05
     outs:
     - path: src/evaluation/confusion_matrix.png
       hash: md5
-      md5: 504578eb4af86ed1312f227fa39563ed
-      size: 30537
+      md5: 9be712be88521ffbc561fec7bf550c6d
+      size: 29628
     - path: src/evaluation/confusion_matrix_data.csv
       hash: md5
-      md5: 8680eb949879c81a746c6ec2b2d76dc0
+      md5: ed3d780732222bc30a343da2c3502074
       size: 148977
     - path: src/evaluation/metrics.json
       hash: md5
-      md5: 9309929097f9c7464fc172803ae27c58
+      md5: 6b8923be070922eca6e29a29bb4e8e39
       size: 356
