@@ -105,8 +105,8 @@ stages:
           val_split: 25
           modelData_path: data/train_params/modelData.pkl
         select:
-          select_features: true
-          max_features: 80
+          select_features: false
+          max_features: 40
           selected_features_path: data/train_params/selected_features.json
         train:
           use_best_params: false
@@ -124,12 +124,11 @@ stages:
                 loss_function: MultiClass
                 random_state: 121
                 logging_level: Silent
-                depth: 7
     outs:
     - path: data/train_params/best_params.json
       hash: md5
-      md5: 99914b932bd37a50b983c5e7c90ae93b
-      size: 2
+      md5: 3061d566971eb7238ae2f19393c574dd
+      size: 111
     - path: data/train_params/selected_features.json
       hash: md5
       md5: 77049d66e32b038778741c36344bf4cd
@@ -139,8 +138,8 @@ stages:
     deps:
     - path: data/train_params/best_params.json
       hash: md5
-      md5: 99914b932bd37a50b983c5e7c90ae93b
-      size: 2
+      md5: 3061d566971eb7238ae2f19393c574dd
+      size: 111
     - path: data/train_params/modelData.pkl
       hash: md5
       md5: ad076aa4e9f5696b743cf7d647019f24
@@ -188,19 +187,18 @@ stages:
                 loss_function: MultiClass
                 random_state: 121
                 logging_level: Silent
-                depth: 7
     outs:
     - path: models/model.joblib
       hash: md5
-      md5: 94064fae5c076c679ada5c8e417d2612
-      size: 5214321
+      md5: fca40bc142e957adb0235a94c4f1bb84
+      size: 2643737
   evaluate_model:
     cmd: python src/stage_evaluate_model.py --params=params.yaml
     deps:
     - path: data/train_params/best_params.json
       hash: md5
-      md5: 99914b932bd37a50b983c5e7c90ae93b
-      size: 2
+      md5: 3061d566971eb7238ae2f19393c574dd
+      size: 111
     - path: data/train_params/modelData.pkl
       hash: md5
       md5: ad076aa4e9f5696b743cf7d647019f24
@@ -211,8 +209,8 @@ stages:
       size: 310
     - path: models/model.joblib
       hash: md5
-      md5: 94064fae5c076c679ada5c8e417d2612
-      size: 5214321
+      md5: fca40bc142e957adb0235a94c4f1bb84
+      size: 2643737
     - path: src/evaluation/validation_visuals.py
       hash: md5
       md5: d44607261f09b8de101499bb3ec2e1f7
@@ -258,17 +256,16 @@ stages:
                 loss_function: MultiClass
                 random_state: 121
                 logging_level: Silent
-                depth: 7
     outs:
     - path: src/evaluation/confusion_matrix.png
       hash: md5
-      md5: 575ddefeab89f01365bb464dcf7c75c0
-      size: 31020
+      md5: 2f5105a6167bb8d07b03bab13b0c179a
+      size: 30386
     - path: src/evaluation/confusion_matrix_data.csv
       hash: md5
-      md5: 304b4e13349d13b970ff44ff3946d279
+      md5: 29c2be2f0b83b6a51651e4169bd1f2a1
       size: 148977
     - path: src/evaluation/metrics.json
       hash: md5
-      md5: 6f39ba34707ccbc6a97eb64200721944
+      md5: 6dc8e50a26088a24d1a91762736676a5
       size: 516
