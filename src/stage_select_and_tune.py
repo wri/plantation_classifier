@@ -35,16 +35,6 @@ def perform_selection_and_tuning(param_path: Text) -> None:
     
     if not perform_fs and not perform_tuning:
         logger.info("Skipping feature selection and tuning.")
-        logger.info("Writing all features and no params to file..")
-        top_feats = range(0,95)
-        best_params = {}
-        with open(params["select"]["selected_features_path"], "w") as fp:
-            json.dump(obj=top_feats, fp=fp)
-        with open(params["tune"]["best_params"], "w") as fp:
-            json.dump(obj=best_params, fp=fp)
-        logger.info(f"Best params: {best_params}")
-        logger.info(f"Selected feats: {top_feats}")
-
     else:
         if perform_fs: 
             # define parameters for feature selection
@@ -65,6 +55,9 @@ def perform_selection_and_tuning(param_path: Text) -> None:
             logger.info("Writing selected features to file..")
             with open(params["select"]["selected_features_path"], "w") as fp:
                 json.dump(obj=top_feats, fp=fp)
+            best_params = {}
+            with open(params["tune"]["best_params"], "w") as fp:
+                json.dump(obj=best_params, fp=fp)
                
         if perform_tuning:
             # use model data to create feature selected and reshaped X_train
