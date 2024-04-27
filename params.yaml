@@ -45,7 +45,7 @@ select:
   selected_features_path: data/train_params/selected_features.json
 
 tune:
-  tune_hyperparameters: True   # Update
+  tune_hyperparameters: False   # Update
   n_iter: 20 
   cv: 3
   plot: False
@@ -86,11 +86,11 @@ train:
         loss_function: MultiClass
         random_state: 121
         logging_level: Silent 
-        # depth: 10
-        # iterations: 900
-        # l2_leaf_reg: 11
-        # min_data_in_leaf: 120
-        # learning_rate: 0.05   
+        depth: 10
+        iterations: 900
+        l2_leaf_reg: 11
+        min_data_in_leaf: 120
+        learning_rate: 0.05   
         # early_stopping_rounds: 10
 
 evaluate:
