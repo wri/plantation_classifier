@@ -35,6 +35,7 @@ def download_shape(data_dir: str,
     if os.path.exists(f"{data_dir}shapefiles/{location[1]}.shp"):
         print(f'Shapefile for {location[1]} exists locally.')
 
+    # TODO: this should check if the file is present on s3 first
     else:
         for obj in bucket.objects.filter(Prefix=s3_dir):
             target = os.path.join(dest_dir, os.path.relpath(obj.key, s3_dir))
@@ -84,11 +85,6 @@ def mosaic_tif(location: list, version: str, tiles: list):
 
     mosaic, out_transform = merge(reader_mode)
 
-    # delete the old list
-    del tiles
-    del tifs_to_mosaic
-    del reader_mode
-
     date = datetime.today().strftime('%Y-%m-%d')
     
     # outpath will be the new filename 
@@ -104,6 +100,12 @@ def mosaic_tif(location: list, version: str, tiles: list):
 
     with rs.open(outpath, "w", **out_meta) as dest:
         dest.write(mosaic)
+
+    # Ensure to close all files
+    del tiles
+    del tifs_to_mosaic
+    for src in reader_mode:
+        src.close()
 
     return None
 
