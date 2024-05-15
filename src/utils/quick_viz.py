@@ -229,6 +229,7 @@ def heat_compare_arrays(arr_a, arr_b, vmin, vmax, title_a, title_b):
     '''
     Type: Seaborn heatmap
     Purpose: Compare and visualize two files (could be s2 data, ARD, feats, etc.)
+    Requires 2D input arrays with shape (618, 614, 1)
     
     '''
 
@@ -252,6 +253,33 @@ def heat_compare_arrays(arr_a, arr_b, vmin, vmax, title_a, title_b):
 
     return None
 
+def heat_combine_neighbors(arr_a, arr_b, index, title):
+    '''
+    Type: Seaborn heatmap
+    Purpose: Combines neighboring tiles into a single array and plots a 
+    heatmap in order to analyze artifacts and the effects of resegmentation.
+    arr_a is left
+    arr_b is right
+    
+    '''
+    slice_a = arr_a[..., index]
+    slice_b = arr_b[..., index]
+    assert slice_a.shape[0] == slice_b.shape[0], "Slices must have the same height to be concatenated."
+
+    comb_arr = np.concatenate((slice_a, slice_b), axis=1)
+
+    plt.figure(figsize=(9,3))
+
+    sns.heatmap(comb_arr, 
+                xticklabels=False, 
+                yticklabels=False,
+                cbar_kws = {'ticks' : [min(arr_a.min(), arr_b.min()), max(arr_a.max(), arr_b.max())]},
+                vmin=min(slice_a.min(), slice_b.min()),
+                vmax=max(slice_a.max(), slice_b.max()),
+                ).set_title(str(title))
+
+    plt.close()
+    return None
 
 
 def cm_roc_pr(model, y_test, pred, probs_pos):
