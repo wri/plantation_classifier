@@ -21,7 +21,9 @@ def download_shape(data_dir: str,
                    aws_secret_key: str):
     '''
     Checks to see if the location shapefile exists locally,
-    if not downloads the file from s3
+    if not checks s3. If available on s3, downloads 
+    shapefile, otherwise returns false - shapefile for this
+    location does not exist.
     '''
 
     s3_dir = f'2020/shapefiles/{location[1]}/'
@@ -31,28 +33,33 @@ def download_shape(data_dir: str,
                 aws_secret_access_key=aws_secret_key)
     bucket = s3.Bucket(bucket)
     
-    # skip if shapefile present
+    # Check if shapefile exists locally
     if os.path.exists(f"{data_dir}shapefiles/{location[1]}.shp"):
         print(f'Shapefile for {location[1]} exists locally.')
+        return False
 
-    # TODO: this should check if the file is present on s3 first
-    else:
-        for obj in bucket.objects.filter(Prefix=s3_dir):
-            target = os.path.join(dest_dir, os.path.relpath(obj.key, s3_dir))
-            if not os.path.exists(os.path.dirname(target)):
-                os.makedirs(os.path.dirname(target))
-            if obj.key[-1] == '/':
-                continue
-            try:
-                bucket.download_file(obj.key, target)
+    # Check if shapefile exists on s3
+    try:
+        s3.Object(bucket.name, f"{s3_dir}{location[1]}.shp").load()
+    except botocore.exceptions.ClientError as e:
+        if e.response['Error']['Code'] == "404":
+            print("Shapefile is not on s3.")
+            return False
+        else:
+            raise
 
-            # if the tiles do not exist on s3, catch the error and return False
-            except botocore.exceptions.ClientError as e:
-                if e.response['Error']['Code'] == "404":
-                    print("Shapefile is not on s3.")
-                    return False
-                
-        print(f"Shapefile downloaded for {location[1]}.")
+    # Download shapefile from s3
+    for obj in bucket.objects.filter(Prefix=s3_dir):
+        target = os.path.join(dest_dir, os.path.relpath(obj.key, s3_dir))
+        try:
+            bucket.download_file(obj.key, target)
+            print(f"Shapefile downloaded for {location[1]}.")
+        except botocore.exceptions.ClientError as e:
+            if e.response['Error']['Code'] == "404":
+                print("Shapefile is not on s3.")
+                return False
+            else:
+                raise
 
     return True
 
@@ -150,7 +157,7 @@ def clip_it(aak: str,
         return clipped
     
     else:
-        print("Shapefile does not exist - skipping clip.")
+        print("No shapefile for this location - skipping clip.")
         return merged
 
 
