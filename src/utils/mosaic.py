@@ -33,11 +33,6 @@ def download_shape(data_dir: str,
                 aws_secret_access_key=aws_secret_key)
     bucket = s3.Bucket(bucket)
     
-    # Check if shapefile exists locally
-    if os.path.exists(f"{data_dir}shapefiles/{location[1]}.shp"):
-        print(f'Shapefile for {location[1]} exists locally.')
-        return False
-
     # Check if shapefile exists on s3
     try:
         s3.Object(bucket.name, f"{s3_dir}{location[1]}.shp").load()
@@ -123,19 +118,22 @@ def clip_it(aak: str,
             dir:str,
             bucket: str):
     ''''
-    imports a mosaic tif and clips it to the extent of a 
-    given shapefile
+    Checks if the location shapefile exists locally, if not
+    downloads the shapefile from s3. imports a mosaic tif and 
+    clips it to the extent of the given shapefile
     '''
-    successful = download_shape(dir, location, bucket, aak, ask)
-    
-    mosaic_dir = f'tmp/{location[0]}/preds/mosaic/'
-    date = datetime.today().strftime('%Y-%m-%d')
-    merged = f'{mosaic_dir}{location[1]}_{version}_{date}_mrgd.tif'
-    clipped = f'{mosaic_dir}{location[1]}_{version}_{date}.tif'
+    if os.path.exists(f"{dir}shapefiles/{location[1]}.shp"):
+        print(f'Shapefile for {location[1]} exists locally.')
+        successful = True
+    else:
+        successful = download_shape(dir, location, bucket, aak, ask)
     
     if successful:
-        shapefile = f"data/shapefiles/{location[1]}.shp"
-        shapefile = gpd.read_file(shapefile)
+        mosaic_dir = f'tmp/{location[0]}/preds/mosaic/'
+        date = datetime.today().strftime('%Y-%m-%d')
+        merged = f'{mosaic_dir}{location[1]}_{version}_{date}_mrgd.tif'
+        clipped = f'{mosaic_dir}{location[1]}_{version}_{date}.tif'
+        shapefile = gpd.read_file(f"data/shapefiles/{location[1]}.shp")
         with rs.open(merged) as src:
             shapefile = shapefile.to_crs(src.crs)
             out_image, out_transform = mask(src, 
