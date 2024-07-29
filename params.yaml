@@ -11,7 +11,7 @@ deploy:
   model_type: classifier
   cleanup: false
   overwrite: false
-  version: v25
+  version: v26
 
 data_load:
   download_data: false
@@ -19,7 +19,7 @@ data_load:
   folder_prefix: plantation-mapping/data/train/
   local_prefix: data/
   ttc_feats_dir: train-features-ard/
-  create_labels: false
+  create_labels: true
   ceo_survey:
     - v08
     - v14
