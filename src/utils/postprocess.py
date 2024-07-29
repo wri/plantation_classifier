@@ -87,10 +87,9 @@ def clean_tile(arr: np.array, feature_select: list, ttc: np.array):
     # # and keep every True as the original label
     # arr[arr == 1] *= postprocess_mono[arr == 1]
     # arr[arr == 2] *= postprocess_af[arr == 2]
-
-    # # clean up pixels in the non-tree class
-    output = cleanup_noisy_zeros(arr, ttc[...,0])
-  
     # del postprocess_af, postprocess_mono
 
+    # clean up pixels in the non-tree class
+    output = cleanup_noisy_zeros(arr, ttc[...,0])
+  
     return output

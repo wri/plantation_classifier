@@ -278,7 +278,7 @@ def heat_combine_neighbors(arr_a, arr_b, index, title):
                 vmax=max(slice_a.max(), slice_b.max()),
                 ).set_title(str(title))
 
-    plt.close()
+    #plt.close()
     return None
 
 
