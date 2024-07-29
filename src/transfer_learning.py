@@ -331,7 +331,7 @@ def predict_classification(arr: np.array, pretrained_model: str, sample_dims: tu
 
     return preds
 
-def predict_regression(arr: np.array, pretrained_model: str, sample_dims: tuple):
+def predict_regression(arr: np.array, pretrained_model: str, sample_dims: tuple, classes: int):
     '''
     Import pretrained model and run predictions on arr.
     If using a regression model, multiply results by 100
@@ -344,9 +344,9 @@ def predict_regression(arr: np.array, pretrained_model: str, sample_dims: tuple)
     #preds = pretrained_model.predict(arr, prediction_type='Probability') 
     preds = pretrained_model.predict_proba(arr)
     preds = preds * 100
-    print(f'original shape: {preds.shape}')
-    preds = preds.reshape((sample_dims[0], sample_dims[1], 4)) # update this to pull from params
-    print(f'reshaped: {preds.shape}')
+    #print(f'original shape: {preds.shape}')
+    preds = preds.reshape((sample_dims[0], sample_dims[1], classes)) 
+    #print(f'reshaped: {preds.shape}')
 
     return preds
 
@@ -393,11 +393,14 @@ def write_tif(arr: np.array, bbx: list, tile_idx: tuple, country: str, model_typ
     else:
         #arr = reshape_as_raster(arr)
         # Reorder the bands so the zero class is last
-        print(arr.shape)
+        # (618, 610, 4)
+        # (4, 618, 610)
+        # (4, 618, 610)
+        #print(arr.shape)
         arr = np.moveaxis(arr, -1, 0)  # Move the last dimension to the first
-        print(arr.shape)
+        #print(arr.shape)
         arr = np.concatenate((arr[1:], arr[0:1]), axis=0)  # Move the first band to the last
-        print(arr.shape)
+        #print(arr[0])
         transform = rs.transform.from_bounds(west = west, south = south,
                                             east = east, north = north,
                                             width = arr.shape[2], 
@@ -412,8 +415,14 @@ def write_tif(arr: np.array, bbx: list, tile_idx: tuple, country: str, model_typ
                             compress = 'lzw',
                             crs = '+proj=longlat +datum=WGS84 +no_defs',
                             transform=transform,
+                            nodata=255
                             )
-        new_dataset.write(arr) # adding count here throws error
+        # new_dataset.write(arr) # adding count here throws error
+        
+        # Write the array to the dataset
+        for i in range(arr.shape[0]):
+            new_dataset.write(arr[i], i + 1)
+        
         new_dataset.close()
 
     del arr, new_dataset
@@ -435,7 +444,14 @@ def remove_folder(tile_idx: tuple, location: str):
         
     return None
 
-def execute_per_tile(database, tile_idx: tuple, location: list, model, verbose: bool, feature_select: list, model_type: str, overwrite: bool):
+def execute_per_tile(database, 
+                     tile_idx: tuple, 
+                     location: list, 
+                     model, verbose: bool, 
+                     feature_select: list, 
+                     model_type: str, 
+                     classes: int,
+                     overwrite: bool):
 
     ''' 
     Execute all steps in the pipeline for the given tile.
@@ -462,7 +478,7 @@ def execute_per_tile(database, tile_idx: tuple, location: list, model, verbose: 
             preds_final = postprocess.clean_tile(preds, feature_select, ttc)
             validate.model_outputs(preds, model_type)
         else:
-            preds_final = predict_regression(sample_ss, model, sample_dims)
+            preds_final = predict_regression(sample_ss, model, sample_dims, classes)
 
         write_tif(preds_final, bbx, tile_idx, location[0], model_type, 'preds')
         if params['deploy']['cleanup']:
@@ -531,6 +547,7 @@ if __name__ == '__main__':
                          params['deploy']['verbose'], 
                          selected_features, 
                          model_type,
+                         params['data_condition']['classes'],
                          params['deploy']['overwrite'])
 
         if counter % 2 == 0:
