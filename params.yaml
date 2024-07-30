@@ -19,7 +19,7 @@ data_load:
   folder_prefix: plantation-mapping/data/train/
   local_prefix: data/
   ttc_feats_dir: train-features-ard/
-  create_labels: true
+  create_labels: false
   ceo_survey:
     - v08
     - v14
@@ -40,7 +40,7 @@ data_condition:
   modelData_path: data/train_params/modelData.pkl
 
 select:
-  select_features: False       # Update
+  select_features: True       # Update
   max_features: 40
   selected_features_path: data/train_params/selected_features.json
 
