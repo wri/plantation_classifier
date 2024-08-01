@@ -58,7 +58,10 @@ def cleanup_noisy_zeros(preds, ttc_treecover):
     return preds
 
 
-def clean_tile(arr: np.array, feature_select: list, ttc: np.array):
+def clean_tile(arr: np.array, 
+               feature_select: list, 
+               ttc: np.array,
+               remove_noise: bool):
 
     '''
     Applies the no data and no tree flag if TTC tree cover predictions are used
@@ -80,14 +83,14 @@ def clean_tile(arr: np.array, feature_select: list, ttc: np.array):
         arr[no_data_flag] = 255.
         arr[no_tree_flag] = 0.
 
-    # postprocess_mono = remove_small_patches(arr == 1, thresh = 20)
-    # postprocess_af = remove_small_patches(arr == 2, thresh = 15)
-    
-    # # multiplying by boolean will turn every False into 0 
-    # # and keep every True as the original label
-    # arr[arr == 1] *= postprocess_mono[arr == 1]
-    # arr[arr == 2] *= postprocess_af[arr == 2]
-    # del postprocess_af, postprocess_mono
+    if remove_noise:
+        postprocess_mono = remove_small_patches(arr == 1, thresh = 15)
+        #postprocess_af = remove_small_patches(arr == 2, thresh = 15)
+        
+        # multiplying by boolean will turn every False into 0 
+        # and keep every True as the original label
+        arr[arr == 1] *= postprocess_mono[arr == 1]
+        #arr[arr == 2] *= postprocess_af[arr == 2]
 
     # clean up pixels in the non-tree class
     output = cleanup_noisy_zeros(arr, ttc[...,0])
