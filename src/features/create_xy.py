@@ -1,6 +1,7 @@
 #! /usr/bin/env python3
 import hickle as hkl
 import yaml
+import re
 import pandas as pd
 import numpy as np
 import os
@@ -10,6 +11,47 @@ import features.slow_glcm as slow_txt
 from tqdm import tqdm
 from skimage.util import img_as_ubyte
 import json
+
+def load_ceo_csv(v_train_data, local_dir):
+    '''
+    Cleans up the CEO survey in order to create label
+    arrays by creating a plantation encoding and a 
+    plot filename based on the training data batch
+    '''
+
+    csv = f"{local_dir}ceo-plantations-train-{v_train_data}.csv"
+    df = pd.read_csv(csv, encoding = "ISO-8859-1")
+
+    df.columns = [re.sub(r'\W+', '', x) for x in df.columns]
+    df.rename(columns={'ïplotid':'plotid'}, inplace=True)
+    df.columns = [x.upper() for x in df.columns]
+    df.columns = ['PLOT_ID' if x == 'PLOTID' else x for x in df.columns]
+    df.columns = ['SAMPLE_ID' if x == 'SAMPLEID' else x for x in df.columns]
+    df = df[['PLOT_ID', 
+            'SAMPLE_ID', 
+            'LON', 'LAT',
+            'SYSTEM']]
+    df['PLANTATION'] = df.SYSTEM.map({'Not plantation': 0, 
+                                        'Monoculture': 1,
+                                        'Agroforestry': 2,
+                                        'Unknown': 255})
+    
+    # create a col called plot_fname to hold new plot ids
+    df['PLOT_FNAME'] = '0'
+
+    if len(df) > 0:
+        plot_ids = []
+        counter = 0
+        for index, row in df.iterrows():
+            if row['PLOT_ID'] not in plot_ids:
+                plot_ids.append(row['PLOT_ID'])
+                counter += 1
+            # create plot fnames based on training batch (v21 will be 21)
+            df['PLOT_FNAME'][index] = f"{str(v_train_data[1:]).zfill(2)}{str(counter).zfill(3)}"
+    print("Writing clean csv...")
+    df.to_csv(csv)
+    return df
+
 
 def reconstruct_images(plot, df):
     '''
@@ -37,18 +79,17 @@ def reconstruct_images(plot, df):
 def create_label_arrays(v_train_data, local_dir):
     '''
     Set up functionality to take in specified
-    versions of training data rather than the full 
-    batch
+    versions of training data rather than the full batch
     '''
     directory = f"{local_dir}train-labels/"
     
     for i in v_train_data:
-        print(f"Creating label arrays for v{i}")
+        print(f"Creating label arrays for {i}")
         df = pd.read_csv(f"{local_dir}ceo-plantations-train-{i}.csv")
         plot_ids = sorted(df['PLOT_ID'].unique())
         plot_fname = sorted(df['PLOT_FNAME'].unique())        
         for i, x in zip(plot_ids, plot_fname):
-            print(f"plot_ids:{i} plot_fname: {x}")
+            #print(f"plot_ids:{i} plot_fname: {x}")
             plot = reconstruct_images(i, df)
             plot = np.array(plot)
             np.save(f"{directory}{str(x).zfill(5)}.npy", plot)
@@ -207,9 +248,11 @@ def load_label(idx, ttc, classes, local_dir):
         tree_cover = ttc[..., 0]
         labels = labels_raw.copy()
         noplant_mask = np.ma.masked_less(labels, 1)
-        notree_mask = np.ma.masked_greater(tree_cover, 0.20000000)
-        mask = np.logical_and(noplant_mask.mask, notree_mask.mask)
+        natree_mask = np.ma.masked_greater(tree_cover, 0.20000000)
+        mask = np.logical_and(noplant_mask.mask, natree_mask.mask)
         labels[mask] = 3
+        no_tree_mask = ttc[...,0] <= 0.1
+        labels[no_tree_mask] = 0
 
     else:
         labels = labels_raw.astype(np.float32)
@@ -217,10 +260,10 @@ def load_label(idx, ttc, classes, local_dir):
     return labels
 
 
-def gather_plot_ids(v_train_data, local_dir, logger):
+def gather_plot_ids(v_train_data, local_dir, ttc_feats_dir, logger):
     """
-    Creates a list of plot ids to process from collect earth surveys
-    with multi-class labels (0, 1, 2, 255). Drops all plots with
+    Cleans the downloaded CEO survey to meet requirements.
+    Creates a list of plot ids to process. Drops all plots with
     "unknown" labels and plots w/o s2 imagery. Returns list of plot_ids.
     """
 
@@ -229,8 +272,7 @@ def gather_plot_ids(v_train_data, local_dir, logger):
     no_labels = []
 
     for i in v_train_data:
-        df = pd.read_csv(f"{local_dir}ceo-plantations-train-{i}.csv")
-
+        df = load_ceo_csv(i, local_dir)
         # assert unknown labels are always a full 14x14 (196 points) of unknowns
         unknowns = df[df.PLANTATION == 255]
         no_labels.extend(sorted(list(set(unknowns.PLOT_FNAME))))
@@ -244,20 +286,10 @@ def gather_plot_ids(v_train_data, local_dir, logger):
         plot_ids += labeled.PLOT_FNAME.drop_duplicates().tolist()
 
     # add leading 0 to plot_ids that do not have 5 digits
-    plot_ids = [
-        str(item).zfill(5) if len(str(item)) < 5 else str(item) for item in plot_ids
-    ]
-    final_ard = [
-        plot for plot in plot_ids if os.path.exists(f"{local_dir}train-ard/{plot}.hkl")
-    ]
-    no_ard = [
-        plot
-        for plot in plot_ids
-        if not os.path.exists(f"{local_dir}train-ard/{plot}.hkl")
-    ]
-    final_raw = [
-        plot for plot in no_ard if os.path.exists(f"{local_dir}train-s2/{plot}.hkl")
-    ]
+    plot_ids = [str(item).zfill(5) if len(str(item)) < 5 else str(item) for item in plot_ids]
+    final_ard = [plot for plot in plot_ids if os.path.exists(f"{local_dir}{ttc_feats_dir}{plot}.hkl")]
+    no_ard = [plot for plot in plot_ids if not os.path.exists(f"{local_dir}{ttc_feats_dir}{plot}.hkl")]
+    final_raw = [plot for plot in no_ard if os.path.exists(f"{local_dir}train-s2/{plot}.hkl")]
 
     logger.info(f'{len(no_labels)} plots labeled "unknown" were dropped.')
     logger.info(f"{len(no_ard)} plots did not have ARD.")
@@ -302,6 +334,7 @@ def build_training_sample(train_batch, classes, params_path, logger):
     Gathers training data plots from collect earth surveys (v1, v2, v3, etc)
     and loads data to create a sample for each plot. Removes ids where there is no
     cloud-free imagery or "unknown" labels.
+    Creates new label files according to params.
 
     Combines samples as X and loads labels as y for input to the model.
     """
@@ -310,7 +343,7 @@ def build_training_sample(train_batch, classes, params_path, logger):
 
     train_data_dir = params["data_load"]["local_prefix"]
     ttc_feats_dir = params["data_load"]["ttc_feats_dir"]
-    plot_ids = gather_plot_ids(train_batch, train_data_dir, logger)
+    plot_ids = gather_plot_ids(train_batch, train_data_dir, ttc_feats_dir, logger)
     logger.info(f"{len(plot_ids)} plots will be used in training.")
     if params['data_load']['create_labels']:
         create_label_arrays(train_batch, train_data_dir)

@@ -21,7 +21,9 @@ def download_shape(data_dir: str,
                    aws_secret_key: str):
     '''
     Checks to see if the location shapefile exists locally,
-    if not downloads the file from s3
+    if not checks s3. If available on s3, downloads 
+    shapefile, otherwise returns false - shapefile for this
+    location does not exist.
     '''
 
     s3_dir = f'2020/shapefiles/{location[1]}/'
@@ -31,27 +33,28 @@ def download_shape(data_dir: str,
                 aws_secret_access_key=aws_secret_key)
     bucket = s3.Bucket(bucket)
     
-    # skip if shapefile present
-    if os.path.exists(f"{data_dir}shapefiles/{location[1]}.shp"):
-        print(f'Shapefile for {location[1]} exists locally.')
+    # Check if shapefile exists on s3
+    try:
+        s3.Object(bucket.name, f"{s3_dir}{location[1]}.shp").load()
+    except botocore.exceptions.ClientError as e:
+        if e.response['Error']['Code'] == "404":
+            print("Shapefile is not on s3.")
+            return False
+        else:
+            raise
 
-    else:
-        for obj in bucket.objects.filter(Prefix=s3_dir):
-            target = os.path.join(dest_dir, os.path.relpath(obj.key, s3_dir))
-            if not os.path.exists(os.path.dirname(target)):
-                os.makedirs(os.path.dirname(target))
-            if obj.key[-1] == '/':
-                continue
-            try:
-                bucket.download_file(obj.key, target)
-
-            # if the tiles do not exist on s3, catch the error and return False
-            except botocore.exceptions.ClientError as e:
-                if e.response['Error']['Code'] == "404":
-                    print("Shapefile is not on s3.")
-                    return False
-                
-        print(f"Shapefile downloaded for {location[1]}.")
+    # Download shapefile from s3
+    for obj in bucket.objects.filter(Prefix=s3_dir):
+        target = os.path.join(dest_dir, os.path.relpath(obj.key, s3_dir))
+        try:
+            bucket.download_file(obj.key, target)
+            print(f"Shapefile downloaded for {location[1]}.")
+        except botocore.exceptions.ClientError as e:
+            if e.response['Error']['Code'] == "404":
+                print("Shapefile is not on s3.")
+                return False
+            else:
+                raise
 
     return True
 
@@ -84,11 +87,6 @@ def mosaic_tif(location: list, version: str, tiles: list):
 
     mosaic, out_transform = merge(reader_mode)
 
-    # delete the old list
-    del tiles
-    del tifs_to_mosaic
-    del reader_mode
-
     date = datetime.today().strftime('%Y-%m-%d')
     
     # outpath will be the new filename 
@@ -105,6 +103,12 @@ def mosaic_tif(location: list, version: str, tiles: list):
     with rs.open(outpath, "w", **out_meta) as dest:
         dest.write(mosaic)
 
+    # Ensure to close all files
+    del tiles
+    del tifs_to_mosaic
+    for src in reader_mode:
+        src.close()
+
     return None
 
 def clip_it(aak: str, 
@@ -114,19 +118,22 @@ def clip_it(aak: str,
             dir:str,
             bucket: str):
     ''''
-    imports a mosaic tif and clips it to the extent of a 
-    given shapefile
+    Checks if the location shapefile exists locally, if not
+    downloads the shapefile from s3. imports a mosaic tif and 
+    clips it to the extent of the given shapefile
     '''
-    successful = download_shape(dir, location, bucket, aak, ask)
-    
-    mosaic_dir = f'tmp/{location[0]}/preds/mosaic/'
-    date = datetime.today().strftime('%Y-%m-%d')
-    merged = f'{mosaic_dir}{location[1]}_{version}_{date}_mrgd.tif'
-    clipped = f'{mosaic_dir}{location[1]}_{version}_{date}.tif'
+    if os.path.exists(f"{dir}shapefiles/{location[1]}.shp"):
+        print(f'Shapefile for {location[1]} exists locally.')
+        successful = True
+    else:
+        successful = download_shape(dir, location, bucket, aak, ask)
     
     if successful:
-        shapefile = f"data/shapefiles/{location[1]}.shp"
-        shapefile = gpd.read_file(shapefile)
+        mosaic_dir = f'tmp/{location[0]}/preds/mosaic/'
+        date = datetime.today().strftime('%Y-%m-%d')
+        merged = f'{mosaic_dir}{location[1]}_{version}_{date}_mrgd.tif'
+        clipped = f'{mosaic_dir}{location[1]}_{version}_{date}.tif'
+        shapefile = gpd.read_file(f"data/shapefiles/{location[1]}.shp")
         with rs.open(merged) as src:
             shapefile = shapefile.to_crs(src.crs)
             out_image, out_transform = mask(src, 
@@ -148,7 +155,7 @@ def clip_it(aak: str,
         return clipped
     
     else:
-        print("Shapefile does not exist - skipping clip.")
+        print("No shapefile for this location - skipping clip.")
         return merged
 
 

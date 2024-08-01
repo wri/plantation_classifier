@@ -9,9 +9,10 @@ deploy:
   bucket: tof-output
   model_path: models/model.joblib
   model_type: classifier
+  remove_noise: true
   cleanup: false
   overwrite: false
-  version: no_pp
+  version: v26_2
 
 data_load:
   download_data: false
@@ -24,11 +25,11 @@ data_load:
     - v08
     - v14
     - v15
-    - v18
     - v19
     - v20
     - v21
     - v22
+
 data_condition:
   total_feature_count: 94
   classes: 4
@@ -37,16 +38,17 @@ data_condition:
   test_split: 20 # previously used .33 test
   train_split: 80
   val_split: 25
-  modelData_path: data/train/modelData.pkl
+  modelData_path: data/train_params/modelData.pkl
 
 select:
   select_features: False       # Update
   max_features: 40
-  selected_features_path: data/train/selected_features.json
+  selected_features_path: data/train_params/selected_features.json
 
 tune:
-  tune_hyperparameters: False   # Update
+  tune_hyperparameters: True   # Update
   n_iter: 20 
+  cv: 3
   plot: False
   verbose: False
   estimators:
@@ -54,7 +56,7 @@ tune:
       param_grid:
         iter_min: 500
         iter_max: 1200
-        iter_step: 10
+        iter_step: 200
         depth_min: 6
         depth_max: 12
         depth_step: 4
@@ -68,7 +70,7 @@ tune:
           - .03
           - .04
           - .05
-  best_params: src/evaluation/best_params.json
+  best_params: data/train_params/best_params.json
 
 train:
   use_best_params: False        # Update
@@ -84,12 +86,12 @@ train:
       param_grid:
         loss_function: MultiClass
         random_state: 121
-        logging_level: Silent
-        depth: 7
-        # iterations: 1000
-        # l2_leaf_reg: 11
-        # min_data_in_leaf: 100
-        # learning_rate: 0.04   
+        logging_level: Silent 
+        depth: 10
+        iterations: 900
+        l2_leaf_reg: 11
+        min_data_in_leaf: 120
+        learning_rate: 0.05   
         # early_stopping_rounds: 10
 
 evaluate:
@@ -98,3 +100,5 @@ evaluate:
   cm_data: src/evaluation/confusion_matrix_data
   train_progress: src/evaluation/train_progress
   tile_id_loc: data
+
+

@@ -49,10 +49,9 @@ def featurize(param_path: Text) -> None:
     logger.info("X arrays scaled for feature selection")
 
     # save DataModel object
-    logger.info(f"Model object generated")
     with open(params["data_condition"]["modelData_path"], "wb") as fp:
         pickle.dump(model_data, fp)
-    logger.info("Model object exported")
+    logger.info("Model object saved")
 
 
 if __name__ == "__main__":

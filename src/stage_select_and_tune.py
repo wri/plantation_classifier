@@ -16,7 +16,8 @@ def perform_selection_and_tuning(param_path: Text) -> None:
     from the params file. If true, perfoms feature selection to identify
     and save the top [max_features] features.
     Performs optional random seach to identify and save the best parameters.
-    If both options are set to false, saves empty json files.
+    If both options are set to false, saves empty json file for best params
+    and a full list of features as top feats.
     '''
     with open(param_path) as file:
         params = yaml.safe_load(file)
@@ -24,10 +25,10 @@ def perform_selection_and_tuning(param_path: Text) -> None:
                         log_level=params["base"]["log_level"])
     with open(params["data_condition"]["modelData_path"], "rb") as fp:
         model_data = pickle.load(fp)
-    with open(params["tune"]["best_params"], "r") as fp:
-        best_params = json.load(fp)
     with open(params["select"]["selected_features_path"], "r") as fp:
         top_feats = json.load(fp)
+    with open(params["tune"]["best_params"], "r") as fp:
+        best_params = json.load(fp)
         
     perform_fs = params["select"]["select_features"]
     perform_tuning = params["tune"]["tune_hyperparameters"]
@@ -51,6 +52,12 @@ def perform_selection_and_tuning(param_path: Text) -> None:
                                     logger,
                                     max_features)
             logger.debug(f"Top features identified: {top_feats}")
+            logger.info("Writing selected features to file..")
+            with open(params["select"]["selected_features_path"], "w") as fp:
+                json.dump(obj=top_feats, fp=fp)
+            best_params = {}
+            with open(params["tune"]["best_params"], "w") as fp:
+                json.dump(obj=best_params, fp=fp)
                
         if perform_tuning:
             # use model data to create feature selected and reshaped X_train
@@ -64,19 +71,12 @@ def perform_selection_and_tuning(param_path: Text) -> None:
                 params["train"]["estimator_name"],
                 params["train"]["tuning_metric"],
                 param_path,
+                logger,
             )
             logger.debug(f"Returned params: {best_params}")
-    
-    # if no feature selection or tuning performed, this just
-    # opens what's on file and rewrites the same content
-    logger.info("Writing selected features and best params to file..")
-    logger.info(f"Best params: {best_params}")
-    logger.info(f"Selected feats: {top_feats}")
-    with open(params["select"]["selected_features_path"], "w") as fp:
-        json.dump(obj=top_feats, fp=fp)
-    with open(params["tune"]["best_params"], "w") as fp:
-        json.dump(obj=best_params, fp=fp)
-
+            logger.info("Writing best params to file..")
+            with open(params["tune"]["best_params"], "w") as fp:
+                json.dump(obj=best_params, fp=fp)
 
 if __name__ == "__main__":
     args_parser = argparse.ArgumentParser()

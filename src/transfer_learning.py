@@ -194,7 +194,7 @@ def process_feats_slow(tile_idx: tuple, country: str, feature_select:list) -> np
     tile_str = f'{str(x)}X{str(y)}Y'
     feats_raw = hkl.load(f'{folder}{tile_str}_feats.hkl').astype(np.float32)
     txt = np.load(f'{folder}{tile_str}_txt.npy')
-
+    
     # prepare outputs 
     n_feats = 65 + 16
     output = np.zeros((txt.shape[0], txt.shape[1], n_feats), dtype=np.float32)
@@ -331,27 +331,26 @@ def predict_classification(arr: np.array, pretrained_model: str, sample_dims: tu
 
     return preds
 
-def predict_regression(arr: np.array, pretrained_model: str, sample_dims: tuple):
+def predict_regression(arr: np.array, pretrained_model: str, sample_dims: tuple, classes: int):
     '''
     Import pretrained model and run predictions on arr.
     If using a regression model, multiply results by 100
     to get probability 0-100. Reshape array to permit writing to tif.
 
-    model.predict() outputs a 2D array with shape (379452, 2). This can
-    only be reshaped to (618, 614, 2). But there are 3 classes, so how
-    to get the model to predict probability for each class?
+    model.predict() outputs a 2D array with shape (379452, 2) which 
+    is reshaped based on number of classes
     '''
         
     #preds = pretrained_model.predict(arr, prediction_type='Probability') 
     preds = pretrained_model.predict_proba(arr)
     preds = preds * 100
-    print(f'original shape: {preds.shape}')
-    preds = preds.reshape((sample_dims[0], sample_dims[1], 3))
-    print(f'reshaped: {preds.shape}')
+    #print(f'original shape: {preds.shape}')
+    preds = preds.reshape((sample_dims[0], sample_dims[1], classes)) 
+    #print(f'reshaped: {preds.shape}')
 
     return preds
 
-def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, model_type: str, suffix = "preds"):
+def write_tif(arr: np.array, bbx: list, tile_idx: tuple, country: str, model_type: str, suffix = "preds"):
     '''
     Write predictions to a geotiff, using the same bounding box 
     to determine north, south, east, west corners of the tile
@@ -392,8 +391,16 @@ def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, model_t
     
     # switch (618, 614, band) to (band, 618, 614)
     else:
-        arr = reshape_as_raster(arr)
-        print(f'reshaped #2: {arr.shape}') 
+        #arr = reshape_as_raster(arr)
+        # Reorder the bands so the zero class is last
+        # (618, 610, 4)
+        # (4, 618, 610)
+        # (4, 618, 610)
+        #print(arr.shape)
+        arr = np.moveaxis(arr, -1, 0)  # Move the last dimension to the first
+        #print(arr.shape)
+        arr = np.concatenate((arr[1:], arr[0:1]), axis=0)  # Move the first band to the last
+        #print(arr[0])
         transform = rs.transform.from_bounds(west = west, south = south,
                                             east = east, north = north,
                                             width = arr.shape[2], 
@@ -407,8 +414,15 @@ def write_tif(arr: np.ndarray, bbx: list, tile_idx: tuple, country: str, model_t
                             dtype = "uint8",
                             compress = 'lzw',
                             crs = '+proj=longlat +datum=WGS84 +no_defs',
-                            transform=transform)
-        new_dataset.write(arr) # adding count here throws error
+                            transform=transform,
+                            nodata=255
+                            )
+        # new_dataset.write(arr) # adding count here throws error
+        
+        # Write the array to the dataset
+        for i in range(arr.shape[0]):
+            new_dataset.write(arr[i], i + 1)
+        
         new_dataset.close()
 
     del arr, new_dataset
@@ -430,7 +444,15 @@ def remove_folder(tile_idx: tuple, location: str):
         
     return None
 
-def execute_per_tile(database, tile_idx: tuple, location: list, model, verbose: bool, feature_select: list, model_type: str, overwrite: bool):
+def execute_per_tile(database, 
+                     tile_idx: tuple, 
+                     location: list, 
+                     model, verbose: bool, 
+                     feature_select: list, 
+                     model_type: str, 
+                     classes: int,
+                     remove_noise: bool,
+                     overwrite: bool):
 
     ''' 
     Execute all steps in the pipeline for the given tile.
@@ -454,10 +476,13 @@ def execute_per_tile(database, tile_idx: tuple, location: list, model, verbose: 
         validate.model_inputs(sample_ss)
         if model_type == 'classifier':
             preds = predict_classification(sample_ss, model, sample_dims)
-            preds_final = postprocess.clean_tile(preds, feature_select, ttc)
+            preds_final = postprocess.clean_tile(preds, 
+                                                 feature_select, 
+                                                 ttc, 
+                                                 remove_noise)
             validate.model_outputs(preds, model_type)
         else:
-            preds_final = predict_regression(sample_ss, model, sample_dims)
+            preds_final = predict_regression(sample_ss, model, sample_dims, classes)
 
         write_tif(preds_final, bbx, tile_idx, location[0], model_type, 'preds')
         if params['deploy']['cleanup']:
@@ -499,13 +524,17 @@ if __name__ == '__main__':
     with open(params["select"]["selected_features_path"], "r") as fp:
         selected_features = json.load(fp)
 
-    # specify tiles to process
     database, tile_ids = download_tile_ids(location, aak, ask)
     indices = tuple(args.slicer)
     if len(indices) == 1 and indices[0] == -1:
         tiles_to_process = tile_ids
     else: 
-        tiles_to_process = tile_ids[slice(*indices)] # unpack tuple with *
+        if len(indices) == 1:
+            tiles_to_process = tile_ids[slice(indices[0], None)]  # slice from start index to the end
+        else:
+            tiles_to_process = tile_ids[slice(*indices)]  # otherwise unpack tuple with *
+    
+    
     tile_count = len(tiles_to_process)
 
     print('............................................')
@@ -522,6 +551,8 @@ if __name__ == '__main__':
                          params['deploy']['verbose'], 
                          selected_features, 
                          model_type,
+                         params['data_condition']['classes'],
+                         params['deploy']['remove_noise'],
                          params['deploy']['overwrite'])
 
         if counter % 2 == 0:
@@ -533,6 +564,6 @@ if __name__ == '__main__':
                                     params['deploy']['version'], 
                                     params['deploy']['data_dir'],
                                     params['deploy']['bucket'])
-    mosaic.upload_mosaic(aak, ask, file_to_upload)
+    #mosaic.upload_mosaic(aak, ask, file_to_upload)
   
     
