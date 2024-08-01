@@ -105,7 +105,7 @@ stages:
           val_split: 25
           modelData_path: data/train_params/modelData.pkl
         select:
-          select_features: true
+          select_features: false
           max_features: 40
           selected_features_path: data/train_params/selected_features.json
         train:
@@ -132,8 +132,8 @@ stages:
     outs:
     - path: data/train_params/best_params.json
       hash: md5
-      md5: 99914b932bd37a50b983c5e7c90ae93b
-      size: 2
+      md5: 3061d566971eb7238ae2f19393c574dd
+      size: 111
     - path: data/train_params/selected_features.json
       hash: md5
       md5: b4fc33afcc8099925895f71c09ed87a1
@@ -143,8 +143,8 @@ stages:
     deps:
     - path: data/train_params/best_params.json
       hash: md5
-      md5: 99914b932bd37a50b983c5e7c90ae93b
-      size: 2
+      md5: 3061d566971eb7238ae2f19393c574dd
+      size: 111
     - path: data/train_params/modelData.pkl
       hash: md5
       md5: 6b44ef1c0c622caeb2a88ac99196d90a
@@ -200,15 +200,15 @@ stages:
     outs:
     - path: models/model.joblib
       hash: md5
-      md5: 97ef4d8f3084b961cba4e15b5fb0ec69
+      md5: a1cba5a8820f3b997860fd4b46059233
       size: 36969998
   evaluate_model:
     cmd: python src/stage_evaluate_model.py --params=params.yaml
     deps:
     - path: data/train_params/best_params.json
       hash: md5
-      md5: 99914b932bd37a50b983c5e7c90ae93b
-      size: 2
+      md5: 3061d566971eb7238ae2f19393c574dd
+      size: 111
     - path: data/train_params/modelData.pkl
       hash: md5
       md5: 6b44ef1c0c622caeb2a88ac99196d90a
@@ -219,7 +219,7 @@ stages:
       size: 150
     - path: models/model.joblib
       hash: md5
-      md5: 97ef4d8f3084b961cba4e15b5fb0ec69
+      md5: a1cba5a8820f3b997860fd4b46059233
       size: 36969998
     - path: src/evaluation/validation_visuals.py
       hash: md5

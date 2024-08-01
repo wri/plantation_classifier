@@ -9,9 +9,10 @@ deploy:
   bucket: tof-output
   model_path: models/model.joblib
   model_type: classifier
+  remove_noise: true
   cleanup: false
   overwrite: false
-  version: v26
+  version: v26_2
 
 data_load:
   download_data: false
@@ -40,12 +41,12 @@ data_condition:
   modelData_path: data/train_params/modelData.pkl
 
 select:
-  select_features: True       # Update
+  select_features: False       # Update
   max_features: 40
   selected_features_path: data/train_params/selected_features.json
 
 tune:
-  tune_hyperparameters: False   # Update
+  tune_hyperparameters: True   # Update
   n_iter: 20 
   cv: 3
   plot: False
@@ -99,3 +100,5 @@ evaluate:
   cm_data: src/evaluation/confusion_matrix_data
   train_progress: src/evaluation/train_progress
   tile_id_loc: data
+
+
