@@ -451,6 +451,7 @@ def execute_per_tile(database,
                      feature_select: list, 
                      model_type: str, 
                      classes: int,
+                     remove_noise: bool,
                      overwrite: bool):
 
     ''' 
@@ -475,7 +476,10 @@ def execute_per_tile(database,
         validate.model_inputs(sample_ss)
         if model_type == 'classifier':
             preds = predict_classification(sample_ss, model, sample_dims)
-            preds_final = postprocess.clean_tile(preds, feature_select, ttc)
+            preds_final = postprocess.clean_tile(preds, 
+                                                 feature_select, 
+                                                 ttc, 
+                                                 remove_noise)
             validate.model_outputs(preds, model_type)
         else:
             preds_final = predict_regression(sample_ss, model, sample_dims, classes)
@@ -548,6 +552,7 @@ if __name__ == '__main__':
                          selected_features, 
                          model_type,
                          params['data_condition']['classes'],
+                         params['deploy']['remove_noise'],
                          params['deploy']['overwrite'])
 
         if counter % 2 == 0:
