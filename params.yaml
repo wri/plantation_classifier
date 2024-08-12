@@ -35,7 +35,7 @@ data_condition:
   classes: 4
   ard_subsample: 4
   subset_fraction: 0.1 # set to 1.0 for all data
-  test_split: 20 # previously used .33 test
+  test_split: 20 
   train_split: 80
   val_split: 25
   modelData_path: data/train_params/modelData.pkl
@@ -47,15 +47,15 @@ select:
 
 tune:
   tune_hyperparameters: True   # Update
-  n_iter: 20 
+  n_iter: 25
   cv: 3
   plot: False
   verbose: False
   estimators:
     cat:
       param_grid:
-        iter_min: 500
-        iter_max: 1200
+        iter_min: 600
+        iter_max: 1300
         iter_step: 200
         depth_min: 6
         depth_max: 12
@@ -63,10 +63,11 @@ tune:
         leaf_reg_min: 2
         leaf_reg_max: 30
         leaf_reg_step: 4
-        min_data_leaf_min: 50
-        min_data_leaf_max: 120
-        min_data_leaf_step: 3
+        min_data_leaf_min: 800
+        min_data_leaf_max: 3000
+        min_data_leaf_step: 6
         learn_rate:
+          - .02
           - .03
           - .04
           - .05
