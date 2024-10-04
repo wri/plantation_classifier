@@ -396,11 +396,8 @@ def write_tif(arr: np.array, bbx: list, tile_idx: tuple, country: str, model_typ
         # (618, 610, 4)
         # (4, 618, 610)
         # (4, 618, 610)
-        #print(arr.shape)
         arr = np.moveaxis(arr, -1, 0)  # Move the last dimension to the first
-        #print(arr.shape)
         arr = np.concatenate((arr[1:], arr[0:1]), axis=0)  # Move the first band to the last
-        #print(arr[0])
         transform = rs.transform.from_bounds(west = west, south = south,
                                             east = east, north = north,
                                             width = arr.shape[2], 
@@ -452,7 +449,10 @@ def execute_per_tile(database,
                      model_type: str, 
                      classes: int,
                      remove_noise: bool,
-                     overwrite: bool):
+                     ttc_thresh: int,
+                     kernel: int,
+                     overwrite: bool,
+                     cleanup: bool):
 
     ''' 
     Execute all steps in the pipeline for the given tile.
@@ -479,13 +479,17 @@ def execute_per_tile(database,
             preds_final = postprocess.clean_tile(preds, 
                                                  feature_select, 
                                                  ttc, 
-                                                 remove_noise)
+                                                 remove_noise,
+                                                 ttc_thresh,
+                                                 kernel)
+            
             validate.model_outputs(preds, model_type)
         else:
             preds_final = predict_regression(sample_ss, model, sample_dims, classes)
 
         write_tif(preds_final, bbx, tile_idx, location[0], model_type, 'preds')
-        if params['deploy']['cleanup']:
+        
+        if cleanup:
             remove_folder(tile_idx, location[0])
 
         del ard, feats, sample, sample_ss, preds_final
@@ -552,8 +556,11 @@ if __name__ == '__main__':
                          selected_features, 
                          model_type,
                          params['data_condition']['classes'],
-                         params['deploy']['remove_noise'],
-                         params['deploy']['overwrite'])
+                         params['postprocess']['remove_noise'],
+                         params['postprocess']['ttc_thresh'],
+                         params['postprocess']['kernel'],
+                         params['deploy']['overwrite'],
+                         params['deploy']['cleanup'])
 
         if counter % 2 == 0:
             print(f'{counter}/{tile_count} tiles processed...')
