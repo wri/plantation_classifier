@@ -9,10 +9,14 @@ deploy:
   bucket: tof-output
   model_path: models/model.joblib
   model_type: classifier
-  remove_noise: true
   cleanup: false
   overwrite: false
-  version: v26_2
+  version: v27
+
+postprocess:
+  remove_noise: true
+  ttc_thresh: 0.2
+  kernel: 3
 
 data_load:
   download_data: false
@@ -46,7 +50,7 @@ select:
   selected_features_path: data/train_params/selected_features.json
 
 tune:
-  tune_hyperparameters: True   # Update
+  tune_hyperparameters: False   # Update
   n_iter: 25
   cv: 3
   plot: False
@@ -74,7 +78,7 @@ tune:
   best_params: data/train_params/best_params.json
 
 train:
-  use_best_params: False        # Update
+  use_best_params: True        # Update
   model_dir: models/ 
   model_name: models/model.joblib
   estimator_name: cat
@@ -89,10 +93,10 @@ train:
         random_state: 121
         logging_level: Silent 
         depth: 10
-        iterations: 900
-        l2_leaf_reg: 11
-        min_data_in_leaf: 120
-        learning_rate: 0.05   
+        iterations: 1200
+        l2_leaf_reg: 20
+        min_data_in_leaf: 1680
+        learning_rate: 0.02   
         # early_stopping_rounds: 10
 
 evaluate:
