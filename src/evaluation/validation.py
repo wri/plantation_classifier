@@ -7,7 +7,7 @@ from shapely.geometry import Point
 
 
 
-def calculate_class_distribution(land_use_map):
+def calculate_class_distribution(raster_file):
     '''
     Get the counts and proportions of each land use class (0, 1, 2, 3)
     bincount() counts occurrences of non-negative integers. can optionally include 
@@ -16,6 +16,7 @@ def calculate_class_distribution(land_use_map):
     Class distribution: {0: 269113871, 1: 1272342, 2: 138084189, 3: 99051836}
     Class proportions: {0: 53.03, 1: 0.25, 2: 27.21, 3: 19.52}
     '''    
+    land_use_map = rs.open(raster_file).read(1)
     classes = [0, 1, 2, 3]
     class_dist = {}
     class_prop = {}
@@ -34,8 +35,36 @@ def calculate_class_distribution(land_use_map):
         
     return class_dist, class_prop
 
+def training_pts_buffer(train_batches= ['08', '14', '15', '19', '20', '21', '22',]):
+    '''
+    This step ensures that none of the identified validation samples
+    overlap with existing training plots.
+    '''
+    # create single df of all training samples
+    df_list = []
 
-def sample_raster_by_class(raster, 
+    for i in train_batches:
+        df = pd.read_csv(f'../data/ceo-plantations-train-v{i}.csv')    
+        df_list.append(df)
+
+    df_master = pd.concat(df_list, ignore_index=True)
+
+    plantation_counts = df_master['PLANTATION'].value_counts()
+    plantation_percs = df_master['PLANTATION'].value_counts(normalize=True) * 100
+
+    # Combine counts and percentages into a single dataframe
+    plantation_stats = pd.DataFrame({
+        'Training Points': plantation_counts,
+        'Percentage (%)': round(plantation_percs)
+    })
+    
+    # cross reference this with the stratified sample? create a buffer?
+    # this might need to use the plot csvs
+
+    return df_master, plantation_stats
+
+
+def sample_raster_by_class(raster_file, 
                            total_samples, 
                            class_proportions,
                            outfile):
@@ -43,10 +72,10 @@ def sample_raster_by_class(raster,
     Sample a raster for a specific land cover class and return geo-referenced points.
     GeoDataFrame containing sampled points with geographic coordinates and raster values
     '''
-    
-
-    transform = raster.transform
-    crs = raster.crs
+    with rs.open(raster_file) as src:
+        raster = src.read(1)  # Read the first band
+        transform = src.transform
+        crs = src.crs
 
     gdf = gpd.GeoDataFrame(columns=['geometry', 'value'], crs=crs)
 
@@ -59,8 +88,8 @@ def sample_raster_by_class(raster,
         
         # Randomly sample pixel indices from the available class pixels
         sampled_indices = np.random.choice(class_indices.shape[0], 
-                                           size=num_samples,
-                                           replace=False)
+                                        size=num_samples,
+                                        replace=False)
         sampled_pixel_coords = class_indices[sampled_indices]
         
         # Convert sampled pixel indices to geographic coordinates
@@ -79,17 +108,20 @@ def sample_raster_by_class(raster,
     
     return gdf
 
-def run_validation_workflow(land_use_map, total_samples, outfile):
+def run_validation_workflow(raster_file, total_samples, outfile):
 
     '''
+    Calculates class distribution and samples the
+    provided input raster based on the number of total_samples.
     The input raster contains the following values: [0,1,2,3,255]
+    Outputs a geodataframe of sample points.
     Steps:
         1. Calculates total area of map and class distribution
         2. Performs stratified random sampling
     '''
 
-    class_dist, class_prop = calculate_class_distribution(land_use_map)
-    sampled_points = sample_raster_by_class(land_use_map, 
+    class_dist, class_prop = calculate_class_distribution(raster_file)
+    sampled_points = sample_raster_by_class(raster_file, 
                                             total_samples, 
                                             class_prop,
                                             outfile)
