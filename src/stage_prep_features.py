@@ -51,7 +51,7 @@ def featurize(param_path: Text) -> None:
     # save DataModel object
     with open(params["data_condition"]["modelData_path"], "wb") as fp:
         pickle.dump(model_data, fp)
-    logger.info("Model object saved")
+    logger.info("ModelData object saved")
 
 
 if __name__ == "__main__":

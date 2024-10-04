@@ -9,10 +9,14 @@ deploy:
   bucket: tof-output
   model_path: models/model.joblib
   model_type: classifier
-  remove_noise: true
   cleanup: false
   overwrite: false
-  version: v26_2
+  version: v27
+
+postprocess:
+  remove_noise: true
+  ttc_thresh: 0.2
+  kernel: 3
 
 data_load:
   download_data: false
@@ -35,7 +39,7 @@ data_condition:
   classes: 4
   ard_subsample: 4
   subset_fraction: 0.1 # set to 1.0 for all data
-  test_split: 20 # previously used .33 test
+  test_split: 20 
   train_split: 80
   val_split: 25
   modelData_path: data/train_params/modelData.pkl
@@ -46,16 +50,16 @@ select:
   selected_features_path: data/train_params/selected_features.json
 
 tune:
-  tune_hyperparameters: True   # Update
-  n_iter: 20 
+  tune_hyperparameters: False   # Update
+  n_iter: 25
   cv: 3
   plot: False
   verbose: False
   estimators:
     cat:
       param_grid:
-        iter_min: 500
-        iter_max: 1200
+        iter_min: 600
+        iter_max: 1300
         iter_step: 200
         depth_min: 6
         depth_max: 12
@@ -63,17 +67,18 @@ tune:
         leaf_reg_min: 2
         leaf_reg_max: 30
         leaf_reg_step: 4
-        min_data_leaf_min: 50
-        min_data_leaf_max: 120
-        min_data_leaf_step: 3
+        min_data_leaf_min: 800
+        min_data_leaf_max: 3000
+        min_data_leaf_step: 6
         learn_rate:
+          - .02
           - .03
           - .04
           - .05
   best_params: data/train_params/best_params.json
 
 train:
-  use_best_params: False        # Update
+  use_best_params: True        # Update
   model_dir: models/ 
   model_name: models/model.joblib
   estimator_name: cat
@@ -88,10 +93,10 @@ train:
         random_state: 121
         logging_level: Silent 
         depth: 10
-        iterations: 900
-        l2_leaf_reg: 11
-        min_data_in_leaf: 120
-        learning_rate: 0.05   
+        iterations: 1200
+        l2_leaf_reg: 20
+        min_data_in_leaf: 1680
+        learning_rate: 0.02   
         # early_stopping_rounds: 10
 
 evaluate:

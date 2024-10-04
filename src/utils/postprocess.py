@@ -6,10 +6,13 @@ from scipy import ndimage
 def remove_small_patches(arr, thresh):
     
     '''
-    Finds patches of of size thresh in a given array.
-    Label these features using ndimage.label() and counts
+    Finds patches of of size thresh in a given array by performing
+    a connected component analysis to remove positive predictions 
+    where the connected pixel count is < thresh. 
+
+    Features are labeled with ndimage.label() and counts
     pixels for each label. If the count doesn't meet provided
-    threshold, make the label 0. Return an updated array
+    threshold, make the label 3 (natural). Return an updated array
 
     (option to add a 3x3 structure which considers features connected even 
     if they touch diagonally - probably dnt want this)
@@ -29,7 +32,7 @@ def remove_small_patches(arr, thresh):
     
     return arr
 
-def cleanup_noisy_zeros(preds, ttc_treecover):
+def cleanup_noisy_zeros(preds, ttc_treecover, kernel, ttc_thresh):
     '''
     One option for correcting false positives in the predicted "no tree" class.
     Replaces zero predictions with a more representative value calculated 
@@ -46,11 +49,12 @@ def cleanup_noisy_zeros(preds, ttc_treecover):
         smallholder systems)
     
     '''
-    # create a boolean mask in areas where preds is 0 but tree cover >10
-    is_fp_zero = np.logical_and(preds == 0, ttc_treecover > .10)
+    # create a boolean mask in areas where preds is 0 but tree cover >10%
+    # this should be different than the ttc_tresh
+    is_fp_zero = np.logical_and(preds == 0, ttc_treecover > .1)
 
     # apply median filter on the array
-    preds_flt = ndimage.median_filter(np.copy(preds), 5)
+    preds_flt = ndimage.median_filter(np.copy(preds), kernel)
 
     # Replace noisy zeros in the original preds with the filtered values
     preds[is_fp_zero] = preds_flt[is_fp_zero]
@@ -61,38 +65,41 @@ def cleanup_noisy_zeros(preds, ttc_treecover):
 def clean_tile(arr: np.array, 
                feature_select: list, 
                ttc: np.array,
-               remove_noise: bool):
+               remove_noise: bool,
+               ttc_thresh: int,
+               kernel_size: int,
+               ):
 
     '''
-    Applies the no data and no tree flag if TTC tree cover predictions are used
-    in feature selection. The NN produces a float32 continuous prediction.
-
-    Performs a connected component analysis to remove positive predictions 
-    where the connected pixel count is < thresh. 
+    Cleans up misclassifications using the following order:
+    1) Replaces small patches of AF or monoculture with the natural tree class.
+    2) Replaces no-data or no-tree pixels with zero - The NN produces a float32 
+    continuous probability.
+    3) Replaces noisy zeros with the neighborhood class.
 
     preds = preds * (ttc_treecover > .10)
     '''
+
+    if remove_noise:
+        postprocess_mono = remove_small_patches(arr == 1, thresh = 15)
+        postprocess_af = remove_small_patches(arr == 2, thresh = 2)
+        
+        # multiplying by boolean will turn every False into 0 
+        # and keep every True as the original label
+        arr[arr == 1] *= postprocess_mono[arr == 1]
+        arr[arr == 2] *= postprocess_af[arr == 2]
+
     # create no data and no tree flag (boolean mask)
     # where TML probability is 255 or 0, pass along to preds
     # note that the feats shape is (x, x, 65)
     no_data_flag = ttc[...,0] == 255.
-    no_tree_flag = ttc[...,0] <= 0.1
+    no_tree_flag = ttc[...,0] <= ttc_thresh
 
     # FLAG: this step requires feature selection
     if 13 in feature_select:
         arr[no_data_flag] = 255.
         arr[no_tree_flag] = 0.
-
-    if remove_noise:
-        postprocess_mono = remove_small_patches(arr == 1, thresh = 15)
-        #postprocess_af = remove_small_patches(arr == 2, thresh = 15)
-        
-        # multiplying by boolean will turn every False into 0 
-        # and keep every True as the original label
-        arr[arr == 1] *= postprocess_mono[arr == 1]
-        #arr[arr == 2] *= postprocess_af[arr == 2]
-
-    # clean up pixels in the non-tree class
-    output = cleanup_noisy_zeros(arr, ttc[...,0])
+    
+    arr = cleanup_noisy_zeros(arr, ttc[...,0], kernel_size, ttc_thresh)
   
-    return output
+    return arr

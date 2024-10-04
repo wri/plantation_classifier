@@ -37,7 +37,7 @@ def perform_selection_and_tuning(param_path: Text) -> None:
         logger.info("Skipping feature selection and tuning.")
     else:
         if perform_fs: 
-            # define parameters for feature selection
+            # define parameters for feature selectio
             model_params = params["train"]["estimators"]["cat"]["param_grid"]
             max_features = params["select"]["max_features"]
             logger.info(f"Max features for feature selection: {max_features}")
