@@ -14,9 +14,11 @@ import json
 
 def load_ceo_csv(v_train_data, local_dir):
     '''
-    Cleans up the CEO survey in order to create label
-    arrays by creating a plantation encoding and a 
-    plot filename based on the training data batch
+    Cleans up the CEO sample survey in order to create label
+    arrays by creating a plantation encoding. Ensures
+    all input csvs have same format. 
+    Creates the plot_fname using the same naming convention
+    as the feature extraction pipeline.
     '''
 
     csv = f"{local_dir}ceo-plantations-train-{v_train_data}.csv"
@@ -47,7 +49,7 @@ def load_ceo_csv(v_train_data, local_dir):
                 plot_ids.append(row['PLOT_ID'])
                 counter += 1
             # create plot fnames based on training batch (v21 will be 21)
-            df['PLOT_FNAME'][index] = f"{str(v_train_data[1:]).zfill(2)}{str(counter).zfill(3)}"
+            df.loc[index, 'PLOT_FNAME'] = f"{str(v_train_data[1:]).zfill(2)}{str(counter).zfill(3)}"
     print("Writing clean csv...")
     df.to_csv(csv)
     return df
@@ -78,14 +80,17 @@ def reconstruct_images(plot, df):
 
 def create_label_arrays(v_train_data, local_dir):
     '''
-    Set up functionality to take in specified
-    versions of training data rather than the full batch
+    Iterates through each training data batch and 
+    ensures csvs are in the correct format with 
+    load_ceo_csv, then gathers the plot ids and
+    creates the numpy label arrays. Saves to 
+    output train-labels folder.
     '''
     directory = f"{local_dir}train-labels/"
     
     for i in v_train_data:
         print(f"Creating label arrays for {i}")
-        df = pd.read_csv(f"{local_dir}ceo-plantations-train-{i}.csv")
+        df = load_ceo_csv(i, local_dir)
         plot_ids = sorted(df['PLOT_ID'].unique())
         plot_fname = sorted(df['PLOT_FNAME'].unique())        
         for i, x in zip(plot_ids, plot_fname):
@@ -272,7 +277,7 @@ def gather_plot_ids(v_train_data, local_dir, ttc_feats_dir, logger):
     no_labels = []
 
     for i in v_train_data:
-        df = load_ceo_csv(i, local_dir)
+        df = pd.read_csv(f"{local_dir}ceo-plantations-train-{i}.csv")
         # assert unknown labels are always a full 14x14 (196 points) of unknowns
         unknowns = df[df.PLANTATION == 255]
         no_labels.extend(sorted(list(set(unknowns.PLOT_FNAME))))
@@ -289,13 +294,21 @@ def gather_plot_ids(v_train_data, local_dir, ttc_feats_dir, logger):
     plot_ids = [str(item).zfill(5) if len(str(item)) < 5 else str(item) for item in plot_ids]
     final_ard = [plot for plot in plot_ids if os.path.exists(f"{local_dir}{ttc_feats_dir}{plot}.hkl")]
     no_ard = [plot for plot in plot_ids if not os.path.exists(f"{local_dir}{ttc_feats_dir}{plot}.hkl")]
-    final_raw = [plot for plot in no_ard if os.path.exists(f"{local_dir}train-s2/{plot}.hkl")]
+
+    # remove problematic plots from cleanlab assessment
+    with open("data/cleanlab/cleanlab_id_drops.json", "r") as file:
+        cl_issues = json.load(file)
+    cl_issues = set(cl_issues)
+    final = [plot for plot in final_ard if plot not in cl_issues]
 
     logger.info(f'{len(no_labels)} plots labeled "unknown" were dropped.')
     logger.info(f"{len(no_ard)} plots did not have ARD.")
-    logger.info(f"Training data batch includes: {len(final_ard)} plots.")
+    logger.info(f"Training data batch includes: {len(final)} plots.")
+    logger.info(f"Writing plot ids to file..")
+    with open("data/cleanlab/plot_ids_v2.json", "w") as file:
+        json.dump(final, file)
 
-    return final_ard
+    return final
 
 
 def make_sample(sample_shape, s2, slope, s1, txt, ttc):
@@ -379,6 +392,20 @@ def build_training_sample(train_batch, classes, params_path, logger):
         y = load_label(plot, ttc, classes, train_data_dir)
         x_all[num] = X
         y_all[num] = y
+    
+    # # save x and y
+    print("Saving X and y on file")
+
+   # Reshape the arrays to make them pixel-wise
+    features_flat = x_all.reshape(-1, n_feats)  # Reshape to (total_pixels, n_feats)
+    labels_flat = y_all.reshape(-1)  # Reshape to (total_pixels,)
+
+    # Create a DataFrame where each row corresponds to a pixel
+    df = pd.DataFrame(features_flat, columns=[f'feature_{i}' for i in range(n_feats)])
+    df['label'] = labels_flat
+
+    # Saving the DataFrame to a CSV file
+    df.to_csv('data/cleanlab/cleanlab_demo3.csv', index=False)
 
     # check class balance
     labels, counts = np.unique(y_all, return_counts=True)
