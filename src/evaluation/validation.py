@@ -4,7 +4,8 @@ import numpy as np
 import rasterio as rs
 import pandas as pd
 from shapely.geometry import Point
-
+import os
+import yaml
 
 
 def calculate_class_distribution(raster_file):
@@ -35,38 +36,52 @@ def calculate_class_distribution(raster_file):
         
     return class_dist, class_prop
 
-def training_pts_buffer(train_batches= ['08', '14', '15', '19', '20', '21', '22',]):
+def buffer(buffer_dist, train_batches):
     '''
-    This step ensures that none of the identified validation samples
-    overlap with existing training plots.
+    This function needs to ensure that none of the identified validation samples
+    overlap with the input training plots or fall within a 1km buffer zone of the
+    training samples. 
+    This would have to take the plot data as input..
     '''
+    # after v23 integrated have it check locally for file
+    # if not os.file_exists('../data/validation/training_data_buffers.shp'):
+
+    # if buffer file doesn't exist, create new one
     # create single df of all training samples
     df_list = []
-
     for i in train_batches:
-        df = pd.read_csv(f'../data/ceo-plantations-train-v{i}.csv')    
+        df = pd.read_csv(f'../data/collect_earth_surveys/ceo-plantations-train-v{i}/ceo-plantations-train-v{i}-plot.csv')    
         df_list.append(df)
-
     df_master = pd.concat(df_list, ignore_index=True)
 
+    # print stats per class
     plantation_counts = df_master['PLANTATION'].value_counts()
     plantation_percs = df_master['PLANTATION'].value_counts(normalize=True) * 100
+    for pclass, count in plantation_counts.items():
+        percentage = round(plantation_percs[pclass], 2) 
+        print(f"Class {pclass}: {count} training points, {percentage}% of total")
 
-    # Combine counts and percentages into a single dataframe
-    plantation_stats = pd.DataFrame({
-        'Training Points': plantation_counts,
-        'Percentage (%)': round(plantation_percs)
-    })
+    # Create buffer zone around each plot (calc plot radius + buffer)
+    plot_radius = 65
+    gdf_train = gpd.GeoDataFrame(df_master, 
+                                 geometry=gpd.points_from_xy(df_master['LON'], 
+                                                             df_master['LAT']), 
+                                                             crs='EPSG:3857') 
     
-    # cross reference this with the stratified sample? create a buffer?
-    # this might need to use the plot csvs
-
-    return df_master, plantation_stats
+    gdf_train['buffer'] = gdf_train.geometry.buffer(plot_radius + buffer_dist)
+    
+    # Merge all the buffered areas into a single geometry
+    buffer_zone = gdf_train['buffer'].unary_union
+    buffer_zone = buffer_zone.to_crs(epsg='4326') # crs switch needed?
+    buffer_zone.to_file(f'../data/validation/buffer.shp')
+    
+    return buffer_zone
 
 
 def sample_raster_by_class(raster_file, 
                            total_samples, 
                            class_proportions,
+                           buffer_zone,
                            outfile):
     '''
     Sample a raster for a specific land cover class and return geo-referenced points.
@@ -78,6 +93,9 @@ def sample_raster_by_class(raster_file,
         crs = src.crs
 
     gdf = gpd.GeoDataFrame(columns=['geometry', 'value'], crs=crs)
+
+    # overlay the buffer with the raster and then sample?
+    # or only append points that are outside the buffer zone?
 
     for cls, proportion in class_proportions.items():
         class_mask = (raster == cls)
@@ -108,7 +126,11 @@ def sample_raster_by_class(raster_file,
     
     return gdf
 
-def run_validation_workflow(raster_file, total_samples, outfile):
+def run_validation_workflow(raster_file, 
+                            total_samples, 
+                            outfile, 
+                            buffer_distance,
+                            params_path):
 
     '''
     Calculates class distribution and samples the
@@ -119,11 +141,16 @@ def run_validation_workflow(raster_file, total_samples, outfile):
         1. Calculates total area of map and class distribution
         2. Performs stratified random sampling
     '''
-
+    with open(params_path) as file:
+        params = yaml.safe_load(file)
+        
+    train_surveys = params['data_load']['ceo_survey']
     class_dist, class_prop = calculate_class_distribution(raster_file)
+    buffer_zone = buffer(buffer_distance, train_surveys)
     sampled_points = sample_raster_by_class(raster_file, 
                                             total_samples, 
                                             class_prop,
+                                            buffer_zone,
                                             outfile)
     return sampled_points
 
