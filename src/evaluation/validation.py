@@ -36,45 +36,41 @@ def calculate_class_distribution(raster_file):
         
     return class_dist, class_prop
 
-def buffer(buffer_dist, train_batches):
+def buffer_training_pts(buffer_dist, train_batches):
     '''
-    This function needs to ensure that none of the identified validation samples
-    overlap with the input training plots or fall within a 1km buffer zone of the
-    training samples. 
-    This would have to take the plot data as input..
+    This function creates a 1000m buffer zone around each training plot to prevent
+    overlap between the training and validation samples. Must use plot level CEO survey
+    convert the entire GeoDataFrame (gdf_train) to EPSG:3857 
+    to apply the buffer in meters. The buffer operation needs a meter-based CRS to ensure 
+    correct distance measurements.
     '''
     # after v23 integrated have it check locally for file
     # if not os.file_exists('../data/validation/training_data_buffers.shp'):
 
-    # if buffer file doesn't exist, create new one
     # create single df of all training samples
     df_list = []
+    print(f"Creating buffer with {train_batches} batches")
     for i in train_batches:
-        df = pd.read_csv(f'../data/collect_earth_surveys/ceo-plantations-train-v{i}/ceo-plantations-train-v{i}-plot.csv')    
+        df = pd.read_csv(f'../../data/collect_earth_surveys/plantations-train-{i}/ceo-plantations-train-{i}-plot.csv')    
         df_list.append(df)
     df_master = pd.concat(df_list, ignore_index=True)
-
-    # print stats per class
-    plantation_counts = df_master['PLANTATION'].value_counts()
-    plantation_percs = df_master['PLANTATION'].value_counts(normalize=True) * 100
-    for pclass, count in plantation_counts.items():
-        percentage = round(plantation_percs[pclass], 2) 
-        print(f"Class {pclass}: {count} training points, {percentage}% of total")
+    print(df_master.shape)
 
     # Create buffer zone around each plot (calc plot radius + buffer)
-    plot_radius = 65
+    # and merge as a single geometry
+    # make crs in meters then converts to degrees
     gdf_train = gpd.GeoDataFrame(df_master, 
-                                 geometry=gpd.points_from_xy(df_master['LON'], 
-                                                             df_master['LAT']), 
-                                                             crs='EPSG:3857') 
-    
+                                geometry=gpd.points_from_xy(df_master['center_lon'], 
+                                                             df_master['center_lat']), 
+                                                             crs='EPSG:4326') 
+    print(gdf_train.shape)
+    gdf_train = gdf_train.to_crs(epsg=3857)
+    plot_radius = 65
     gdf_train['buffer'] = gdf_train.geometry.buffer(plot_radius + buffer_dist)
-    
-    # Merge all the buffered areas into a single geometry
     buffer_zone = gdf_train['buffer'].unary_union
-    buffer_zone = buffer_zone.to_crs(epsg='4326') # crs switch needed?
-    buffer_zone.to_file(f'../data/validation/buffer.shp')
-    
+    print(buffer_zone.shape)
+    buffer_zone = gpd.GeoSeries([buffer_zone], crs='EPSG:3857').to_crs(epsg=4326)
+    buffer_zone.to_file(f'../../data/validation/buffer.shp')
     return buffer_zone
 
 
@@ -88,14 +84,11 @@ def sample_raster_by_class(raster_file,
     GeoDataFrame containing sampled points with geographic coordinates and raster values
     '''
     with rs.open(raster_file) as src:
-        raster = src.read(1)  # Read the first band
+        raster = src.read(1)
         transform = src.transform
         crs = src.crs
 
     gdf = gpd.GeoDataFrame(columns=['geometry', 'value'], crs=crs)
-
-    # overlay the buffer with the raster and then sample?
-    # or only append points that are outside the buffer zone?
 
     for cls, proportion in class_proportions.items():
         class_mask = (raster == cls)
@@ -105,19 +98,25 @@ def sample_raster_by_class(raster_file,
         print(f"Sampling {num_samples} points for class {cls} out of {class_indices.shape[0]} available pixels.")
         
         # Randomly sample pixel indices from the available class pixels
-        sampled_indices = np.random.choice(class_indices.shape[0], 
-                                        size=num_samples,
-                                        replace=False)
-        sampled_pixel_coords = class_indices[sampled_indices]
-        
-        # Convert sampled pixel indices to geographic coordinates
+        # and confirm they don't fall within buffer, until num_samples is reached
         geo_points = []
-        for row, col in sampled_pixel_coords:
-            lon, lat = rs.transform.xy(transform, row, col)
-            geo_points.append(Point(lon, lat))
+        while len(geo_points) < num_samples:
+            sampled_indices = np.random.choice(class_indices.shape[0], 
+                                            size=num_samples,
+                                            replace=False)
+            sampled_pixel_coords = class_indices[sampled_indices]
+        
+            # Convert sampled pixel indices to geographic coordinates
+            for row, col in sampled_pixel_coords:
+                lon, lat = rs.transform.xy(transform, row, col)
+                point = Point(lon, lat)
+                
+                # Only append the point if it is outside the training buffer zone
+                if not buffer_zone.contains(point):
+                    geo_points.append(point)
         
         temp_gdf = gpd.GeoDataFrame(geometry=geo_points, crs=crs)
-        
+
         # Sample raster values at the sampled points
         temp_gdf['value'] = [raster[row, col] for row, col in sampled_pixel_coords]
         gdf = pd.concat([gdf, temp_gdf], ignore_index=True)
@@ -146,7 +145,7 @@ def run_validation_workflow(raster_file,
         
     train_surveys = params['data_load']['ceo_survey']
     class_dist, class_prop = calculate_class_distribution(raster_file)
-    buffer_zone = buffer(buffer_distance, train_surveys)
+    buffer_zone = buffer_training_pts(buffer_distance, train_surveys)
     sampled_points = sample_raster_by_class(raster_file, 
                                             total_samples, 
                                             class_prop,
