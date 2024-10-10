@@ -12,13 +12,32 @@ from tqdm import tqdm
 from skimage.util import img_as_ubyte
 import json
 
+def confirm_ard_alignment(v_train, local_dir, df_data):
+    '''
+    TBD if needed --
+    Cross references ARD generation survey w/ sample survey
+    to ensure plot naming convention is executed properly
+    
+    Groups sample csv file and asserts there are 196
+    rows per plot. Checks that each plot_fname in the
+    plot csv exists in the sample csv
+    '''
+    df_plots = pd.read_csv(f'{local_dir}collect_earth_surveys/plantations-train-{v_train}/ceo-plantations-train-{v_train}-plot.csv')
+    plot_counts = df_data.groupby('plot_fname').size()
+    for plot_fname in df_plots['plot_fname']:
+        assert plot_fname in plot_counts.index, f"Error: plot_fname {plot_fname} is missing is sample csv"
+    for plot_fname, count in plot_counts.items():
+        assert count == 196, f"Error: plot_fname {plot_fname} does not have 196 rows (has {count} rows)"
+    print("All checks passed!")
+
 def load_ceo_csv(v_train_data, local_dir):
     '''
     Cleans up the CEO sample survey in order to create label
     arrays by creating a plantation encoding. Ensures
     all input csvs have same format. 
     Creates the plot_fname using the same naming convention
-    as the feature extraction pipeline.
+    as ARD generation pipeline, except for the **SAMPLE** scale
+    CEO survey.
     '''
 
     csv = f"{local_dir}ceo-plantations-train-{v_train_data}.csv"
@@ -29,6 +48,7 @@ def load_ceo_csv(v_train_data, local_dir):
     df.columns = [x.upper() for x in df.columns]
     df.columns = ['PLOT_ID' if x == 'PLOTID' else x for x in df.columns]
     df.columns = ['SAMPLE_ID' if x == 'SAMPLEID' else x for x in df.columns]
+
     df = df[['PLOT_ID', 
             'SAMPLE_ID', 
             'LON', 'LAT',
@@ -38,20 +58,23 @@ def load_ceo_csv(v_train_data, local_dir):
                                         'Agroforestry': 2,
                                         'Unknown': 255})
     
-    # create a col called plot_fname to hold new plot ids
+    # cross references naming convention in plot csv to ensure
+    # alignment between ard files
     df['PLOT_FNAME'] = '0'
+    plot_ids = []
+    counter = 0
+    for index, row in df.iterrows():
+        if row['PLOT_ID'] not in plot_ids:
+            plot_ids.append(row['PLOT_ID'])
+            counter += 1
+        
+        df.loc[index, 'PLOT_FNAME'] = f"{str(v_train_data[1:]).zfill(2)}{str(counter).zfill(3)}"
 
-    if len(df) > 0:
-        plot_ids = []
-        counter = 0
-        for index, row in df.iterrows():
-            if row['PLOT_ID'] not in plot_ids:
-                plot_ids.append(row['PLOT_ID'])
-                counter += 1
-            # create plot fnames based on training batch (v21 will be 21)
-            df.loc[index, 'PLOT_FNAME'] = f"{str(v_train_data[1:]).zfill(2)}{str(counter).zfill(3)}"
     print("Writing clean csv...")
     df.to_csv(csv)
+
+    #confirm_ard_alignment(v_train_data, local_dir)
+
     return df
 
 
