@@ -11,7 +11,7 @@ deploy:
   model_type: classifier
   cleanup: false
   overwrite: false
-  version: v27
+  version: v28
 
 postprocess:
   remove_noise: true
@@ -33,6 +33,7 @@ data_load:
     - v20
     - v21
     - v22
+    - v23
 
 data_condition:
   total_feature_count: 94
@@ -45,7 +46,7 @@ data_condition:
   modelData_path: data/train_params/modelData.pkl
 
 select:
-  select_features: False       # Update
+  select_features: True       # Update
   max_features: 40
   selected_features_path: data/train_params/selected_features.json
 
@@ -78,7 +79,7 @@ tune:
   best_params: data/train_params/best_params.json
 
 train:
-  use_best_params: True        # Update
+  use_best_params: False        # Update - true following tuning
   model_dir: models/ 
   model_name: models/model.joblib
   estimator_name: cat
