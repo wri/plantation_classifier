@@ -33,7 +33,37 @@ def calculate_class_distribution(raster_file):
     print(f"Class proportions: {class_prop}")
     print(f"Total count (pixels): {total_pixels}")
         
-    return class_dist, class_prop
+    return total_pixels, class_prop
+
+def calculate_smpl_size(population, size):
+    '''
+    adapted from: https://github.com/flaboss/python_stratified_sampling/tree/master
+    A function to compute the sample size. If not informed, a sampling 
+    size will be calculated using Cochran adjusted sampling formula:
+        cochran_n = (Z**2 * p * q) /e**2
+        where:
+            - Z is the z-value. In this case we use 1.96 representing 95%
+            - p is the estimated proportion of the population which has an
+                attribute. In this case we use 0.5
+            - q is 1-p
+            - e is the margin of error. In this case we use 3%
+
+        This formula is adjusted as follows:
+        adjusted_cochran = cochran_n / 1+((cochran_n -1)/N)
+        where:
+            - cochran_n = result of the previous formula
+            - N is the population size
+    '''
+    if size is None:
+        cochran_n = np.round(((1.96)**2 * 0.5 * 0.5)/ 0.03**2)
+        n = np.round(cochran_n/(1+((cochran_n -1) /population)))
+    elif size >= 0 and size < 1:
+        n = np.round(population * size)
+    elif size < 0:
+        raise ValueError('Parameter "size" must be an integer or a proportion between 0 and 0.99.')
+    elif size >= 1:
+        n = size
+    return n
 
 def buffer_training_pts(buffer_dist, train_batches):
     '''
@@ -86,7 +116,7 @@ def sample_raster_by_class(raster_file,
                                 out_shape=src.shape)
 
     gdf = gpd.GeoDataFrame(columns=['geometry', 'value'], crs=crs)
-
+    print(f"Total_samples: {total_samples}")
     for cls, proportion in class_proportions.items():
         class_mask = (raster == cls) & (buffer_mask)
         num_samples = int((proportion / 100) * total_samples)
@@ -121,7 +151,6 @@ def sample_raster_by_class(raster_file,
     return gdf
 
 def run_validation_workflow(raster_file, 
-                            total_samples, 
                             outfile, 
                             buffer_distance,
                             params_path):
@@ -139,9 +168,10 @@ def run_validation_workflow(raster_file,
     '''
     with open(params_path) as file:
         params = yaml.safe_load(file)
-        
+    
     train_surveys = params['data_load']['ceo_survey']
-    class_dist, class_prop = calculate_class_distribution(raster_file)
+    total_pixels, class_prop = calculate_class_distribution(raster_file)
+    total_samples = calculate_smpl_size(total_pixels, size=None)
     buffer_zone = buffer_training_pts(buffer_distance, train_surveys)
     sampled_points = sample_raster_by_class(raster_file, 
                                             total_samples, 
