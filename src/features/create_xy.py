@@ -12,7 +12,7 @@ from tqdm import tqdm
 from skimage.util import img_as_ubyte
 import json
 
-def confirm_ard_alignment(v_train, local_dir, df_data):
+def confirm_ard_alignment(v_train, local_dir, df_sample):
     '''
     TBD if needed --
     Cross references ARD generation survey w/ sample survey
@@ -23,12 +23,13 @@ def confirm_ard_alignment(v_train, local_dir, df_data):
     plot csv exists in the sample csv
     '''
     df_plots = pd.read_csv(f'{local_dir}collect_earth_surveys/plantations-train-{v_train}/ceo-plantations-train-{v_train}-plot.csv')
-    plot_counts = df_data.groupby('plot_fname').size()
-    for plot_fname in df_plots['plot_fname']:
-        assert plot_fname in plot_counts.index, f"Error: plot_fname {plot_fname} is missing is sample csv"
+    # plot_fnames = np.unique(df_plots.PLOT_FNAME)
+    # sample_fnames = np.unique(df_sample.PLOT_FNAME)
+    # assert (plot_fnames == sample_fnames).all(), print(f"Differences: {np.setxor1d(plot_fnames, sample_fnames)}")
+    plot_counts = df_sample.groupby('PLOT_FNAME').size()
     for plot_fname, count in plot_counts.items():
         assert count == 196, f"Error: plot_fname {plot_fname} does not have 196 rows (has {count} rows)"
-    print("All checks passed!")
+    print("All fname checks passed!")
 
 def load_ceo_csv(v_train_data, local_dir):
     '''
@@ -73,7 +74,7 @@ def load_ceo_csv(v_train_data, local_dir):
     print("Writing clean csv...")
     df.to_csv(csv)
 
-    #confirm_ard_alignment(v_train_data, local_dir)
+    confirm_ard_alignment(v_train_data, local_dir, df)
 
     return df
 
@@ -103,6 +104,8 @@ def reconstruct_images(plot, df):
 
 def create_label_arrays(v_train_data, local_dir):
     '''
+    Checks if label arrays already exist on file.
+    Assumption is that they don't need to be recreated.
     Iterates through each training data batch and 
     ensures csvs are in the correct format with 
     load_ceo_csv, then gathers the plot ids and
@@ -112,15 +115,19 @@ def create_label_arrays(v_train_data, local_dir):
     directory = f"{local_dir}train-labels/"
     
     for i in v_train_data:
-        print(f"Creating label arrays for {i}")
-        df = load_ceo_csv(i, local_dir)
-        plot_ids = sorted(df['PLOT_ID'].unique())
-        plot_fname = sorted(df['PLOT_FNAME'].unique())        
-        for i, x in zip(plot_ids, plot_fname):
-            #print(f"plot_ids:{i} plot_fname: {x}")
-            plot = reconstruct_images(i, df)
-            plot = np.array(plot)
-            np.save(f"{directory}{str(x).zfill(5)}.npy", plot)
+        labels_exist = any(file.startswith(i[1:]) for file in os.listdir(directory))
+        if labels_exist:
+            print(f"Label arrays exist for {i}, skipping")
+        else:
+            print(f"Creating label arrays for {i}")
+            df = load_ceo_csv(i, local_dir)
+            plot_ids = sorted(df['PLOT_ID'].unique())
+            plot_fname = sorted(df['PLOT_FNAME'].unique())        
+            for i, x in zip(plot_ids, plot_fname):
+                #print(f"plot_ids:{i} plot_fname: {x}")
+                plot = reconstruct_images(i, df)
+                plot = np.array(plot)
+                np.save(f"{directory}{str(x).zfill(5)}.npy", plot)
     
     return plot
 
@@ -370,7 +377,8 @@ def build_training_sample(train_batch, classes, params_path, logger):
     Gathers training data plots from collect earth surveys (v1, v2, v3, etc)
     and loads data to create a sample for each plot. Removes ids where there is no
     cloud-free imagery or "unknown" labels.
-    Creates new label files according to params.
+    Create labels should be True any time a new CEO survey is added. This triggers
+    csv cleaning and creates label arrays for the new training batch.
 
     Combines samples as X and loads labels as y for input to the model.
     """
@@ -379,10 +387,10 @@ def build_training_sample(train_batch, classes, params_path, logger):
 
     train_data_dir = params["data_load"]["local_prefix"]
     ttc_feats_dir = params["data_load"]["ttc_feats_dir"]
-    plot_ids = gather_plot_ids(train_batch, train_data_dir, ttc_feats_dir, logger)
-    logger.info(f"{len(plot_ids)} plots will be used in training.")
     if params['data_load']['create_labels']:
         create_label_arrays(train_batch, train_data_dir)
+    plot_ids = gather_plot_ids(train_batch, train_data_dir, ttc_feats_dir, logger)
+    logger.info(f"{len(plot_ids)} plots will be used in training.")
 
     # create empty x and y array based on number of plots
     # x.shape is (plots, 14, 14, n_feats) y.shape is (plots, 14, 14)
