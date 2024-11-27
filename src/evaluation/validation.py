@@ -54,6 +54,7 @@ def calculate_smpl_size(population, size):
             - cochran_n = result of the previous formula
             - N is the population size
     '''
+    print("Computing sample size...")
     if size is None:
         cochran_n = np.round(((1.96)**2 * 0.5 * 0.5)/ 0.03**2)
         n = np.round(cochran_n/(1+((cochran_n -1) /population)))
@@ -65,7 +66,9 @@ def calculate_smpl_size(population, size):
         n = size
     return n
 
-def buffer_training_pts(buffer_dist, train_batches):
+def buffer_training_pts(buffer_dist, 
+                        train_batches,
+                        valv1):
     '''
     This function creates a buffer zone around each training plot to prevent
     overlap between the training and validation samples. First, all plot level CEO surveys
@@ -73,12 +76,18 @@ def buffer_training_pts(buffer_dist, train_batches):
     buffer_dist. To apply the buffer in meters, the gdf is converted to a meter-based
     CRS (EPSG:3857) to ensure correct distance measurements.
     Saves the buffer zone shapefile to local dir.
+
+    if valv1 is not none, imports the last validation schema to create 
+    a buffer around pts that have already been used for validation
     '''
     df_list = []
     print(f"Creating buffer zone with {train_batches} batches")
     for i in train_batches:
         df = pd.read_csv(f'../../data/collect_earth_surveys/plantations-train-{i}/ceo-plantations-train-{i}-plot.csv')    
         df_list.append(df)
+        if valv1 != None:
+            val = pd.read_csv(valv1) 
+            df_list.append(val)
     df_master = pd.concat(df_list, ignore_index=True)
 
     # Create buffer zone around each plot (calc plot radius + buffer)
@@ -153,7 +162,10 @@ def sample_raster_by_class(raster_file,
 def run_validation_workflow(raster_file, 
                             outfile, 
                             buffer_distance,
-                            params_path):
+                            params_path,
+                            valv1=None,
+                            total_samples=None,
+                            ):
 
     '''
     Calculates distribution of validation samples per class and samples the
@@ -162,7 +174,8 @@ def run_validation_workflow(raster_file,
     Outputs a geodataframe of sample points.
     Steps:
         1. Calculates total area of map and class distribution
-        2. Creates a buffer zone around training plots
+        2. Creates a buffer zone around training plots (and previous
+        validation survey if filename provided)
         3. Performs stratified random sampling for each class
 
     '''
@@ -171,8 +184,10 @@ def run_validation_workflow(raster_file,
     
     train_surveys = params['data_load']['ceo_survey']
     total_pixels, class_prop = calculate_class_distribution(raster_file)
-    total_samples = calculate_smpl_size(total_pixels, size=None)
-    buffer_zone = buffer_training_pts(buffer_distance, train_surveys)
+    if total_samples is None:
+        total_samples = calculate_smpl_size(total_pixels, size=None)
+    buffer_zone = buffer_training_pts(buffer_distance, train_surveys, valv1)
+    class_prop = {0: 20, 1: 25, 2: 25, 3: 30}
     sampled_points = sample_raster_by_class(raster_file, 
                                             total_samples, 
                                             class_prop,
