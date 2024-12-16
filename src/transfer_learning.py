@@ -415,7 +415,6 @@ def write_tif(arr: np.array, bbx: list, tile_idx: tuple, country: str, model_typ
                             nodata=255
                             )
         # new_dataset.write(arr) # adding count here throws error
-        
         # Write the array to the dataset
         for i in range(arr.shape[0]):
             new_dataset.write(arr[i], i + 1)

@@ -10,7 +10,7 @@ deploy:
   model_path: models/model.joblib
   model_type: classifier
   cleanup: false
-  overwrite: false
+  overwrite: true
   version: v28
 
 postprocess:
@@ -24,7 +24,7 @@ data_load:
   folder_prefix: plantation-mapping/data/train/
   local_prefix: data/
   ttc_feats_dir: train-features-ard/
-  create_labels: true
+  create_labels: false       # Update
   ceo_survey:
     - v08
     - v14
@@ -51,7 +51,7 @@ select:
   selected_features_path: data/train_params/selected_features.json
 
 tune:
-  tune_hyperparameters: True   # Update
+  tune_hyperparameters: False   # Update
   n_iter: 25
   cv: 3
   plot: False
@@ -79,7 +79,7 @@ tune:
   best_params: data/train_params/best_params.json
 
 train:
-  use_best_params: False        # Update - true following tuning
+  use_best_params: True        # Update - true following tuning
   model_dir: models/ 
   model_name: models/model.joblib
   estimator_name: cat
