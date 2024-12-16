@@ -10,8 +10,8 @@ deploy:
   model_path: models/model.joblib
   model_type: classifier
   cleanup: false
-  overwrite: false
-  version: v27
+  overwrite: true
+  version: v28
 
 postprocess:
   remove_noise: true
@@ -24,7 +24,7 @@ data_load:
   folder_prefix: plantation-mapping/data/train/
   local_prefix: data/
   ttc_feats_dir: train-features-ard/
-  create_labels: false
+  create_labels: false       # Update
   ceo_survey:
     - v08
     - v14
@@ -33,6 +33,7 @@ data_load:
     - v20
     - v21
     - v22
+    - v23
 
 data_condition:
   total_feature_count: 94
@@ -78,7 +79,7 @@ tune:
   best_params: data/train_params/best_params.json
 
 train:
-  use_best_params: True        # Update
+  use_best_params: True        # Update - true following tuning
   model_dir: models/ 
   model_name: models/model.joblib
   estimator_name: cat
