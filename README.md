@@ -1,28 +1,23 @@
 ## Overview
-This research and code repository present a method for detection and separation of tree systems in Sentinel-2 satellite imagery. Using a transfer learning approach, learned tree features are extracted from Brandt et al.’s (2023) [Tropical Tree Cover](https://github.com/wri/sentinel-tree-cover) convolutional neural network and applied in a post-classification exercise. The application of the method is illustrated for 26 priority administrative districts throughout Ghana, given its highly heterogenous agricultural and natural landscape. The final product is a 10m resolution land use map of Ghana for the year 2020 that distinguishes between natural, monoculture and agroforestry tree systems.  
+Monitoring ecosystem services, commodity-driven deforestation and progress towards international restoration commitments requires separate treatment of natural and agricultural trees in earth observation datasets. Satellite-based remote sensing data, combined with machine learning techniques, can offer a cost effective, automated, and transparent option for monitoring these systems at scale. In Ghana, this effort is complicated by persistent cloud cover, haze, and the intrinsic heterogeneity of agroforestry systems.
+The objective of this work is to spatially differentiate tree cover into 4 types of systems, or land use classes, using a transfer learning approach. The application of the method is illustrated for 26 priority administrative districts throughout Ghana, given its highly heterogenous agricultural and natural landscape. The final product is a 10m resolution land use map of Ghana for the year 2020 that distinguishes between natural, monoculture and agroforestry systems.  
+The results highlight the value in incorporating texture information and extracted tree features from Brandt et al.’s (2023) [Tropical Tree Cover](https://github.com/wri/sentinel-tree-cover) to improve pixel-based classification accuracy. We identify [xx] ha of planted area across 26 districts in Ghana in the year 2020. Land use maps that disaggregate planted and natural tree cover can facilitate effective decision-making for integrated landscape management plans and restoration interventions.
 
 ## Table of Contents
 
 - [Overview](#overview)
-- [Data](#data)
-- [Models](#models)
 - [Results](#results)
+- [Data & Model](#data-and-model)
 - [Contributing](#contributing)
-- [Citations](#citations)
 - [License](#license)
 - [Repository Organization](#repository-organization)
+- [Citations](#citations)
 
-## Data
-coming soon.
-
-## Models
-coming soon.
+## Data and Model
+The data and model will be released following publication of our technical note in 2025.
 
 ## Contributing
 See our [contribution guidelines](https://github.com/wri/plantation_classifier/blob/master/contributing.md).
-
-## Citations
-Brandt, J., Ertel, J., Spore, J., & Stolle, F. (2023). Wall-to-wall mapping of tree extent in the tropics with Sentinel-1 and Sentinel-2. Remote Sensing of Environment, 292, 113574. doi:10.1016/j.rse.2023.113574
 
 ## License
 This project is licensed under the MIT License - see the [LICENSE.md](LICENSE) file for details.
@@ -85,21 +80,16 @@ This project is licensed under the MIT License - see the [LICENSE.md](LICENSE) f
 │       ├── quick_viz.py             
 │       └── mosaic.py               
 │
-├── notebooks                           <- Jupyter notebooks           
-│   ├── exploratory_data_analysis.ipynb 
-│   ├── extract_features.ipynb          
-│   ├── modeling_approaches.ipynb       
-│   ├── mvp-pilots.ipynb                
-│   ├── post_processing.ipynb           
-│   ├── prototype.ipynb   
-│   ├── resegmentation_analysis.ipynb                
-│   ├── scaling_workflow.ipynb          
-│   ├── texture_analysis.ipynb        
-│   ├── training_data_eda.ipynb        
-│   └── tuning-feature-selection.ipynb 
-│
+├── notebooks                           <- Jupyter notebooks                         
+│   ├── analyses         
+│   ├── features     
+│   ├── modeling      
+│   └── training_data
 │
 ├── .gitignore                     
 ├── .dockerignore                  
 └── .dvcignore                   
 ```
+
+## Citations
+Brandt, J., Ertel, J., Spore, J., & Stolle, F. (2023). Wall-to-wall mapping of tree extent in the tropics with Sentinel-1 and Sentinel-2. Remote Sensing of Environment, 292, 113574. doi:10.1016/j.rse.2023.113574
