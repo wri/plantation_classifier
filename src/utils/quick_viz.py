@@ -6,8 +6,8 @@ import rasterio as rs
 import hickle as hkl
 import numpy as np
 import pickle
-
-# from sklearn.model_selection import learning_curve
+from catboost import CatBoostClassifier
+from sklearn.model_selection import learning_curve
 # from sklearn.metrics import roc_curve, roc_auc_score, precision_recall_curve, confusion_matrix, ConfusionMatrixDisplay
 
 # Base
@@ -160,42 +160,52 @@ def hist_compare_s2(location: str, tile_idx_a: tuple, tile_idx_b: tuple, title:s
 
 def hist_compare_s2_byband(location: str, 
                            tile_idx_a: tuple, 
-                           tile_idx_b: tuple, 
-                           title:str, 
-                           tile_idx_c: tuple = None):
+                           tile_idx_b: tuple,  
+                           tile_idx_c: tuple,
+                           title:str,
+                           color_dict: dict,
+                           output_file: str = None
+                           ):
     '''
-    Each s2 band is plot 
+    Each s2 band is plotted as it's own hist.
+    Parameters:
+    - location (str): The country.
+    - tile_idx_a (tuple): The coordinates (x, y) of the first tile.
+    - tile_idx_b (tuple): The coordinates (x, y) of the second tile.
+    - tile_idx_c (tuple): The coordinates (x, y) of the third tile.
+    - title (str): The base title for the histograms, describing the area.
     
     '''
-    x_a, y_a = tile_idx_a[0], tile_idx_a[1]
-    x_b, y_b = tile_idx_b[0], tile_idx_b[1]
-    ard_a = hkl.load(f'../../tmp/{location}/{str(x_a)}/{str(y_a)}/ard/{str(x_a)}X{str(y_a)}Y_ard.hkl')
-    ard_b = hkl.load(f'../../tmp/{location}/{str(x_b)}/{str(y_b)}/ard/{str(x_b)}X{str(y_b)}Y_ard.hkl')
-    
-    s2_a = ard_a[..., 0:10]
-    s2_b = ard_b[..., 0:10]
+    def load_ard(tile_idx):
+        x, y = tile_idx
+        ard = hkl.load(f'../../tmp/{location}/{str(x)}/{str(y)}/ard/{str(x)}X{str(y)}Y_ard.hkl')[..., 0:10]
+        return ard
+
+    # Load data for each tile
+    s2_a = load_ard(tile_idx_a).flatten()
+    s2_b = load_ard(tile_idx_b).flatten()
+    s2_c = load_ard(tile_idx_c).flatten()
+
+    # Determine common axis limits
+    binwidth = 0.01
+    global_min = min(s2_a.min(), s2_b.min(), s2_c.min())
+    global_max = max(s2_a.max(), s2_b.max(), s2_c.max())
+    bins = np.arange(global_min, global_max + binwidth, binwidth)
 
     plt.figure(figsize=(20,20))
-    binwidth = .01
-    min = s2_a.min()
-    max = s2_a.max()
     band_counter = 0
     
     for i in range(1, 11):
         plt.subplot(4,3,i)
-        plt.hist(s2_a[..., band_counter].flatten(), alpha=0.5, label=str(tile_idx_a), edgecolor="black", bins=np.arange(min, max + binwidth, binwidth))
-        plt.hist(s2_b[..., band_counter].flatten(), alpha=0.3, label=str(tile_idx_b), edgecolor="black", bins=np.arange(min, max + binwidth, binwidth))
+        plt.hist(s2_a[..., band_counter].flatten(), alpha=0.5, label=str(tile_idx_a), edgecolor="black", bins=bins)
+        plt.hist(s2_b[..., band_counter].flatten(), alpha=0.3, label=str(tile_idx_b), edgecolor="black", bins=bins)
+        plt.hist(s2_c[..., band_counter].flatten(), alpha=0.3, label=str(tile_idx_c), edgecolor="black", bins=bins)
+        
         plt.xlim(0.0, 0.5)
         plt.xticks(np.arange(0.0, 0.5, 0.1))
         plt.title(title + f' Band {str(band_counter)}')
         #plt.legend();
 
-        if tile_idx_c is not None:
-            x_c, y_c = tile_idx_c[0], tile_idx_c[1]
-            ard_c = hkl.load(f'../../tmp/{location}/{str(x_c)}/{str(y_c)}/ard/{str(x_c)}X{str(y_c)}Y_ard.hkl')
-            s2_c = ard_c[..., 0:10]
-            plt.hist(s2_c[..., band_counter].flatten(), alpha=0.3, label=str(tile_idx_c), edgecolor="black", bins=np.arange(min, max + binwidth, binwidth))
-        
         band_counter += 1
 
     return None
@@ -204,7 +214,9 @@ def hist_individual_tile(location: str,
                          tile_idx_a: tuple, 
                          tile_idx_b: tuple, 
                          tile_idx_c: tuple, 
-                         title: str):
+                         title: str,
+                         color_dict: dict,
+                         output_file: str = None):
     '''
     Type: Matplotlib histograms
     Purpose: Create separate histograms for Sentinel-2 data for three specific tiles in a given location.
@@ -244,16 +256,20 @@ def hist_individual_tile(location: str,
 
     # Create subplots
     fig, axes = plt.subplots(1, 3, figsize=(16, 5), sharex=True, sharey=True)
-    colors = ['orange', 'green', 'blue']
-    systems = ['Monoculture', 'Agroforestry', 'Natural']
+    systems = ['monoculture', 'agroforestry', 'natural']
     tile_indices = [tile_idx_a, tile_idx_b, tile_idx_c]
     data_list = [s2_a, s2_b, s2_c]
 
-    for ax, tile_idx, data, color, sys in zip(axes, tile_indices, data_list, colors, systems):
-        ax.hist(data, alpha=0.3, label=str(tile_idx), edgecolor="black", bins=bins, color=color)
+    for ax, tile_idx, data, sys in zip(axes, tile_indices, data_list, systems):
+        ax.hist(data, alpha=0.4, 
+                label=str(tile_idx), 
+                edgecolor="black", 
+                bins=bins, 
+                color=color_dict.get(sys, "#cccccc")
+                )
         ax.set_xlim(xlim)
         ax.set_xticks(xticks)
-        ax.set_title(f"{sys} System")
+        ax.set_title(f"{sys.capitalize()} System")
         #ax.grid(axis='y', alpha=0.75)
     
     # Add legend to the figure
@@ -263,9 +279,12 @@ def hist_individual_tile(location: str,
     #            labels, 
     #            loc='upper right', 
     #            title="Tiles")
+    # plt.legend(title="System", loc="upper left", bbox_to_anchor=(1.05, 1))
 
     fig.suptitle(title)
     plt.tight_layout()
+    if output_file:
+        plt.savefig(output_file, dpi=300, bbox_inches='tight')
     plt.show()
 
     return None
@@ -524,4 +543,60 @@ def learning_curve_comp(model_names, X_train, y_train, x_max):
     plt.ylabel('Score')
     plt.legend(title='Models', loc='lower right');        
         
+    return None
+
+
+def learning_curve_catboost(X_train_all,
+                            X_train_dropped,
+                            y_train):
+
+    '''
+    Plots the learning curve comparing 2 catboost models:
+    - one uses sentinel imagery and TTC features 
+    - one uses only sentinel imagery
+
+    Parameters:
+    - X_train_all: Training data including sentinel imagery and transferred features 
+    - X_train_dropped: Training data including only sentinel
+    - y_train: True labels of the training set.
+        
+    '''
+    
+    colors = ['royalblue', 'maroon']
+
+    plt.figure(figsize=(12, 7))
+
+    # Initialize CatBoost model
+    catboost = CatBoostClassifier(verbose=0, iterations=100)
+
+    # Plot learning curve for model with TTC features
+    train_sizes_ttc, train_scores_ttc, test_scores_ttc = learning_curve(
+        catboost, X_train_all, y_train, cv=5, return_times=False, verbose=0
+    )
+    train_scores_mean_ttc = np.mean(train_scores_ttc, axis=1)
+    test_scores_mean_ttc = np.mean(test_scores_ttc, axis=1)
+    plt.plot(train_sizes_ttc, train_scores_mean_ttc, "o--", color=colors[0], label="Train (with TL)")
+    plt.plot(train_sizes_ttc, test_scores_mean_ttc, "o-", color=colors[0], label="Test (with TL)")
+
+    # Plot learning curve for model without TTC features
+    train_sizes, train_scores, test_scores = learning_curve(
+        catboost, X_train_dropped, y_train, cv=5, return_times=False, verbose=0
+    )
+    train_scores_mean = np.mean(train_scores, axis=1)
+    test_scores_mean = np.mean(test_scores, axis=1)
+    plt.plot(train_sizes, train_scores_mean, "o--", color=colors[1], label="Train (without TL)")
+    plt.plot(train_sizes, test_scores_mean, "o-", color=colors[1], label="Test (without TL)")
+
+    # Formatting the plot
+    plt.grid()
+    plt.xlim([train_sizes.min() - 10000, train_sizes.max() + 10000])
+    plt.ylim([0.0, 1.2])
+    plt.title("Learning Curve Comparison")
+    plt.xlabel("Number of Training Samples")
+    plt.ylabel("Score")
+    plt.legend(title="Catboost Model", loc="lower right")
+
+    plt.tight_layout()
+    plt.show()
+
     return None
