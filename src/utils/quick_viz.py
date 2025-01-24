@@ -468,7 +468,7 @@ def roc_curve_comp(X_test, y_test, model_names):
     plt.ylabel('True Positive Rate')
     plt.legend(loc='lower right');
     
-    # AUC curve
+    # PR curve
     for m in model_names:
         
         with open(f'../models/{m}.pkl', 'rb') as file:  
@@ -548,7 +548,8 @@ def learning_curve_comp(model_names, X_train, y_train, x_max):
 
 def learning_curve_catboost(X_train_all,
                             X_train_dropped,
-                            y_train):
+                            y_train,
+                            output_file: str = None):
 
     '''
     Plots the learning curve comparing 2 catboost models:
@@ -567,11 +568,12 @@ def learning_curve_catboost(X_train_all,
     plt.figure(figsize=(12, 7))
 
     # Initialize CatBoost model
-    catboost = CatBoostClassifier(verbose=0, iterations=100)
+    catboost = CatBoostClassifier(verbose=0, iterations=300)
 
     # Plot learning curve for model with TTC features
     train_sizes_ttc, train_scores_ttc, test_scores_ttc = learning_curve(
-        catboost, X_train_all, y_train, cv=5, return_times=False, verbose=0
+        catboost, X_train_all, y_train, cv=5, return_times=False, verbose=0,
+        # train_sizes = [10000, 40000, 70000, 100000] 
     )
     train_scores_mean_ttc = np.mean(train_scores_ttc, axis=1)
     test_scores_mean_ttc = np.mean(test_scores_ttc, axis=1)
@@ -588,15 +590,74 @@ def learning_curve_catboost(X_train_all,
     plt.plot(train_sizes, test_scores_mean, "o-", color=colors[1], label="Test (without TL)")
 
     # Formatting the plot
+    plt.axhline(y=0.80, color='red', linestyle='--', label='Target Accuracy')
     plt.grid()
     plt.xlim([train_sizes.min() - 10000, train_sizes.max() + 10000])
     plt.ylim([0.0, 1.2])
     plt.title("Learning Curve Comparison")
     plt.xlabel("Number of Training Samples")
     plt.ylabel("Score")
-    plt.legend(title="Catboost Model", loc="lower right")
+    plt.legend(title="CatBoost Model", loc="lower right")
 
     plt.tight_layout()
     plt.show()
-
+    if output_file:
+        plt.savefig(output_file, dpi=300, bbox_inches='tight')
     return None
+
+
+from catboost import CatBoostClassifier
+from sklearn.metrics import roc_curve, auc
+import matplotlib.pyplot as plt
+
+def roc_auc_curve_catboost(X_train_all, X_train_dropped, X_test, y_train, y_test, output_file: str = None):
+    '''
+    Plots an ROC AUC curve comparing 2 CatBoost models:
+    - one using sentinel imagery and TTC features 
+    - one using only sentinel imagery
+    
+    Parameters:
+    - X_train_all: Training data with sentinel imagery and transferred features 
+    - X_train_dropped: Training data with only sentinel imagery
+    - X_test: Test data used for evaluation
+    - y_train: Training labels
+    - y_test: Test labels
+    - output_file: Optional path to save the plot
+    '''
+
+    plt.figure(figsize=(8,5)) 
+    
+    # Initialize CatBoost models
+    models = {
+        "With Transfer Learning": X_train_all,
+        "Without Transfer Learning": X_train_dropped
+    }
+
+    for label, X_train in models.items():
+        catboost = CatBoostClassifier(verbose=0, iterations=300)
+        catboost.fit(X_train, y_train)
+        
+        # Get predicted probabilities for the positive class
+        probs = catboost.predict_proba(X_test)[:, 1]
+        
+        # Compute ROC curve
+        fpr, tpr, _ = roc_curve(y_test, probs)
+        roc_auc = auc(fpr, tpr)
+        
+        # Plot ROC curve
+        plt.plot(fpr, tpr, marker=',', label=f'{label} (AUC = {roc_auc:.2f})')
+    
+    # Plot the no-skill line
+    plt.plot([0, 1], [0, 1], linestyle='--', label='No Skill')
+
+    # Customize the plot
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.title('ROC AUC Curve Comparison')
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.legend(loc='lower right')
+    if output_file:
+        plt.savefig(output_file, dpi=300, bbox_inches='tight')
+
+    plt.show()
