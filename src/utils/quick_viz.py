@@ -7,6 +7,7 @@ import hickle as hkl
 import numpy as np
 import pickle
 from catboost import CatBoostClassifier
+from sklearn.metrics import roc_curve, auc
 from sklearn.model_selection import learning_curve
 # from sklearn.metrics import roc_curve, roc_auc_score, precision_recall_curve, confusion_matrix, ConfusionMatrixDisplay
 
@@ -253,6 +254,7 @@ def hist_individual_tile(location: str,
 
     xlim = (0.0, 0.6)
     xticks = np.arange(0.0, 0.6, 0.1)
+    #ylim = (0.0, 500000)
 
     # Create subplots
     fig, axes = plt.subplots(1, 3, figsize=(16, 5), sharex=True, sharey=True)
@@ -268,6 +270,7 @@ def hist_individual_tile(location: str,
                 color=color_dict.get(sys, "#cccccc")
                 )
         ax.set_xlim(xlim)
+       # ax.set_ylim(ylim)
         ax.set_xticks(xticks)
         ax.set_title(f"{sys.capitalize()} System")
         #ax.grid(axis='y', alpha=0.75)
@@ -605,10 +608,6 @@ def learning_curve_catboost(X_train_all,
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
     return None
 
-
-from catboost import CatBoostClassifier
-from sklearn.metrics import roc_curve, auc
-import matplotlib.pyplot as plt
 
 def roc_auc_curve_catboost(X_train_all, X_train_dropped, X_test, y_train, y_test, output_file: str = None):
     '''
