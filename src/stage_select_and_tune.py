@@ -38,7 +38,7 @@ def perform_selection_and_tuning(param_path: Text) -> None:
     else:
         if perform_fs: 
             # define parameters for feature selectio
-            model_params = params["train"]["estimators"]["cat"]["param_grid"]
+            hparams_to_test = params["train"]["estimators"]["cat"]["param_grid"] 
             max_features = params["select"]["max_features"]
             logger.info(f"Max features for feature selection: {max_features}")
             top_feats = fsl.backward_selection(
@@ -48,7 +48,7 @@ def perform_selection_and_tuning(param_path: Text) -> None:
                                     model_data.y_test_reshaped,
                                     "cat",
                                     params["train"]["tuning_metric"],
-                                    model_params,
+                                    hparams_to_test,
                                     logger,
                                     max_features)
             logger.debug(f"Top features identified: {top_feats}")

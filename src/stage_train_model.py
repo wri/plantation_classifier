@@ -15,6 +15,7 @@ def train_model(param_path: Text) -> None:
     """ 
     Per criteria in the params.yaml file, imports
     training data and parameters, filters to selected features
+    why are features filtered regardless of whether FS is true?
     """
     with open(param_path) as file:
         params = yaml.safe_load(file)
@@ -26,13 +27,17 @@ def train_model(param_path: Text) -> None:
         selected_features = json.load(fp)
     with open(params["tune"]["best_params"], "r") as fp:
         best_params = json.load(fp)
-    logger.info("All data loaded")
+    logger.info("All data loaded") 
 
     estimator_name = params["train"]["estimator_name"]
     model_path = f"{params['train']['model_name']}"
     basic_params = params["train"]["estimators"][estimator_name]["param_grid"]
-    # features are filtered regardless of whether fs used
-    model_data.filter_features(selected_features)
+    perform_fs = params["select"]["select_features"]
+    
+    # features are filtered regardless of whether fs used -- think this is the error
+    # should only apply if fs is true
+    if perform_fs:  
+        model_data.filter_features(selected_features)
 
     # use best params file or params in params.yaml
     if not params['train']['use_best_params']:
@@ -47,7 +52,7 @@ def train_model(param_path: Text) -> None:
     
     # make sure class weights are added for either option
     model_params["class_weights"] = model_data.class_weights
-    logger.info(f"Model will be trained with the following conditions:")
+    logger.info(f"Model will be trained with the following conditions:") #this should only print if fs and ht are activated
     logger.info(f"Model params: {model_params}")
     logger.info(f"Features: {selected_features}") 
     logger.debug(f"X_train_reshaped: {model_data.X_train_reshaped.shape}")
@@ -66,6 +71,7 @@ def train_model(param_path: Text) -> None:
         logger,
     )
     logger.info("Saving model")
+    logger.info(f"Features: {len(model.feature_names_)}")
     joblib.dump(model, f"{model_path}")
 
 

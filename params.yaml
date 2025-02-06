@@ -11,7 +11,7 @@ deploy:
   model_type: classifier
   cleanup: false
   overwrite: true
-  version: v28
+  version: v28_pub
 
 postprocess:
   remove_noise: true
@@ -79,7 +79,7 @@ tune:
   best_params: data/train_params/best_params.json
 
 train:
-  use_best_params: True        # Update - true following tuning
+  use_best_params: False        # Update - true following tuning
   model_dir: models/ 
   model_name: models/model.joblib
   estimator_name: cat

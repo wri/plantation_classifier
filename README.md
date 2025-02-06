@@ -1,20 +1,32 @@
-## Overview
-Monitoring ecosystem services, commodity-driven deforestation and progress towards international restoration commitments requires separate treatment of natural and agricultural trees in earth observation datasets. Satellite-based remote sensing data, combined with machine learning techniques, can offer a cost effective, automated, and transparent option for monitoring these systems at scale. In Ghana, this effort is complicated by persistent cloud cover, haze, and the intrinsic heterogeneity of agroforestry systems.
-The objective of this work is to spatially differentiate tree cover into 4 types of systems, or land use classes, using a transfer learning approach. The application of the method is illustrated for 26 priority administrative districts throughout Ghana, given its highly heterogenous agricultural and natural landscape. The final product is a 10m resolution land use map of Ghana for the year 2020 that distinguishes between natural, monoculture and agroforestry systems.  
-The results highlight the value in incorporating texture information and extracted tree features from Brandt et al.’s (2023) [Tropical Tree Cover](https://github.com/wri/sentinel-tree-cover) to improve pixel-based classification accuracy. We identify [xx] ha of planted area across 26 districts in Ghana in the year 2020. Land use maps that disaggregate planted and natural tree cover can facilitate effective decision-making for integrated landscape management plans and restoration interventions.
+# Transfer Learning for Tree Cover Classification in Ghana
 
-## Table of Contents
+This repository contains the code for a novel transfer learning-based approach to classify tree systems in Ghana using Sentinel-1 and Sentinel-2 imagery. By leveraging pre-trained convolutional neural networks and feature engineering, this method distinguishes between natural forests, monoculture plantations, and agroforestry systems—a critical step for monitoring deforestation and facilitating effective landscape management.
 
-- [Overview](#overview)
-- [Results](#results)
-- [Data & Model](#data-and-model)
-- [Contributing](#contributing)
-- [License](#license)
-- [Repository Organization](#repository-organization)
-- [Citations](#citations)
+* **Why it matters**: Traditional classification methods struggle to distinguish natural and planted tree systems in cloud-prone, heterogeneous landscapes like Ghana.
+* **What’s new**: We integrate [deep learning-based tree features](https://github.com/wri/sentinel-tree-cover) and texture analysis to improve classification accuracy.
+* **Who is this for?** Data scientists, geospatial analysts, and researchers working with remote sensing data for land use classification.
 
-## Data and Model
-The data and model will be released following publication of our technical note in 2025.
+The application of the method is illustrated for 26 priority administrative districts throughout Ghana. The final product is a 10m resolution land use map of Ghana for the year 2020 that distinguishes between natural, monoculture and agroforestry systems.  
+
+![Pixel-based Land Use Classification Results](images/image.png)
+
+## ML Pipeline Overview
+
+### 1: Data Preprocessing
+- Sentinel-1/2 analysis-ready data preparation
+
+### 2: Feature Engineering
+- Extracts tree features from pre-trained CNN
+- Computes texture metrics 
+
+### 3: Model Training
+- Trains CatBoost classifier
+- Performs feature selection
+- Performs hyperparameter tuning
+
+### 4: Inference & Mapping
+- Applies trained model to generate 10m-resolution land use maps
+- Post processing steps
 
 ## Contributing
 See our [contribution guidelines](https://github.com/wri/plantation_classifier/blob/master/contributing.md).
@@ -90,6 +102,3 @@ This project is licensed under the MIT License - see the [LICENSE.md](LICENSE) f
 ├── .dockerignore                  
 └── .dvcignore                   
 ```
-
-## Citations
-Brandt, J., Ertel, J., Spore, J., & Stolle, F. (2023). Wall-to-wall mapping of tree extent in the tropics with Sentinel-1 and Sentinel-2. Remote Sensing of Environment, 292, 113574. doi:10.1016/j.rse.2023.113574
