@@ -9,6 +9,7 @@ import pickle
 from catboost import CatBoostClassifier
 from sklearn.metrics import roc_curve, auc
 from sklearn.model_selection import learning_curve
+import pandas as pd
 # from sklearn.metrics import roc_curve, roc_auc_score, precision_recall_curve, confusion_matrix, ConfusionMatrixDisplay
 
 # Base
@@ -659,4 +660,107 @@ def roc_auc_curve_catboost(X_train_all, X_train_dropped, X_test, y_train, y_test
     if output_file:
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
 
+    plt.show()
+
+
+def style_axis(ax, 
+               xlabel: str, 
+               ylabel: str, 
+               xgrid: bool,
+               ygrid:bool,
+               title: str = None, 
+               grid_color: str = '#DDDDDD',
+               tick_format: str = None):
+    """
+    Applies consistent styling to the axes, including labels and gridlines.
+
+    Parameters:
+    ax (matplotlib.axes.Axes): The axis to be styled.
+    xlabel (str): The label for the x-axis.
+    ylabel (str): The label for the y-axis.
+    gridlines (bool): Option to add gridlines to the chart background.
+    title (str, optional): The title of the chart.
+    grid_color (str, optional): The color of the gridlines. Default is '#DDDDDD'.
+    """
+    # Remove unnecessary spines
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+
+    # Style the bottom and left spines
+    ax.spines['bottom'].set_color(grid_color)
+    ax.spines['left'].set_color(grid_color)
+    
+    # Set gridlines and axis below the plot elements
+    ax.yaxis.grid(ygrid, color=grid_color)
+    ax.xaxis.grid(xgrid,color=grid_color)
+    ax.set_axisbelow(True)
+    
+    # Set the axis labels
+    ax.set_xlabel(xlabel, labelpad=15)
+    ax.set_ylabel(ylabel, labelpad=15)
+    if tick_format is not None:
+        ax.ticklabel_format(style='plain', axis='y')
+
+    # Optionally set the title
+    if title:
+        ax.set_title(title, pad=15)
+
+def horizontal_stacked_bar(df: pd.DataFrame, 
+                           title: str,
+                           color_dict: dict,
+                           sort_by: str,
+                           output_file: str = None,
+                           dpi: int = 300):
+    """
+    Creates a horizontal 100% stacked bar chart showing the percentage 
+    area for different tree cover classes per district.
+
+    Parameters:
+    df (pd.DataFrame): DataFrame containing the data.
+    title (str): Title of the chart.
+    color_dict (dict): Dictionary mapping classes to colors.
+    categories (list): List of land use class columns to include in the stacked bar.
+    output_file (str): File path to save the chart (optional).
+    dpi (int): Resolution for the saved chart.
+    """
+    categories = ['Agroforestry', 'Monoculture', 'Natural', 'No vegetation']
+
+    # Normalize the data to percentages
+    df[categories] = df[categories].div(df[categories].sum(axis=1), axis=0) * 100
+    
+    # Sort the DataFrame by Agroforestry percentage (descending)
+    df = df.sort_values(by=sort_by, ascending=False)
+
+    fig, ax = plt.subplots(figsize=(8,8))
+
+    # Initialize the left position for stacking
+    left = np.zeros(len(df))
+
+    # Plot each category as a horizontal bar
+    for category in categories:
+        ax.barh(
+            df.district, 
+            df[category], 
+            left=left, 
+            label=category, 
+            color=color_dict.get(category, "#cccccc"),
+            # alpha=0.4
+        )
+        left += df[category].values
+
+
+    # Style the chart
+    style_axis(
+        ax=ax,
+        xlabel="Percentage Area (%)",
+        ylabel=" ",
+        title=title,
+        xgrid=True,
+        ygrid=False
+    )
+    ax.set_xlim(0, 100)
+    ax.legend(title="System", loc="upper left", bbox_to_anchor=(1.05, 1))
+    plt.tight_layout()
+    if output_file:
+        plt.savefig(output_file, dpi=dpi, bbox_inches='tight')
     plt.show()
