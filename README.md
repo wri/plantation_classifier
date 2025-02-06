@@ -1,7 +1,5 @@
 # Transfer Learning for Tree Cover Classification in Ghana
 
-## Overview
-
 This repository contains the code for a novel transfer learning-based approach to classify tree systems in Ghana using Sentinel-1 and Sentinel-2 imagery. By leveraging pre-trained convolutional neural networks and feature engineering, this method distinguishes between natural forests, monoculture plantations, and agroforestry systems—a critical step for monitoring deforestation and facilitating effective landscape management.
 
 * **Why it matters**: Traditional classification methods struggle to distinguish natural and planted tree systems in cloud-prone, heterogeneous landscapes like Ghana.
