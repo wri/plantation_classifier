@@ -14,7 +14,7 @@ reports/*
 src/models/*
 .vscode/
 *.code-workspace
-catboost_info/*
+catboost_info/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -23,7 +23,4 @@ __pycache__/
 
 # Jupyter Notebook
 .ipynb_checkpoints
-catboost_info/*
-src/catboost_info/*
-notebooks/catboost_info/*
 notebooks/conclusions.ipynb
