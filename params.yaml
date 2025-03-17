@@ -25,6 +25,7 @@ data_load:
   local_prefix: data/
   ttc_feats_dir: train-features-ard/
   create_labels: false       # Update
+  drop_cleanlab_ids: false   # Update
   ceo_survey:
     - v08
     - v14
@@ -46,7 +47,7 @@ data_condition:
   modelData_path: data/train_params/modelData.pkl
 
 select:
-  select_features: False       # Update
+  perform_fs: True       # Update
   max_features: 40
   selected_features_path: data/train_params/selected_features.json
 
@@ -98,7 +99,6 @@ train:
         l2_leaf_reg: 20
         min_data_in_leaf: 1680
         learning_rate: 0.02   
-        # early_stopping_rounds: 10
 
 evaluate:
   metrics_file: src/evaluation/metrics
