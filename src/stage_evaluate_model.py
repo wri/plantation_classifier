@@ -58,9 +58,6 @@ def evaluate_model(params_path: Text) -> None:
         model_data = pickle.load(fp)
     with open(params["select"]["selected_features_path"], "r") as fp:
         selected_features = json.load(fp)
- 
-    model_data.filter_features(selected_features)
-    #   model_params["class_weights"] = model_data.class_weights
 
     logger.info("Evaluating (building report)")
     prediction = model.predict(model_data.X_test_reshaped)
