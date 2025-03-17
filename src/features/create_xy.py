@@ -295,50 +295,73 @@ def load_label(idx, ttc, classes, local_dir):
     return labels
 
 
-def gather_plot_ids(v_train_data, local_dir, ttc_feats_dir, logger):
+def gather_plot_ids(v_train_data, 
+                    local_dir, 
+                    ttc_feats_dir, 
+                    logger, 
+                    drop_cleanlab=True
+                    ):
     """
     Cleans the downloaded CEO survey to meet requirements.
     Creates a list of plot ids to process. Drops all plots with
-    "unknown" labels and plots w/o s2 imagery. Returns list of plot_ids.
+    "unknown" labels and plots w/o s2 imagery. Optionally removes
+    plots flagged by CleanLab.
+
+    Args:
+        v_train_data (list): List of training data versions.
+        local_dir (str): Directory path for data storage.
+        ttc_feats_dir (str): Directory path for TTC features.
+        logger (Logger): Logger for logging info.
+        drop_cleanlab_issues (bool, optional): Whether to drop CleanLab flagged plots. Defaults to True.
+
+    Returns:
+        list: Final list of plot IDs for training.
     """
 
-    # use CEO csv to gather plot id numbers
     plot_ids = []
     no_labels = []
 
     for i in v_train_data:
         df = pd.read_csv(f"{local_dir}ceo-plantations-train-{i}.csv")
-        # assert unknown labels are always a full 14x14 (196 points) of unknowns
+
+        # Identify and drop "unknown" label plots
         unknowns = df[df.PLANTATION == 255]
         no_labels.extend(sorted(list(set(unknowns.PLOT_FNAME))))
-        for plot in set(list(unknowns.PLOT_ID)):
-            assert (
-                len(unknowns[unknowns.PLOT_ID == plot]) == 196
-            ), f"WARNING: {plot} has {len(unknowns[unknowns.PLOT_ID == plot])}/196 points labeled unknown."
 
-        # drop unknowns and add to full list
+        for plot in set(unknowns.PLOT_ID):
+            assert len(unknowns[unknowns.PLOT_ID == plot]) == 196, \
+                f"WARNING: {plot} has {len(unknowns[unknowns.PLOT_ID == plot])}/196 points labeled unknown."
+
+        # Remove "unknown" plots and collect remaining plot IDs
         labeled = df.drop(unknowns.index)
         plot_ids += labeled.PLOT_FNAME.drop_duplicates().tolist()
 
-    # add leading 0 to plot_ids that do not have 5 digits
-    plot_ids = [str(item).zfill(5) if len(str(item)) < 5 else str(item) for item in plot_ids]
-    final_ard = [plot for plot in plot_ids if os.path.exists(f"{local_dir}{ttc_feats_dir}{plot}.hkl")]
-    no_ard = [plot for plot in plot_ids if not os.path.exists(f"{local_dir}{ttc_feats_dir}{plot}.hkl")]
+    # Format plot IDs to ensure consistent length (5 digits)
+    plot_ids = [str(p).zfill(5) if len(str(p)) < 5 else str(p) for p in plot_ids]
+    final_ard = [p for p in plot_ids if os.path.exists(f"{local_dir}{ttc_feats_dir}{p}.hkl")]
+    no_ard = [p for p in plot_ids if not os.path.exists(f"{local_dir}{ttc_feats_dir}{p}.hkl")]
 
-    # remove problematic plots from cleanlab assessment
-    with open("data/cleanlab/cleanlab_id_drops.json", "r") as file:
-        cl_issues = json.load(file)
-    cl_issues = set(cl_issues)
-    final = [plot for plot in final_ard if plot not in cl_issues]
+    # Optionally remove CleanLab flagged plots
+    # only saves final plots if cleanlab
+    if drop_cleanlab:
+        try:
+            with open("data/cleanlab/round2/cleanlab_id_drops.json", "r") as file:
+                cl_issues = set(json.load(file))
+            final_ard = [p for p in final_ard if p not in cl_issues]
+            logger.info("Writing plot IDs to file...")
+            with open("data/cleanlab/round2/final_plot_ids.json", "w") as file:
+                json.dump(final_ard, file)
+        except FileNotFoundError:
+            logger.warning("CleanLab ID file not found.")
 
+    # Logging summary
+    logger.info("SUMMARY")
     logger.info(f'{len(no_labels)} plots labeled "unknown" were dropped.')
     logger.info(f"{len(no_ard)} plots did not have ARD.")
-    logger.info(f"Training data batch includes: {len(final)} plots.")
-    logger.info(f"Writing plot ids to file..")
-    with open("data/cleanlab/plot_ids_v2.json", "w") as file:
-        json.dump(final, file)
+    logger.info(f"Training data batch includes: {len(final_ard)} plots.")
 
-    return final
+    return final_ard
+
 
 
 def make_sample(sample_shape, s2, slope, s1, txt, ttc):
@@ -389,7 +412,12 @@ def build_training_sample(train_batch, classes, params_path, logger):
     ttc_feats_dir = params["data_load"]["ttc_feats_dir"]
     if params['data_load']['create_labels']:
         create_label_arrays(train_batch, train_data_dir)
-    plot_ids = gather_plot_ids(train_batch, train_data_dir, ttc_feats_dir, logger)
+    cleanlab = params["data_load"]["drop_cleanlab_ids"]
+    plot_ids = gather_plot_ids(train_batch, 
+                               train_data_dir, 
+                               ttc_feats_dir, 
+                               logger,
+                               cleanlab)
     logger.info(f"{len(plot_ids)} plots will be used in training.")
 
     # create empty x and y array based on number of plots
@@ -423,8 +451,7 @@ def build_training_sample(train_batch, classes, params_path, logger):
         y = load_label(plot, ttc, classes, train_data_dir)
         x_all[num] = X
         y_all[num] = y
-    
-    # # save x and y
+
     print("Saving X and y on file")
 
    # Reshape the arrays to make them pixel-wise
@@ -436,7 +463,7 @@ def build_training_sample(train_batch, classes, params_path, logger):
     df['label'] = labels_flat
 
     # Saving the DataFrame to a CSV file
-    df.to_csv('data/cleanlab/cleanlab_demo3.csv', index=False)
+    df.to_csv('data/cleanlab/round2/cleanlab_xy.csv', index=False) # this was named demo
 
     # check class balance
     labels, counts = np.unique(y_all, return_counts=True)
