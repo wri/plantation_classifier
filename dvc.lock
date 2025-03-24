@@ -9,8 +9,8 @@ stages:
       size: 3123
     - path: src/features/create_xy.py
       hash: md5
-      md5: d3f1e6db8951de74e86c61a52d23e66f
-      size: 16794
+      md5: a7dbb76ae9c1bc7ca604496e0495006d
+      size: 18017
     - path: src/stage_prep_features.py
       hash: md5
       md5: 7444e7aef0fece8f2a87ec744ac1d4dc
@@ -36,7 +36,8 @@ stages:
           folder_prefix: plantation-mapping/data/train/
           local_prefix: data/
           ttc_feats_dir: train-features-ard/
-          create_labels: false
+          create_labels: true
+          drop_cleanlab_ids: false
           ceo_survey:
           - v08
           - v14
@@ -49,8 +50,8 @@ stages:
     outs:
     - path: data/train_params/modelData.pkl
       hash: md5
-      md5: 6d2420445fc77a4cbd9181535ec2c6fb
-      size: 288393300
+      md5: a6b5da79d7b7d55bc8c2a41fcda53bc7
+      size: 309843556
   load_data:
     cmd: python src/stage_load_data.py --params=params.yaml
     deps:
@@ -70,7 +71,8 @@ stages:
           folder_prefix: plantation-mapping/data/train/
           local_prefix: data/
           ttc_feats_dir: train-features-ard/
-          create_labels: false
+          create_labels: true
+          drop_cleanlab_ids: false
           ceo_survey:
           - v08
           - v14
@@ -85,8 +87,8 @@ stages:
     deps:
     - path: data/train_params/modelData.pkl
       hash: md5
-      md5: 6d2420445fc77a4cbd9181535ec2c6fb
-      size: 288393300
+      md5: a6b5da79d7b7d55bc8c2a41fcda53bc7
+      size: 309843556
     - path: src/features/feature_selection.py
       hash: md5
       md5: f16201b723a739bd5c8d4b4f6d4171f8
@@ -107,7 +109,7 @@ stages:
           val_split: 25
           modelData_path: data/train_params/modelData.pkl
         select:
-          perform_fs: true
+          perform_fs: false
           max_features: 40
           selected_features_path: data/train_params/selected_features.json
         train:
@@ -145,12 +147,12 @@ stages:
     deps:
     - path: data/train_params/best_params.json
       hash: md5
-      md5: fdabd45dffd30ce0dc2dd7fe732bc8f3
-      size: 113
+      md5: 99914b932bd37a50b983c5e7c90ae93b
+      size: 2
     - path: data/train_params/modelData.pkl
       hash: md5
-      md5: 6d2420445fc77a4cbd9181535ec2c6fb
-      size: 288393300
+      md5: a6b5da79d7b7d55bc8c2a41fcda53bc7
+      size: 309843556
     - path: data/train_params/selected_features.json
       hash: md5
       md5: 9ae4c88d0f7cdaec60f1a13e36f565e5
@@ -161,8 +163,8 @@ stages:
       size: 3411
     - path: src/stage_train_model.py
       hash: md5
-      md5: 9f9b54f9bd670f6936cd25d108422fe1
-      size: 4061
+      md5: 11dd34e637e98f61caa5a2c0eec83305
+      size: 4056
     params:
       params.yaml:
         base:
@@ -202,27 +204,27 @@ stages:
     outs:
     - path: models/model.joblib
       hash: md5
-      md5: 5109c66a0c3b9026a9ea62d95778f430
-      size: 2644290
+      md5: e54dd99b7533410764ff041e922bed56
+      size: 2644442
   evaluate_model:
     cmd: python src/stage_evaluate_model.py --params=params.yaml
     deps:
     - path: data/train_params/best_params.json
       hash: md5
-      md5: fdabd45dffd30ce0dc2dd7fe732bc8f3
-      size: 113
+      md5: 99914b932bd37a50b983c5e7c90ae93b
+      size: 2
     - path: data/train_params/modelData.pkl
       hash: md5
-      md5: 6d2420445fc77a4cbd9181535ec2c6fb
-      size: 288393300
+      md5: a6b5da79d7b7d55bc8c2a41fcda53bc7
+      size: 309843556
     - path: data/train_params/selected_features.json
       hash: md5
       md5: 9ae4c88d0f7cdaec60f1a13e36f565e5
       size: 150
     - path: models/model.joblib
       hash: md5
-      md5: 5109c66a0c3b9026a9ea62d95778f430
-      size: 2644290
+      md5: e54dd99b7533410764ff041e922bed56
+      size: 2644442
     - path: src/evaluation/validation_visuals.py
       hash: md5
       md5: d44607261f09b8de101499bb3ec2e1f7
@@ -276,13 +278,13 @@ stages:
     outs:
     - path: src/evaluation/confusion_matrix.png
       hash: md5
-      md5: fcf03680ccdb07edbf51e8b10ae6f485
-      size: 31024
+      md5: 9f8656f000ac8c527e6a663a5a7bb43f
+      size: 30496
     - path: src/evaluation/confusion_matrix_data.csv
       hash: md5
-      md5: 5de89ec6c70767968e9da3a46f03facf
-      size: 152113
+      md5: 556dc07db2f13518b7e2c6f13ebc5c0b
+      size: 163089
     - path: src/evaluation/metrics.json
       hash: md5
-      md5: f389336fb6e95b28695e5bc184d4e62c
+      md5: 666278c41a20555c2af7ccf29b04cf50
       size: 356
