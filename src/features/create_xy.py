@@ -102,34 +102,43 @@ def reconstruct_images(plot, df):
 
     return rows
 
-def create_label_arrays(v_train_data, local_dir):
-    '''
-    Checks if label arrays already exist on file.
-    Assumption is that they don't need to be recreated.
-    Iterates through each training data batch and 
-    ensures csvs are in the correct format with 
-    load_ceo_csv, then gathers the plot ids and
-    creates the numpy label arrays. Saves to 
-    output train-labels folder.
-    '''
+def create_label_arrays(v_train_data, local_dir, overwrite_list=['v08','v15','v21']):
+    """
+    Checks if label arrays exist and recreates them selectively.
+    If an overwrite list is provided, those specific versions will be reprocessed,
+    while others are only created if they do not exist.
+
+    Args:
+        v_train_data (list): List of training data versions.
+        local_dir (str): Directory path for label storage.
+        overwrite_list (list, optional): List of versions to overwrite. Defaults to None.
+    
+    Returns:
+        None
+    """
     directory = f"{local_dir}train-labels/"
-    
+
     for i in v_train_data:
-        labels_exist = any(file.startswith(i[1:]) for file in os.listdir(directory))
-        if labels_exist:
+        label_files = [file for file in os.listdir(directory) if file.startswith(i[1:])]
+        labels_exist = bool(label_files)
+
+        if labels_exist and i not in overwrite_list:
             print(f"Label arrays exist for {i}, skipping")
-        else:
-            print(f"Creating label arrays for {i}")
-            df = load_ceo_csv(i, local_dir)
-            plot_ids = sorted(df['PLOT_ID'].unique())
-            plot_fname = sorted(df['PLOT_FNAME'].unique())        
-            for i, x in zip(plot_ids, plot_fname):
-                #print(f"plot_ids:{i} plot_fname: {x}")
-                plot = reconstruct_images(i, df)
-                plot = np.array(plot)
-                np.save(f"{directory}{str(x).zfill(5)}.npy", plot)
-    
-    return plot
+            continue  # Skip existing labels unless overwrite is required
+
+        # Proceed with label array creation
+        print(f"Creating label arrays for {i}")
+        df = load_ceo_csv(i, local_dir)
+        plot_ids = sorted(df['PLOT_ID'].unique())
+        plot_fname = sorted(df['PLOT_FNAME'].unique())
+
+        for plot_id, fname in zip(plot_ids, plot_fname):
+            plot = reconstruct_images(plot_id, df)
+            plot = np.array(plot)
+            np.save(f"{directory}{str(fname).zfill(5)}.npy", plot)
+
+    print("Label array creation process complete.")
+
 
 def load_ard(idx, subsample, local_dir):
     """
@@ -342,18 +351,19 @@ def gather_plot_ids(v_train_data,
     no_ard = [p for p in plot_ids if not os.path.exists(f"{local_dir}{ttc_feats_dir}{p}.hkl")]
 
     # Optionally remove CleanLab flagged plots
-    # only saves final plots if cleanlab
     if drop_cleanlab:
         try:
             with open("data/cleanlab/round2/cleanlab_id_drops.json", "r") as file:
                 cl_issues = set(json.load(file))
             final_ard = [p for p in final_ard if p not in cl_issues]
-            logger.info("Writing plot IDs to file...")
-            with open("data/cleanlab/round2/final_plot_ids.json", "w") as file:
-                json.dump(final_ard, file)
         except FileNotFoundError:
             logger.warning("CleanLab ID file not found.")
 
+    # final plot ids are saved regardless (needed to interpret cleanlab results)
+    logger.info("Writing plot IDs to file...")
+    with open("data/cleanlab/round2/final_plot_ids.json", "w") as file:
+        json.dump(final_ard, file)
+    
     # Logging summary
     logger.info("SUMMARY")
     logger.info(f'{len(no_labels)} plots labeled "unknown" were dropped.')
