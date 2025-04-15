@@ -10,8 +10,8 @@ deploy:
   model_path: models/model.joblib
   model_type: classifier
   cleanup: false
-  overwrite: true
-  version: v28_pub
+  overwrite: false
+  version: clean_lab_v2
 
 postprocess:
   remove_noise: true
