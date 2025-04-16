@@ -357,7 +357,7 @@ def gather_plot_ids(v_train_data,
                 cl_issues = set(json.load(file))
             final_ard = [p for p in final_ard if p not in cl_issues]
         except FileNotFoundError:
-            logger.warning("CleanLab ID file not found.")
+            logger.warning("CleanLab ID file not found.")   
 
     # final plot ids are saved regardless (needed to interpret cleanlab results)
     logger.info("Writing plot IDs to file...")
