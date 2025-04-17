@@ -53,27 +53,27 @@ def train_model(param_path: Text) -> None:
 
     estimator_name = params["train"]["estimator_name"]
     model_path = f"{params['train']['model_name']}"
-    perform_fs = params["select"]["perform_fs"]
+    
+    use_selected_feats = params["select"]["use_selected_feats"]
     use_best_params = params["train"]["use_best_params"]
     tuned_params = params["train"]["estimators"][estimator_name]["param_grid"]
 
     logger.info(f"Model will be trained with the following conditions:") 
-    if perform_fs:  
+
+    if use_selected_feats:  
         model_data.filter_features(selected_features)
         logger.info(f"Selected features: {selected_features}.")
 
-    model_params = None
-
-    if use_best_params:
-        model_params = tuned_params
-
-    if model_params is None:
-        model_params = {}  # Ensure we pass a valid dictionary
-        model_params["loss_function"] = tuned_params['loss_function']
-        model_params["logging_level"] = tuned_params['logging_level']
+    if use_best_params and tuned_params:
+        model_params = tuned_params.copy()
+    else:
+        model_params = {
+            "loss_function": tuned_params["loss_function"],
+            "logging_level": tuned_params["logging_level"]
+        }
 
     model_params["class_weights"] = getattr(model_data, "class_weights", None)
-    logger.info(f"Hyperparameters {model_params}")
+    logger.info(f"Hyperparameters: {model_params}")
     logger.debug(f"X_train_reshaped: {model_data.X_train_reshaped.shape}")
     logger.debug(f"X_test_reshaped: {model_data.X_test_reshaped.shape}")
     logger.debug(f"y_train_reshaped: {model_data.y_train_reshaped.shape}")

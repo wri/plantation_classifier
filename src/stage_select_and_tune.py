@@ -32,6 +32,7 @@ def perform_selection_and_tuning(param_path: Text) -> None:
         
     perform_fs = params["select"]["perform_fs"]
     perform_tuning = params["tune"]["tune_hyperparameters"]
+    use_selected_feats = params["select"]["use_selected_feats"]
     
     if not perform_fs and not perform_tuning:
         logger.info("Skipping feature selection and tuning.")
@@ -60,8 +61,9 @@ def perform_selection_and_tuning(param_path: Text) -> None:
                 json.dump(obj=best_params, fp=fp)
                
         if perform_tuning:
-            # use model data to create feature selected and reshaped X_train
-            model_data.filter_features(selected_feats)
+            # safe to defensively reapply filter features here
+            if use_selected_feats:
+                model_data.filter_features(selected_feats)
             logger.info(
                 f"Starting random search with {params['tune']['n_iter']} samples"
             )
