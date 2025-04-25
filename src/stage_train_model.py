@@ -26,7 +26,7 @@ def train_model(param_path: Text) -> None:
         1. Load parameters from `params.yaml`.
         2. Initialize logger with the specified logging level.
         3. Load training data, selected features, and hyperparameters.
-        4. Apply feature selection if specified.
+        4. Apply feature selection if specified in configuration.
         5. Use either the best pre-tuned parameters or the provided parameter grid.
         6. Add class weights to the model configuration.
         7. Train the model using the selected estimator and hyperparameters.
@@ -38,8 +38,6 @@ def train_model(param_path: Text) -> None:
         - Debugging information about dataset dimensions.
         - Confirmation of successful model training and saving.
 
-    Note:
-        - Feature selection is only applied if explicitly enabled in the configuration.
     """
     with open(param_path) as file:
         params = yaml.safe_load(file)
@@ -94,7 +92,7 @@ def train_model(param_path: Text) -> None:
 
 
 if __name__ == "__main__":
-    args_parser = argparse.ArgumentParser()
+    args_parser = argparse.ArgumentParser()  
     args_parser.add_argument("--params", dest="params", required=True)
     args = args_parser.parse_args()
     train_model(param_path=args.params)
