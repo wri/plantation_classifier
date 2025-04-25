@@ -102,34 +102,43 @@ def reconstruct_images(plot, df):
 
     return rows
 
-def create_label_arrays(v_train_data, local_dir):
-    '''
-    Checks if label arrays already exist on file.
-    Assumption is that they don't need to be recreated.
-    Iterates through each training data batch and 
-    ensures csvs are in the correct format with 
-    load_ceo_csv, then gathers the plot ids and
-    creates the numpy label arrays. Saves to 
-    output train-labels folder.
-    '''
+def create_label_arrays(v_train_data, local_dir, overwrite_list=['v08','v15','v21']):
+    """
+    Checks if label arrays exist and recreates them selectively.
+    If an overwrite list is provided, those specific versions will be reprocessed,
+    while others are only created if they do not exist.
+
+    Args:
+        v_train_data (list): List of training data versions.
+        local_dir (str): Directory path for label storage.
+        overwrite_list (list, optional): List of versions to overwrite. Defaults to None.
+    
+    Returns:
+        None
+    """
     directory = f"{local_dir}train-labels/"
-    
+
     for i in v_train_data:
-        labels_exist = any(file.startswith(i[1:]) for file in os.listdir(directory))
-        if labels_exist:
+        label_files = [file for file in os.listdir(directory) if file.startswith(i[1:])]
+        labels_exist = bool(label_files)
+
+        if labels_exist and i not in overwrite_list:
             print(f"Label arrays exist for {i}, skipping")
-        else:
-            print(f"Creating label arrays for {i}")
-            df = load_ceo_csv(i, local_dir)
-            plot_ids = sorted(df['PLOT_ID'].unique())
-            plot_fname = sorted(df['PLOT_FNAME'].unique())        
-            for i, x in zip(plot_ids, plot_fname):
-                #print(f"plot_ids:{i} plot_fname: {x}")
-                plot = reconstruct_images(i, df)
-                plot = np.array(plot)
-                np.save(f"{directory}{str(x).zfill(5)}.npy", plot)
-    
-    return plot
+            continue  # Skip existing labels unless overwrite is required
+
+        # Proceed with label array creation
+        print(f"Creating label arrays for {i}")
+        df = load_ceo_csv(i, local_dir)
+        plot_ids = sorted(df['PLOT_ID'].unique())
+        plot_fname = sorted(df['PLOT_FNAME'].unique())
+
+        for plot_id, fname in zip(plot_ids, plot_fname):
+            plot = reconstruct_images(plot_id, df)
+            plot = np.array(plot)
+            np.save(f"{directory}{str(fname).zfill(5)}.npy", plot)
+
+    print("Label array creation process complete.")
+
 
 def load_ard(idx, subsample, local_dir):
     """
@@ -257,10 +266,22 @@ def load_label(idx, ttc, classes, local_dir):
     Unless they are stored as (196,) and need to be reshaped.
     Dtype needs to be converted to float32.
 
-    For binary (2 class) classification, update labels by converting
-    AF to 1. For 3 class classification, leave labels as is. For
-    4 class classification, use the ttc data to update labels
-    for any pixel labeled 0 with >= 20% TTC tree cover as natural trees.
+    Label updates depend on the classification setting:
+    
+    - For binary (2-class) classification:
+        Converts agroforestry (label 2) to 1, so both monoculture 
+        and agroforestry are grouped as trees.
+
+    - For 4-class classification:
+        Labels are updated based on tree cover (`ttc`) as follows:
+        - If a pixel is labeled 0 (no tree), but has >= 20% tree cover in `ttc`, 
+        it's reclassified as natural tree (label 3).
+        - If tree cover is ≤ 10%, the pixel is explicitly labeled as no tree (label 0), 
+        overriding any other value.
+    
+    This approach uses masks to identify specific conditions where pixel 
+    labels should be adjusted based on tree cover.
+
 
     0: no tree
     1: monoculture
@@ -295,50 +316,74 @@ def load_label(idx, ttc, classes, local_dir):
     return labels
 
 
-def gather_plot_ids(v_train_data, local_dir, ttc_feats_dir, logger):
+def gather_plot_ids(v_train_data, 
+                    local_dir, 
+                    ttc_feats_dir, 
+                    logger, 
+                    drop_cleanlab=True
+                    ):
     """
     Cleans the downloaded CEO survey to meet requirements.
     Creates a list of plot ids to process. Drops all plots with
-    "unknown" labels and plots w/o s2 imagery. Returns list of plot_ids.
+    "unknown" labels and plots w/o s2 imagery. Optionally removes
+    plots flagged by CleanLab.
+
+    Args:
+        v_train_data (list): List of training data versions.
+        local_dir (str): Directory path for data storage.
+        ttc_feats_dir (str): Directory path for TTC features.
+        logger (Logger): Logger for logging info.
+        drop_cleanlab_issues (bool, optional): Whether to drop CleanLab flagged plots. Defaults to True.
+
+    Returns:
+        list: Final list of plot IDs for training.
     """
 
-    # use CEO csv to gather plot id numbers
     plot_ids = []
     no_labels = []
 
     for i in v_train_data:
         df = pd.read_csv(f"{local_dir}ceo-plantations-train-{i}.csv")
-        # assert unknown labels are always a full 14x14 (196 points) of unknowns
+
+        # Identify and drop "unknown" label plots
         unknowns = df[df.PLANTATION == 255]
         no_labels.extend(sorted(list(set(unknowns.PLOT_FNAME))))
-        for plot in set(list(unknowns.PLOT_ID)):
-            assert (
-                len(unknowns[unknowns.PLOT_ID == plot]) == 196
-            ), f"WARNING: {plot} has {len(unknowns[unknowns.PLOT_ID == plot])}/196 points labeled unknown."
 
-        # drop unknowns and add to full list
+        for plot in set(unknowns.PLOT_ID):
+            assert len(unknowns[unknowns.PLOT_ID == plot]) == 196, \
+                f"WARNING: {plot} has {len(unknowns[unknowns.PLOT_ID == plot])}/196 points labeled unknown."
+
+        # Remove "unknown" plots and collect remaining plot IDs
         labeled = df.drop(unknowns.index)
         plot_ids += labeled.PLOT_FNAME.drop_duplicates().tolist()
 
-    # add leading 0 to plot_ids that do not have 5 digits
-    plot_ids = [str(item).zfill(5) if len(str(item)) < 5 else str(item) for item in plot_ids]
-    final_ard = [plot for plot in plot_ids if os.path.exists(f"{local_dir}{ttc_feats_dir}{plot}.hkl")]
-    no_ard = [plot for plot in plot_ids if not os.path.exists(f"{local_dir}{ttc_feats_dir}{plot}.hkl")]
+    # Format plot IDs to ensure consistent length (5 digits)
+    plot_ids = [str(p).zfill(5) if len(str(p)) < 5 else str(p) for p in plot_ids]
+    final_ard = [p for p in plot_ids if os.path.exists(f"{local_dir}{ttc_feats_dir}{p}.hkl")]
+    no_ard = [p for p in plot_ids if not os.path.exists(f"{local_dir}{ttc_feats_dir}{p}.hkl")]
 
-    # remove problematic plots from cleanlab assessment
-    with open("data/cleanlab/cleanlab_id_drops.json", "r") as file:
-        cl_issues = json.load(file)
-    cl_issues = set(cl_issues)
-    final = [plot for plot in final_ard if plot not in cl_issues]
+    # Optionally remove CleanLab flagged plots
+    if drop_cleanlab:
+        try:
+            with open("data/cleanlab/round2/cleanlab_id_drops.json", "r") as file:
+                cl_issues = set(json.load(file))
+            final_ard = [p for p in final_ard if p not in cl_issues]
+        except FileNotFoundError:
+            logger.warning("CleanLab ID file not found.")   
 
+    # final plot ids are saved regardless (needed to interpret cleanlab results)
+    logger.info("Writing plot IDs to file...")
+    with open("data/cleanlab/round2/final_plot_ids.json", "w") as file:
+        json.dump(final_ard, file)
+    
+    # Logging summary
+    logger.info("SUMMARY")
     logger.info(f'{len(no_labels)} plots labeled "unknown" were dropped.')
     logger.info(f"{len(no_ard)} plots did not have ARD.")
-    logger.info(f"Training data batch includes: {len(final)} plots.")
-    logger.info(f"Writing plot ids to file..")
-    with open("data/cleanlab/plot_ids_v2.json", "w") as file:
-        json.dump(final, file)
+    logger.info(f"Training data batch includes: {len(final_ard)} plots.")
 
-    return final
+    return final_ard
+
 
 
 def make_sample(sample_shape, s2, slope, s1, txt, ttc):
@@ -389,7 +434,12 @@ def build_training_sample(train_batch, classes, params_path, logger):
     ttc_feats_dir = params["data_load"]["ttc_feats_dir"]
     if params['data_load']['create_labels']:
         create_label_arrays(train_batch, train_data_dir)
-    plot_ids = gather_plot_ids(train_batch, train_data_dir, ttc_feats_dir, logger)
+    cleanlab = params["data_load"]["drop_cleanlab_ids"]
+    plot_ids = gather_plot_ids(train_batch, 
+                               train_data_dir, 
+                               ttc_feats_dir, 
+                               logger,
+                               cleanlab)
     logger.info(f"{len(plot_ids)} plots will be used in training.")
 
     # create empty x and y array based on number of plots
@@ -423,8 +473,7 @@ def build_training_sample(train_batch, classes, params_path, logger):
         y = load_label(plot, ttc, classes, train_data_dir)
         x_all[num] = X
         y_all[num] = y
-    
-    # # save x and y
+
     print("Saving X and y on file")
 
    # Reshape the arrays to make them pixel-wise
@@ -436,7 +485,7 @@ def build_training_sample(train_batch, classes, params_path, logger):
     df['label'] = labels_flat
 
     # Saving the DataFrame to a CSV file
-    df.to_csv('data/cleanlab/cleanlab_demo3.csv', index=False)
+    df.to_csv('data/cleanlab/round2/cleanlab_xy.csv', index=False) # this was named demo
 
     # check class balance
     labels, counts = np.unique(y_all, return_counts=True)

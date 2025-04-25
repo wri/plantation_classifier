@@ -10,8 +10,8 @@ deploy:
   model_path: models/model.joblib
   model_type: classifier
   cleanup: false
-  overwrite: true
-  version: v28_pub
+  overwrite: false
+  version: v30
 
 postprocess:
   remove_noise: true
@@ -25,6 +25,7 @@ data_load:
   local_prefix: data/
   ttc_feats_dir: train-features-ard/
   create_labels: false       # Update
+  drop_cleanlab_ids: true   # Update
   ceo_survey:
     - v08
     - v14
@@ -46,12 +47,13 @@ data_condition:
   modelData_path: data/train_params/modelData.pkl
 
 select:
-  select_features: False       # Update
+  perform_fs: false       # Update
+  use_selected_feats: true  # Update
   max_features: 40
   selected_features_path: data/train_params/selected_features.json
 
 tune:
-  tune_hyperparameters: False   # Update
+  tune_hyperparameters: false   # Update
   n_iter: 25
   cv: 3
   plot: False
@@ -79,7 +81,7 @@ tune:
   best_params: data/train_params/best_params.json
 
 train:
-  use_best_params: False        # Update - true following tuning
+  use_best_params: true        # Update - true following tuning
   model_dir: models/ 
   model_name: models/model.joblib
   estimator_name: cat
@@ -94,11 +96,10 @@ train:
         random_state: 121
         logging_level: Silent 
         depth: 10
-        iterations: 1200
+        iterations: 600
         l2_leaf_reg: 20
-        min_data_in_leaf: 1680
-        learning_rate: 0.02   
-        # early_stopping_rounds: 10
+        min_data_in_leaf: 1240
+        learning_rate: 0.04   
 
 evaluate:
   metrics_file: src/evaluation/metrics

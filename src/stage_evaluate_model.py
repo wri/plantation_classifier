@@ -57,10 +57,14 @@ def evaluate_model(params_path: Text) -> None:
     with open(params["data_condition"]["modelData_path"], "rb") as fp:
         model_data = pickle.load(fp)
     with open(params["select"]["selected_features_path"], "r") as fp:
-        selected_features = json.load(fp)
- 
-    model_data.filter_features(selected_features)
-    #   model_params["class_weights"] = model_data.class_weights
+        selected_feats = json.load(fp)
+    use_selected_feats = params["select"]["use_selected_feats"]
+    
+    # safe to defensively reapply filter features here (in case model data obj was not saved)
+    if use_selected_feats:
+        model_data.filter_features(selected_feats)
+
+    logger.info(f"Number of features at evaluation: {model_data.X_test_reshaped.shape[-1]}")
 
     logger.info("Evaluating (building report)")
     prediction = model.predict(model_data.X_test_reshaped)
@@ -100,7 +104,7 @@ def evaluate_model(params_path: Text) -> None:
                 "balanced_accuracy_score": balanced_accuracy,
                 "precision_score": precision,
                 "recall_score": recall,
-                "features": selected_features,
+                "features": selected_feats,
             },
             fp=fp,
         )

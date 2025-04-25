@@ -68,7 +68,8 @@ def calculate_smpl_size(population, size):
 
 def buffer_training_pts(buffer_dist, 
                         train_batches,
-                        valv1):
+                        valv1,
+                        valv2):
     '''
     This function creates a buffer zone around each training plot to prevent
     overlap between the training and validation samples. First, all plot level CEO surveys
@@ -88,6 +89,9 @@ def buffer_training_pts(buffer_dist,
         if valv1 != None:
             val = pd.read_csv(valv1) 
             df_list.append(val)
+        if valv2 != None:
+            val2 = pd.read_csv(valv2) 
+            df_list.append(val2)
     df_master = pd.concat(df_list, ignore_index=True)
 
     # Create buffer zone around each plot (calc plot radius + buffer)
@@ -103,7 +107,6 @@ def buffer_training_pts(buffer_dist,
     buffer_zone.to_file(f'../../data/validation/buffer.shp')
     return buffer_zone
 
-
 def sample_raster_by_class(raster_file, 
                            total_samples, 
                            class_proportions,
@@ -111,13 +114,13 @@ def sample_raster_by_class(raster_file,
                            outfile):
     '''
     Overlays the provided raster with the buffer zone. Samples the mask for each land cover class 
-    and calculates total_samples count of geo-referenced points given class_proporations.
+    and calculates total_samples count of geo-referenced points given class_proportions.
     Returns a GeoDataFrame containing sampled points with geographic coordinates and raster values
     '''
     with rs.open(raster_file) as src:
         raster = src.read(1)
         crs = src.crs
-        transform=src.transform
+        transform = src.transform
 
     buffer_mask = geometry_mask(buffer_zone.geometry,
                                 transform=transform,
@@ -126,32 +129,32 @@ def sample_raster_by_class(raster_file,
 
     gdf = gpd.GeoDataFrame(columns=['geometry', 'value'], crs=crs)
     print(f"Total_samples: {total_samples}")
+
     for cls, proportion in class_proportions.items():
         class_mask = (raster == cls) & (buffer_mask)
         num_samples = int((proportion / 100) * total_samples)
         class_indices = np.argwhere(class_mask)
 
-        print(f"Sampling {num_samples} points for class {cls} out of {class_indices.shape[0]} available pixels.")
+        # Check if there are enough pixels available before sampling
+        available_pixels = class_indices.shape[0]
+        if available_pixels == 0:
+            print(f"Skipping class {cls}: No available pixels in mask.")
+            continue  # Skip this class and move to the next
+
+        if available_pixels < num_samples:
+            print(f"Warning: Not enough pixels for class {cls}.")
+            num_samples = available_pixels  
+
+        print(f"Sampling {num_samples} points for class {cls} out of {available_pixels} available pixels.")
+
+        # Sample pixel indices
+        sampled_indices = np.random.choice(available_pixels, size=num_samples, replace=False)
+        sampled_pixel_coords = class_indices[sampled_indices]
+
+        # Convert sampled pixel indices to geographic coordinates
+        geo_points = [Point(*rs.transform.xy(transform, row, col)) for row, col in sampled_pixel_coords]
         
-        # Randomly sample pixel indices from the available 
-        # class pixels until num_samples is reached
-        geo_points = []
-        while len(geo_points) < num_samples:
-            sampled_indices = np.random.choice(class_indices.shape[0], 
-                                            size=num_samples,
-                                            replace=False)
-
-            sampled_pixel_coords = class_indices[sampled_indices]
-
-            # Convert sampled pixel indices to geographic coordinates
-            for row, col in sampled_pixel_coords:
-                lon, lat = rs.transform.xy(transform, row, col)
-                point = Point(lon, lat)
-                geo_points.append(point)
-                    
         temp_gdf = gpd.GeoDataFrame(geometry=geo_points, crs=crs)
-
-        # Now sample raster values at the sampled points
         temp_gdf['value'] = [raster[row, col] for row, col in sampled_pixel_coords]
         gdf = pd.concat([gdf, temp_gdf], ignore_index=True)
 
@@ -164,6 +167,7 @@ def run_validation_workflow(raster_file,
                             buffer_distance,
                             params_path,
                             valv1=None,
+                            valv2=None,
                             total_samples=None,
                             ):
 
@@ -175,7 +179,7 @@ def run_validation_workflow(raster_file,
     Steps:
         1. Calculates total area of map and class distribution
         2. Creates a buffer zone around training plots (and previous
-        validation survey if filename provided)
+        validation survey if filenames are provided)
         3. Performs stratified random sampling for each class
 
     '''
@@ -186,8 +190,8 @@ def run_validation_workflow(raster_file,
     total_pixels, class_prop = calculate_class_distribution(raster_file)
     if total_samples is None:
         total_samples = calculate_smpl_size(total_pixels, size=None)
-    buffer_zone = buffer_training_pts(buffer_distance, train_surveys, valv1)
-    class_prop = {0: 20, 1: 25, 2: 25, 3: 30}
+    buffer_zone = buffer_training_pts(buffer_distance, train_surveys, valv1, valv2)
+    #class_prop = {0: 0, 1: 100, 2: 0, 3: 0}
     sampled_points = sample_raster_by_class(raster_file, 
                                             total_samples, 
                                             class_prop,
