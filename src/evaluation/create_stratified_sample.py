@@ -191,7 +191,7 @@ def run_validation_workflow(raster_file,
     if total_samples is None:
         total_samples = calculate_smpl_size(total_pixels, size=None)
     buffer_zone = buffer_training_pts(buffer_distance, train_surveys, valv1, valv2)
-    class_prop = {0: 0, 1: 100, 2: 0, 3: 0}
+    #class_prop = {0: 0, 1: 100, 2: 0, 3: 0}
     sampled_points = sample_raster_by_class(raster_file, 
                                             total_samples, 
                                             class_prop,
