@@ -266,10 +266,22 @@ def load_label(idx, ttc, classes, local_dir):
     Unless they are stored as (196,) and need to be reshaped.
     Dtype needs to be converted to float32.
 
-    For binary (2 class) classification, update labels by converting
-    AF to 1. For 3 class classification, leave labels as is. For
-    4 class classification, use the ttc data to update labels
-    for any pixel labeled 0 with >= 20% TTC tree cover as natural trees.
+    Label updates depend on the classification setting:
+    
+    - For binary (2-class) classification:
+        Converts agroforestry (label 2) to 1, so both monoculture 
+        and agroforestry are grouped as trees.
+
+    - For 4-class classification:
+        Labels are updated based on tree cover (`ttc`) as follows:
+        - If a pixel is labeled 0 (no tree), but has >= 20% tree cover in `ttc`, 
+        it's reclassified as natural tree (label 3).
+        - If tree cover is ≤ 10%, the pixel is explicitly labeled as no tree (label 0), 
+        overriding any other value.
+    
+    This approach uses masks to identify specific conditions where pixel 
+    labels should be adjusted based on tree cover.
+
 
     0: no tree
     1: monoculture
