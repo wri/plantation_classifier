@@ -104,7 +104,7 @@ def evaluate_model(params_path: Text) -> None:
                 "balanced_accuracy_score": balanced_accuracy,
                 "precision_score": precision,
                 "recall_score": recall,
-                "features": selected_features,
+                "features": selected_feats,
             },
             fp=fp,
         )
