@@ -4,10 +4,14 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader 
 import numpy as np
 import os
+import yaml
+from utils.logs import get_logger
+from features import create_xy, PlantationsData
 
 class ConvBlock(nn.Module):
     """
-    A convolutional block that consists of:
+    One deep convolutional layer capturing abstract spatial features.
+    Consists of:
     - Conv2D layer
     - Batch Normalization
     - ReLU Activation
@@ -81,27 +85,37 @@ class UNet(nn.Module):
         output = self.final(d1)
         return output
 
-class TreeDataset(Dataset):
-    """
-    Custom PyTorch dataset for loading Sentinel and tree feature data.
-    """
-    def __init__(self, data_dir):
-        self.data_dir = data_dir
-        self.files = [f for f in os.listdir(data_dir) if f.endswith(".npy")]
+class Dataset(Dataset):
+    '''
+    Creates a custom PyTorch dataset for loading Sentinel and texture features.
+    '''
+    def __init__(self, X, y):
+        self.X = X
+        self.y = y
     
     def __len__(self):
-        return len(self.files)
+        return len(self.X)
     
     def __getitem__(self, idx):
-        data_path = os.path.join(self.data_dir, self.files[idx])
-        sample = np.load(data_path)
-        
-        # First 94 bands are features
-        x = sample[:, :, :94]
-        x = np.transpose(x, (2, 0, 1))  # Convert to (C, H, W) for PyTorch
-        
-        # Last band is the label
-        y = sample[:, :, 94]
-        y = torch.tensor(y, dtype=torch.long)
-        
-        return torch.tensor(x, dtype=torch.float32), y
+        x = self.X[idx]
+        x = np.transpose(x, (2, 0, 1))  # (channels, height, width) for CNN
+        y_label = self.y[idx]
+        return torch.tensor(x, dtype=torch.float32), torch.tensor(y_label, dtype=torch.long)
+
+param_path = # specify
+with open(param_path) as file:
+    params = yaml.safe_load(file)
+train_batch = params["data_load"]["ceo_survey"]
+classes= params["data_condition"]["classes"]
+logger = get_logger("FEATURIZE", log_level=params["base"]["log_level"])
+n_feats = # specify
+X, y = create_xy.build_training_sample_CNN(train_batch, 
+                                           classes, 
+                                           n_feats, 
+                                           param_path, 
+                                           logger)
+
+dataset = Dataset(X, y)
+dataloader = DataLoader(dataset, batch_size=16, shuffle=True)
+
+

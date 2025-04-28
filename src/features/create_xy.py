@@ -498,3 +498,55 @@ def build_training_sample(train_batch, classes, params_path, logger):
         logger.info(f"{int(key)}: {val}%")
 
     return x_all, y_all
+
+
+def build_training_sample_CNN(train_batch, classes, n_feats, params_path, logger):
+    """
+    Need to recreate the x and y so they are not reshaped to pixel-wise rows,
+    there is no scaling, no validation (assuming everything is ok) 
+    and there are no TTC features included
+    """
+    with open(params_path) as file:
+        params = yaml.safe_load(file)
+
+    train_data_dir = params["data_load"]["local_prefix"]
+    ttc_feats_dir = params["data_load"]["ttc_feats_dir"]
+    if params['data_load']['create_labels']:
+        create_label_arrays(train_batch, train_data_dir)
+    cleanlab = params["data_load"]["drop_cleanlab_ids"]
+    plot_ids = gather_plot_ids(train_batch, 
+                               train_data_dir, 
+                               ttc_feats_dir, 
+                               logger,
+                               cleanlab)
+    logger.info(f"{len(plot_ids)} plots will be used in training.")
+
+    # create empty x and y array based on number of plots
+    # x.shape is (plots, 14, 14, n_feats) y.shape is (plots, 14, 14)
+    sample_shape = (14, 14)
+   
+    n_samples = len(plot_ids)
+    y_all = np.zeros(shape=(n_samples, sample_shape[0], sample_shape[1]), dtype=np.float32)
+    x_all = np.zeros(shape=(n_samples, sample_shape[0], sample_shape[1], n_feats), dtype=np.float32)
+    med_indices = params["data_condition"]["ard_subsample"]
+
+    for num, plot in enumerate(tqdm(plot_ids)):
+        ard = load_ard(plot, med_indices, train_data_dir)
+        ttc = load_ttc(plot, ttc_feats_dir, train_data_dir) # still needed for labels
+        txt = load_txt(plot, train_data_dir)
+
+        X = make_sample(
+            sample_shape,
+            ard[..., 0:10],
+            ard[..., 10:11],
+            ard[..., 11:13],
+            txt,
+        )
+
+        y = load_label(plot, ttc, classes, train_data_dir)
+        x_all[num] = X
+        y_all[num] = y
+
+    print("Saving X and y on file")
+
+    return x_all, y_all
