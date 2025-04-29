@@ -386,13 +386,24 @@ def gather_plot_ids(v_train_data,
 
 
 
-def make_sample(sample_shape, s2, slope, s1, txt, ttc):
+def make_sample(sample_shape, s2, slope, s1, txt, ttc, plot):
     """
-    Defines dimensions and then combines slope, s1, s2, TML features and
-    texture features from a plot into a sample with shape (14, 14, 94)
-    Feature select is a list of features that will be used, otherwise empty list
-    Prepares sample plots by combining ARD and features
-    and performing feature selection
+    Combines ARD features (s2, slope, s1), TTC features, and texture 
+    features into a single sample with shape (14, 14, 94).
+    required order: s2, dem, s1, ttc, txt
+    
+    If a plot is specified, select a non contiguous slice of only 
+    sentinel & glcm txt features and same sample to hkl file
+
+    Args:
+        sample_shape: Tuple (height, width) for the output sample (usually (14,14)).
+        s2: Sentinel-2 bands array.
+        slope: DEM-derived slope array.
+        s1: Sentinel-1 bands array.
+        txt: GLCM texture features array.
+        ttc: TTC tree features array.
+        plot: (optional) Plot ID. If provided, saves sample to hkl file.
+
     """
     # prepare the feats (this is done first bc of feature selection)
     # squeeze extra axis that is added (14,14,1,15) -> (14,14,15)
@@ -406,14 +417,17 @@ def make_sample(sample_shape, s2, slope, s1, txt, ttc):
     # define the last dimension of the array
     n_feats = 1 + s1.shape[-1] + s2.shape[-1] + feats.shape[-1]
     sample = np.zeros((sample_shape[0], sample_shape[1], n_feats), dtype=np.float32)
-
-    # populate empty array with each feature
-    # order: s2, dem, s1, ttc, txt
     sample[..., 0:10] = s2
     sample[..., 10:11] = slope
     sample[..., 11:13] = s1
     sample[..., 13:] = feats
 
+    if plot is not None:
+        pytorch_feats = np.r_[0:13, 78:94]  
+        sample_reduced = sample[..., pytorch_feats]
+        output_dir = "../../data/train-pytorch/"
+        hkl.dump(sample_reduced, os.path.join(output_dir, f"{plot}.hkl"))
+    
     return sample
 
 
@@ -468,6 +482,7 @@ def build_training_sample(train_batch, classes, params_path, logger):
             ard[..., 11:13],
             txt,
             ttc,
+            plot=None,
         )
 
         y = load_label(plot, ttc, classes, train_data_dir)
@@ -503,7 +518,7 @@ def build_training_sample(train_batch, classes, params_path, logger):
 def build_training_sample_CNN(train_batch, classes, n_feats, params_path, logger):
     """
     Need to recreate the x and y so they are not reshaped to pixel-wise rows,
-    there is no scaling, no validation (assuming everything is ok) 
+    there is no scaling, no QAQC check (assuming everything is ok) 
     and there are no TTC features included
     """
     with open(params_path) as file:
@@ -511,8 +526,6 @@ def build_training_sample_CNN(train_batch, classes, n_feats, params_path, logger
 
     train_data_dir = params["data_load"]["local_prefix"]
     ttc_feats_dir = params["data_load"]["ttc_feats_dir"]
-    if params['data_load']['create_labels']:
-        create_label_arrays(train_batch, train_data_dir)
     cleanlab = params["data_load"]["drop_cleanlab_ids"]
     plot_ids = gather_plot_ids(train_batch, 
                                train_data_dir, 
@@ -541,12 +554,12 @@ def build_training_sample_CNN(train_batch, classes, n_feats, params_path, logger
             ard[..., 10:11],
             ard[..., 11:13],
             txt,
+            ttc,
+            plot,
         )
 
         y = load_label(plot, ttc, classes, train_data_dir)
         x_all[num] = X
         y_all[num] = y
-
-    print("Saving X and y on file")
 
     return x_all, y_all
