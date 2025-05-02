@@ -88,34 +88,49 @@ class UNet(nn.Module):
 class Dataset(Dataset):
     '''
     Creates a custom PyTorch dataset for loading Sentinel and texture features.
+    this needs to load in a single plot of size (1, 29, 14, 14)
     '''
-    def __init__(self, X, y):
-        self.X = X
-        self.y = y
+    def __init__(self, dataset_path,):
+        self.dataset_path = dataset_path
+        self.datapoints = os.listdir(self.dataset_path + 'train-pytorch/')
+        self.datapoints = [x for x in self.datapoints if x[-4:] == '.hkl']
+        # how do i load in the y values?
     
     def __len__(self):
         return len(self.X)
     
     def __getitem__(self, idx):
+        img_path = os.path.join(self.dataset_path, 'train-pytorch/')
+        target_path = os.path.join(self.dataset_path, 'train-labels/')
+        input = hkl.load(img_path + self.datapoints[idx])
+        output = np.load(target_path + self.datapoints[idx][:-4] + ".npy")
+        # confirm if these steps are necessary?
         x = self.X[idx]
         x = np.transpose(x, (2, 0, 1))  # (channels, height, width) for CNN
         y_label = self.y[idx]
         return torch.tensor(x, dtype=torch.float32), torch.tensor(y_label, dtype=torch.long)
 
-param_path = # specify
-with open(param_path) as file:
-    params = yaml.safe_load(file)
-train_batch = params["data_load"]["ceo_survey"]
-classes= params["data_condition"]["classes"]
-logger = get_logger("FEATURIZE", log_level=params["base"]["log_level"])
-n_feats = # specify
-X, y = create_xy.build_training_sample_CNN(train_batch, 
-                                           classes, 
-                                           n_feats, 
-                                           param_path, 
-                                           logger)
 
-dataset = Dataset(X, y)
-dataloader = DataLoader(dataset, batch_size=16, shuffle=True)
+
+  # this process needs to import each plot in the img_path "data/train-pytorch", 
+  # which is a (14,14,29) array and import each corresponding plot in the target_path
+  # "data/train-labels" which is a (14, 14) array, using __getitem__.
+  # Normalization needs to happen to center the training dataset around 0
+  # the data should be loaded as individual tiles and then batched and fed to the model
+  # in batch_size
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--params", dest = 'param_path', type = str)
+    args = parser.parse_args()
+
+    with open(args.param_path) as file:
+        params = yaml.safe_load(file)
+
+    dataset = Dataset("../../data/") # what does Dataset take as input?
+    dataloader = DataLoader(dataset, 
+                            batch_size=params['pytorch']['batch_size'], 
+                            shuffle=True)
 
 
