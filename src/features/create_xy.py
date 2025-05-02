@@ -365,7 +365,7 @@ def gather_plot_ids(v_train_data,
     # Optionally remove CleanLab flagged plots
     if drop_cleanlab:
         try:
-            with open("data/cleanlab/round2/cleanlab_id_drops.json", "r") as file:
+            with open(f"{local_dir}cleanlab/round2/cleanlab_id_drops.json", "r") as file:
                 cl_issues = set(json.load(file))
             final_ard = [p for p in final_ard if p not in cl_issues]
         except FileNotFoundError:
@@ -373,7 +373,7 @@ def gather_plot_ids(v_train_data,
 
     # final plot ids are saved regardless (needed to interpret cleanlab results)
     logger.info("Writing plot IDs to file...")
-    with open("data/cleanlab/round2/final_plot_ids.json", "w") as file:
+    with open(f"{local_dir}cleanlab/round2/final_plot_ids.json", "w") as file:
         json.dump(final_ard, file)
     
     # Logging summary
@@ -424,9 +424,9 @@ def make_sample(sample_shape, s2, slope, s1, txt, ttc, plot):
 
     if plot is not None:
         pytorch_feats = np.r_[0:13, 78:94]  
-        sample_reduced = sample[..., pytorch_feats]
-        output_dir = "../../data/train-pytorch/"
-        hkl.dump(sample_reduced, os.path.join(output_dir, f"{plot}.hkl"))
+        sample_reduced = sample[..., pytorch_feats] 
+        hkl.dump(sample_reduced, os.path.join('../../data/train-pytorch/', f"{plot}.hkl"))
+        return sample_reduced
     
     return sample
 
@@ -518,7 +518,7 @@ def build_training_sample(train_batch, classes, params_path, logger):
 def build_training_sample_CNN(train_batch, classes, n_feats, params_path, logger):
     """
     Need to recreate the x and y so they are not reshaped to pixel-wise rows,
-    there is no scaling, no QAQC check (assuming everything is ok) 
+    there is no scaling, no QAQC check (all inputs have already passed checks) 
     and there are no TTC features included
     """
     with open(params_path) as file:
