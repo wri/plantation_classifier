@@ -2,11 +2,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader 
+from torch.utils.data import random_split
 import numpy as np
 import os
 import yaml
-from utils.logs import get_logger
-from features import create_xy, PlantationsData
+import hickle as hkl
+import random
 
 class ConvBlock(nn.Module):
     """
@@ -34,6 +35,7 @@ class ConvBlock(nn.Module):
 class UNet(nn.Module):
     """
     U-Net model modified for 4-class land use classification.
+    out_channels=64 is a common U-Net pattern and a design decision
     """
     def __init__(self, in_channels=94, num_classes=4):
         super().__init__()
@@ -88,49 +90,116 @@ class UNet(nn.Module):
 class Dataset(Dataset):
     '''
     Creates a custom PyTorch dataset for loading Sentinel and texture features.
-    this needs to load in a single plot of size (1, 29, 14, 14)
+    __getitem__ loads a single sample (img and corresponding target) one at a time
     '''
-    def __init__(self, dataset_path,):
-        self.dataset_path = dataset_path
-        self.datapoints = os.listdir(self.dataset_path + 'train-pytorch/')
-        self.datapoints = [x for x in self.datapoints if x[-4:] == '.hkl']
-        # how do i load in the y values?
+    def __init__(self, dataset_path):
+        self.img_path = os.path.join(dataset_path, 'train-pytorch/')
+        self.target_path = os.path.join(dataset_path, 'train-labels/')
+        self.datapoints = [f for f in os.listdir(self.img_path) if f.endswith('.hkl')]
     
     def __len__(self):
-        return len(self.X)
+        return len(self.datapoints)
     
     def __getitem__(self, idx):
-        img_path = os.path.join(self.dataset_path, 'train-pytorch/')
-        target_path = os.path.join(self.dataset_path, 'train-labels/')
-        input = hkl.load(img_path + self.datapoints[idx])
-        output = np.load(target_path + self.datapoints[idx][:-4] + ".npy")
-        # confirm if these steps are necessary?
-        x = self.X[idx]
-        x = np.transpose(x, (2, 0, 1))  # (channels, height, width) for CNN
-        y_label = self.y[idx]
-        return torch.tensor(x, dtype=torch.float32), torch.tensor(y_label, dtype=torch.long)
+        img_file = self.datapoints[idx]
+        img = hkl.load(os.path.join(self.img_path, img_file))  # (14,14,29)
+        img = (img - np.mean(img)) / np.std(img)  # this step normalizes
+        img = np.transpose(img, (2,0,1))  # (29,14,14)
+        img_tensor = torch.tensor(img, dtype=torch.float32)
+        
+        label_file = img_file.replace('.hkl', '.npy')
+        label = np.load(os.path.join(self.target_path, label_file))  # (14,14)
+        label_tensor = torch.tensor(label, dtype=torch.long)
+        
+        return img_tensor, label_tensor
 
 
-
-  # this process needs to import each plot in the img_path "data/train-pytorch", 
-  # which is a (14,14,29) array and import each corresponding plot in the target_path
-  # "data/train-labels" which is a (14, 14) array, using __getitem__.
-  # Normalization needs to happen to center the training dataset around 0
-  # the data should be loaded as individual tiles and then batched and fed to the model
-  # in batch_size
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--params", dest = 'param_path', type = str)
+    parser.add_argument("--params", dest='param_path', type=str)
     args = parser.parse_args()
 
     with open(args.param_path) as file:
         params = yaml.safe_load(file)
 
-    dataset = Dataset("../../data/") # what does Dataset take as input?
-    dataloader = DataLoader(dataset, 
+    # uses same random_state and split sizes from params.yaml
+    random_state = params['base']['random_state']
+    torch.manual_seed(random_state)
+    np.random.seed(random_state)
+    random.seed(random_state)
+
+    test_fraction = params['data_condition']['test_split'] / 100
+    train_fraction = params['data_condition']['train_split'] / 100
+    dataset = Dataset("data/")
+    val_size = int(len(dataset) * test_fraction)
+    train_size = len(dataset) - val_size
+    print(f"validation size: {val_size}, train size: {train_size}")
+
+    # Perform split using random_state as the generator seed
+    train_dataset, val_dataset = random_split(
+        dataset,
+        [train_size, val_size],
+        generator=torch.Generator().manual_seed(random_state)
+    )
+
+    train_loader = DataLoader(train_dataset, 
+                              batch_size=params['pytorch']['batch_size'], # batch size is for model training not split
+                              shuffle=True
+                              )
+    val_loader = DataLoader(val_dataset, 
                             batch_size=params['pytorch']['batch_size'], 
-                            shuffle=True)
+                            shuffle=False
+                            )
 
+    #Initialize model
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = UNet(in_channels=params['pytorch']['in_channels'], 
+                 num_classes=4
+                 )
+    model.to(device)
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters())
 
+    for epoch in range(1, params['pytorch']['epochs'] + 1):
+        # Training phase
+        model.train()
+        train_loss = 0
+        for data, target in train_loader:
+            data, target = data.to(device), target.to(device)
+
+            optimizer.zero_grad()              # reset gradients
+            output = model(data)               # forward pass
+            loss = criterion(output, target)   # compute loss
+            loss.backward()                    # backward pass (compute gradients)
+            optimizer.step()                   # update weights
+
+            train_loss += loss.item()
+
+        avg_train_loss = train_loss / len(train_loader)
+
+        # Validation phase
+        model.eval()
+        val_loss = 0
+        correct_pixels = 0
+        total_pixels = 0
+
+        with torch.no_grad():
+            for data, target in val_loader:
+                data, target = data.to(device), target.to(device)
+                output = model(data)
+                loss = criterion(output, target)
+                val_loss += loss.item()
+
+                preds = torch.argmax(output, dim=1)
+                correct_pixels += (preds == target).sum().item()
+                total_pixels += target.numel()
+
+        avg_val_loss = val_loss / len(val_loader)
+        val_accuracy = correct_pixels / total_pixels
+
+        print(f"Epoch [{epoch}/{params['pytorch']['epochs']}], "
+            f"Train Loss: {avg_train_loss:.4f}, "
+            f"Val Loss: {avg_val_loss:.4f}, "
+            f"Val Accuracy: {val_accuracy:.4f}")
