@@ -102,7 +102,10 @@ train:
         learning_rate: 0.04   
 
 pytorch:
-  batch_size: 16
+  in_channels: 29
+  model_path: data/ # TBD
+  epochs: 10        # how many times the model sees the entire training dataset
+  batch_size: 16    # how many samples are fed in at each training step
 
 evaluate:
   metrics_file: src/evaluation/metrics
