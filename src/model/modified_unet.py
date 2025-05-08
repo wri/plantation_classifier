@@ -17,12 +17,12 @@ class ConvBlock(nn.Module):
     - Batch Normalization
     - ReLU Activation
     """
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, padding=0):
         super().__init__()
         self.conv = nn.Conv2d(in_channels, 
                               out_channels, 
                               kernel_size=3, 
-                              padding=1)
+                              padding=padding)
         self.bn = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU()
 
@@ -34,57 +34,73 @@ class ConvBlock(nn.Module):
 
 class UNet(nn.Module):
     """
-    U-Net model modified for 4-class land use classification.
-    out_channels=64 is a common U-Net pattern and a design decision
+    U-Net model for input size 28x28 and output size 14x14.
+
+    Encoder path:
+    28x28 → 14x14 → 12x12 → 6x6 → 4x4 (bottleneck)
+
+    Decoder path:
+    4x4 → 8x8 → 16x16 → 14x14 (output)
+
+    Input:
+    - Tensor of shape (batch_size, in_channels, 28, 28)
+    Output:
+    - Tensor of shape (batch_size, num_classes, 14, 14)
     """
-    def __init__(self, in_channels=94, num_classes=4):
+    def __init__(self, in_channels, num_classes):
         super().__init__()
-        
-        # Encoding Path (Downsampling)
-        self.enc1 = ConvBlock(in_channels, 64)
-        self.enc2 = ConvBlock(64, 128)
-        self.enc3 = ConvBlock(128, 256)
-        
-        # Bottleneck Layer
-        self.bottleneck = ConvBlock(256, 512)
-        
-        # Decoding Path (Upsampling)
-        self.up3 = nn.ConvTranspose2d(512, 256, kernel_size=2, stride=2)
-        self.dec3 = ConvBlock(512, 256)
-        
-        self.up2 = nn.ConvTranspose2d(256, 128, kernel_size=2, stride=2)
-        self.dec2 = ConvBlock(256, 128)
-        
-        self.up1 = nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2)
-        self.dec1 = ConvBlock(128, 64)
-        
-        # Output Layer
+
+        # Encoder layers
+        self.enc1 = ConvBlock(in_channels, 64, padding=1)
+        self.pool1 = nn.MaxPool2d(2)  # 28x28 -> 14x14
+
+        self.enc2 = ConvBlock(64, 128, padding=1)
+        self.pool2 = nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=0)  # 14x14 -> 12x12
+
+        self.enc3 = ConvBlock(128, 256, padding=1)
+        self.pool3 = nn.MaxPool2d(2)  # 12x12 -> 6x6
+
+        self.bottleneck = ConvBlock(256, 512, padding=1)
+        self.reduce = nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=0)  # 6x6 -> 4x4
+
+        # Decoder layers
+        self.up1 = nn.ConvTranspose2d(512, 256, kernel_size=2, stride=2)  # 4x4 -> 8x8
+        self.dec1 = ConvBlock(256, 256, padding=1)
+
+        self.up2 = nn.ConvTranspose2d(256, 128, kernel_size=2, stride=2)  # 8x8 -> 16x16
+        self.dec2 = ConvBlock(128, 128, padding=1)
+
+        # Instead of ConvTranspose2d here, we use Conv2d to go 16x16 → 14x14
+        self.up3 = nn.Conv2d(128, 64, kernel_size=3, stride=1, padding=0)  # 16x16 → 14x14
+        self.dec3 = ConvBlock(64, 64, padding=1)
+
         self.final = nn.Conv2d(64, num_classes, kernel_size=1)
 
     def forward(self, x):
-        # Encoding
+        # Encoder
         e1 = self.enc1(x)
-        e2 = self.enc2(F.max_pool2d(e1, 2))
-        e3 = self.enc3(F.max_pool2d(e2, 2))
-        
-        # Bottleneck
-        b = self.bottleneck(F.max_pool2d(e3, 2))
-        
-        # Decoding
-        d3 = self.up3(b)
-        d3 = torch.cat([d3, e3], dim=1)
-        d3 = self.dec3(d3)
-        
-        d2 = self.up2(d3)
-        d2 = torch.cat([d2, e2], dim=1)
-        d2 = self.dec2(d2)
-        
-        d1 = self.up1(d2)
-        d1 = torch.cat([d1, e1], dim=1)
+        p1 = self.pool1(e1)
+
+        e2 = self.enc2(p1)
+        p2 = self.pool2(e2)
+
+        e3 = self.enc3(p2)
+        p3 = self.pool3(e3)
+
+        b = self.bottleneck(p3)
+        b = self.reduce(b)
+
+        # Decoder
+        d1 = self.up1(b)
         d1 = self.dec1(d1)
-        
-        # Final classification layer
-        output = self.final(d1)
+
+        d2 = self.up2(d1)
+        d2 = self.dec2(d2)
+
+        d3 = self.up3(d2)
+        d3 = self.dec3(d3)
+
+        output = self.final(d3)
         return output
 
 class Dataset(Dataset):
@@ -103,7 +119,7 @@ class Dataset(Dataset):
     def __getitem__(self, idx):
         img_file = self.datapoints[idx]
         img = hkl.load(os.path.join(self.img_path, img_file))  # (14,14,29)
-        img = (img - np.mean(img)) / np.std(img)  # this step normalizes
+        img = (img - np.mean(img)) / np.std(img)  # need to norm per band not img L440
         img = np.transpose(img, (2,0,1))  # (29,14,14)
         img_tensor = torch.tensor(img, dtype=torch.float32)
         
@@ -112,8 +128,6 @@ class Dataset(Dataset):
         label_tensor = torch.tensor(label, dtype=torch.long)
         
         return img_tensor, label_tensor
-
-
 
 if __name__ == "__main__":
     import argparse
@@ -166,11 +180,12 @@ if __name__ == "__main__":
         # Training phase
         model.train()
         train_loss = 0
+        
         for data, target in train_loader:
             data, target = data.to(device), target.to(device)
 
             optimizer.zero_grad()              # reset gradients
-            output = model(data)               # forward pass
+            output = model(data)               # forward pass, output shape is (16 x 4 x 14 x 14)
             loss = criterion(output, target)   # compute loss
             loss.backward()                    # backward pass (compute gradients)
             optimizer.step()                   # update weights
