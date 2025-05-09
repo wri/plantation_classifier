@@ -212,70 +212,71 @@ def hist_compare_s2_byband(location: str,
 
     return None
 
-def hist_individual_tile(location: str, 
-                         tile_idx_a: tuple, 
-                         tile_idx_b: tuple, 
-                         tile_idx_c: tuple, 
-                         title: str,
-                         color_dict: dict,
-                         output_file: str = None):
+def hist_individual_tile(
+    location: str,
+    tile_idx_a: tuple,
+    tile_idx_b: tuple,
+    tile_idx_c: tuple,
+    tile_idx_d: tuple,
+    title: str,
+    color_dict: dict,
+    output_file: str = None
+):
     '''
-    Type: Matplotlib histograms
-    Purpose: Create separate histograms for Sentinel-2 data for three specific tiles in a given location.
+    Create histograms of Sentinel-2 data for four tiles.
 
     Parameters:
     - location (str): The country.
-    - tile_idx_a (tuple): The coordinates (x, y) of the first tile.
-    - tile_idx_b (tuple): The coordinates (x, y) of the second tile.
-    - tile_idx_c (tuple): The coordinates (x, y) of the third tile.
-    - title (str): The base title for the histograms, describing the area.
-
-    This function loads analysis-ready data for three tiles specified by their coordinates (tile_idx_a, tile_idx_b, and tile_idx_c). 
-    It then creates individual histograms of Sentinel-2 data for each tile with consistent x and y axis ranges for comparison.
-
-    Returns:
-    None
+    - tile_idx_[a-d] (tuple): The (x, y) coordinates of each tile.
+    - title (str): Title for the figure.
+    - color_dict (dict): Mapping of land use class to color.
+    - output_file (str): Optional path to save the figure.
     '''
-
     def load_ard(tile_idx):
         x, y = tile_idx
-        ard = hkl.load(f'../../tmp/{location}/{str(x)}/{str(y)}/ard/{str(x)}X{str(y)}Y_ard.hkl')[..., 0:10]
+        ard = hkl.load(f'../../tmp/{location}/{x}/{y}/ard/{x}X{y}Y_ard.hkl')[..., 0:10]
         return ard
 
-    # Load data for each tile
-    s2_a = load_ard(tile_idx_a).flatten()
-    s2_b = load_ard(tile_idx_b).flatten()
-    s2_c = load_ard(tile_idx_c).flatten()
+    # Load Sentinel-2 data for each tile
+    s2_tiles = [load_ard(idx).flatten() for idx in [tile_idx_a, tile_idx_b, tile_idx_c, tile_idx_d]]
+    systems = ['monoculture', 'agroforestry (cocoa)', 'agroforestry (shea)', 'natural']
+    tile_indices = [tile_idx_a, tile_idx_b, tile_idx_c, tile_idx_d]
 
-    # Determine common axis limits
+    # Add new color for agroforestry2
+    color_dict = color_dict.copy()
+    color_dict['agroforestry (cocoa)'] = '#4dc348'
+    color_dict['agroforestry (shea)'] = '#72dc68'
+
+    # Calculate global bin range
     binwidth = 0.01
-    global_min = min(s2_a.min(), s2_b.min(), s2_c.min())
-    global_max = max(s2_a.max(), s2_b.max(), s2_c.max())
+    global_min = min(data.min() for data in s2_tiles)
+    global_max = max(data.max() for data in s2_tiles)
     bins = np.arange(global_min, global_max + binwidth, binwidth)
 
     xlim = (0.0, 0.6)
     xticks = np.arange(0.0, 0.6, 0.1)
-    #ylim = (0.0, 500000)
 
-    # Create subplots
-    fig, axes = plt.subplots(1, 3, figsize=(16, 5), sharex=True, sharey=True)
-    systems = ['monoculture', 'agroforestry', 'natural']
-    tile_indices = [tile_idx_a, tile_idx_b, tile_idx_c]
-    data_list = [s2_a, s2_b, s2_c]
+    # Create 1x4 subplot
+    fig, axes = plt.subplots(1, 4, figsize=(22, 5), sharex=True, sharey=True)
 
-    for ax, tile_idx, data, sys in zip(axes, tile_indices, data_list, systems):
-        ax.hist(data, alpha=0.4, 
-                label=str(tile_idx), 
-                edgecolor="black", 
-                bins=bins, 
-                color=color_dict.get(sys, "#cccccc")
-                )
+    for ax, tile_idx, data, sys in zip(axes, tile_indices, s2_tiles, systems):
+        ax.hist(
+            data,
+            alpha=0.6,
+            label=str(tile_idx),
+            edgecolor="black",
+            bins=bins,
+            color=color_dict.get(sys, "#cccccc")
+        )
         ax.set_xlim(xlim)
-       # ax.set_ylim(ylim)
         ax.set_xticks(xticks)
         ax.set_title(f"{sys.capitalize()} System")
-        #ax.grid(axis='y', alpha=0.75)
-    
+        ax.set_xlabel("Reflectance Value")
+        ax.set_ylabel("Pixel Frequency")
+
+    fig.suptitle(title)
+    plt.tight_layout()
+
     # Add legend to the figure
     # handles = [plt.Line2D([0], [0], color=color, lw=4) for color in colors]
     # labels = [str(tile_idx) for tile_idx in tile_indices]
@@ -285,14 +286,12 @@ def hist_individual_tile(location: str,
     #            title="Tiles")
     # plt.legend(title="System", loc="upper left", bbox_to_anchor=(1.05, 1))
 
-    fig.suptitle(title)
-    plt.tight_layout()
     if output_file:
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
+
     plt.show()
 
     return None
-
 
 def heat_compare_ard(location, tile_idx_a, tile_idx_b):
     '''
