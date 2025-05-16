@@ -722,7 +722,8 @@ def horizontal_stacked_bar(df: pd.DataFrame,
     output_file (str): File path to save the chart (optional).
     dpi (int): Resolution for the saved chart.
     """
-    categories = ['Agroforestry', 'Monoculture', 'Natural', 'No vegetation']
+    df = df.rename(columns={'No Vegetation': 'Background'})
+    categories = ['Agroforestry', 'Natural', 'Monoculture', 'No vegetation']
 
     # Normalize the data to percentages
     df[categories] = df[categories].div(df[categories].sum(axis=1), axis=0) * 100
@@ -730,21 +731,27 @@ def horizontal_stacked_bar(df: pd.DataFrame,
     # Sort the DataFrame by Agroforestry percentage (descending)
     df = df.sort_values(by=sort_by, ascending=False)
 
-    fig, ax = plt.subplots(figsize=(8,8))
+    fig, ax = plt.subplots(figsize=(13,8))
 
     # Initialize the left position for stacking
     left = np.zeros(len(df))
 
     # Plot each category as a horizontal bar
     for category in categories:
-        ax.barh(
+        bars = ax.barh(
             df.district, 
             df[category], 
             left=left, 
             label=category, 
-            color=color_dict.get(category, "#cccccc"),
-            # alpha=0.4
+            color=color_dict.get(category, "#cccccc")
         )
+        for bar, value in zip(bars, df[category]):
+            if value > 1:
+                ax.text(bar.get_x() + .4,
+                        bar.get_y() + bar.get_height() / 2,
+                        f'{value:.0f}%',
+                        va='center', ha='left',
+                        color='white', fontsize=8.5)
         left += df[category].values
 
 
@@ -758,6 +765,59 @@ def horizontal_stacked_bar(df: pd.DataFrame,
         ygrid=False
     )
     ax.set_xlim(0, 100)
+    ax.legend(title="System", loc="upper left", bbox_to_anchor=(1.05, 1))
+    ax.set_xticks([])
+    plt.tight_layout()
+    if output_file:
+        plt.savefig(output_file, dpi=dpi, bbox_inches='tight')
+    plt.show()
+
+
+
+def vertical_stacked_bar(df: pd.DataFrame, 
+                title: str,
+                color_dict: dict,
+                categories: list,
+                output_file: str = None,
+                dpi: int = 300
+               ):
+    """
+    Creates a stacked bar chart showing the total area in hectares for different tree cover classes per district.
+
+    Parameters:
+    df (pd.DataFrame): DataFrame containing the data.
+    title (str): Title of the chart.
+    color_dict (dict): Dictionary mapping classes to colors.
+    categories (list): List of land use class columns to include in the stacked bar.
+
+    """
+    fig, ax = plt.subplots(figsize=(12, 8))
+
+    # Initialize the bottom for stacking
+    bottom = np.zeros(len(df))
+
+    # Plot each category
+    for category in categories:
+        ax.bar(
+            df.district, 
+            df[category], 
+            bottom=bottom, 
+            label=category, 
+            color=color_dict.get(category, "#cccccc"),
+        )
+        bottom += df[category].values
+
+    # Style the chart
+    style_axis(
+        ax=ax,
+        xlabel="District",
+        ylabel="Total Area (ha)",
+        title=title,
+        gridlines=True
+    )
+
+    # Rotate x-axis labels for readability
+    ax.set_xticklabels(df.district, rotation=55, ha="right")
     ax.legend(title="System", loc="upper left", bbox_to_anchor=(1.05, 1))
     plt.tight_layout()
     if output_file:
