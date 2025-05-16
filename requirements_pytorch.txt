@@ -1,0 +1,13 @@
+python>=3.9,<3.13
+
+# Deep learning core libraries (installed with pytorch channels)
+#conda install pytorch torchvision torchaudio cpuonly -c pytorch
+
+numpy
+pandas
+matplotlib
+scikit-learn
+tqdm
+h5py
+hickle==5.0.2
+notebook

@@ -3,22 +3,59 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from utils.preprocessing import reshape_arr
 from sklearn.utils.class_weight import compute_class_weight
-
+import os
+import json
 
 class PlantationsData:
+    '''
+    For the data split, if use_precomputed_split == True, imports list of train 
+    and val ids that were created in build_training_sample().
+    Uses the plot_fname to map plot IDs back to array row positions, to 
+    guarantee the exact same plots are used to build train_ids.txt and val_ids.txt
+    '''
     def __init__(self, X_data_array, y_data_array, params):
         self.X_data_array = X_data_array
         self.y_data_array = y_data_array
         self.params = params
 
     def split_data(self):
-        self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
-            self.X_data_array,
-            self.y_data_array,
-            test_size=((self.params["data_condition"]["test_split"] / 100)),
-            train_size=((self.params["data_condition"]["train_split"] / 100)),
-            random_state=self.params["base"]["random_state"],
-        )
+        use_precomputed_split = self.params["train"]["use_split"]
+        split_path = self.params["data_load"]["local_prefix"] + 'train_params/'
+        train_file = os.path.join(split_path, "train_ids.txt")
+        val_file = os.path.join(split_path, "val_ids.txt")
+        all_ids_file = os.path.join(self.params["data_load"]["local_prefix"], "cleanlab/round2/final_plot_ids.json")
+
+        if use_precomputed_split:
+            with open(train_file) as f:
+                train_ids = [x.strip() for x in f]  
+            with open(val_file) as f:
+                val_ids = [x.strip() for x in f]
+            with open(all_ids_file) as f:
+                all_ids = json.load(f)
+
+            # Map PLOT_FNAME to index
+            id_to_idx = {pid: idx for idx, pid in enumerate(all_ids)}
+            train_idx = [id_to_idx[i] for i in train_ids]
+            val_idx = [id_to_idx[i] for i in val_ids]
+
+            for i in train_ids:
+                if i not in id_to_idx:
+                    print(f"Missing plot ID: {i}")
+
+            self.X_train = self.X_data_array[train_idx]
+            self.X_test = self.X_data_array[val_idx]
+            self.y_train = self.y_data_array[train_idx]
+            self.y_test = self.y_data_array[val_idx]
+        else:
+            # fallback to default
+            self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
+                self.X_data_array,
+                self.y_data_array,
+                test_size=((self.params["data_condition"]["test_split"] / 100)),
+                train_size=((self.params["data_condition"]["train_split"] / 100)),
+                random_state=self.params["base"]["random_state"],
+            )
+
 
     def reshape_data_arr(self):
         self.X_train_reshaped = reshape_arr(self.X_train)
