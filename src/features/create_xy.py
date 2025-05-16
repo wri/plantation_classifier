@@ -9,6 +9,7 @@ import utils.preprocessing as preprocess
 import utils.validate_io as validate
 import features.slow_glcm as slow_txt
 from tqdm import tqdm
+from sklearn.model_selection import train_test_split
 from skimage.util import img_as_ubyte
 import json
 
@@ -140,7 +141,7 @@ def create_label_arrays(v_train_data, local_dir, overwrite_list=['v08','v15','v2
     print("Label array creation process complete.")
 
 
-def load_ard(idx, subsample, local_dir):
+def load_ard(idx, subsample, local_dir, pytorch):
     """
     Analysis ready data is stored as (12, 28, 28, 13) with
     uint16 dtype, ranging from 0 - 65535 and ordered
@@ -188,12 +189,14 @@ def load_ard(idx, subsample, local_dir):
                                     axis=0, 
                                     overwrite_input = True)
 
-    # slice out border information
-    border_x = (varied_median.shape[0] - 14) // 2
-    border_y = (varied_median.shape[1] - 14) // 2
-    varied_median = varied_median[border_x:-border_x, border_y:-border_y, :]
-
-    return varied_median
+    # for pytorch model, need 28 x 28, for classifier, need 14 x 14
+    if pytorch:
+        return varied_median
+    else:
+        border_x = (varied_median.shape[0] - 14) // 2
+        border_y = (varied_median.shape[1] - 14) // 2
+        varied_median_crop = varied_median[border_x:-border_x, border_y:-border_y, :]
+        return varied_median_crop
 
 
 def load_txt(idx, local_dir):
@@ -385,8 +388,7 @@ def gather_plot_ids(v_train_data,
     return final_ard
 
 
-
-def make_sample(sample_shape, s2, slope, s1, txt, ttc, plot):
+def make_sample(sample_shape, s2, slope, s1, txt, ttc):
     """
     Combines ARD features (s2, slope, s1), TTC features, and texture 
     features into a single sample with shape (14, 14, 94).
@@ -421,15 +423,18 @@ def make_sample(sample_shape, s2, slope, s1, txt, ttc, plot):
     sample[..., 10:11] = slope
     sample[..., 11:13] = s1
     sample[..., 13:] = feats
-
-    if plot is not None:
-        pytorch_feats = np.r_[0:13, 78:94]  
-        sample_reduced = sample[..., pytorch_feats] 
-        hkl.dump(sample_reduced, os.path.join('../../data/train-pytorch/', f"{plot}.hkl"))
-        return sample_reduced
     
     return sample
 
+def check_class_balance(y_all, logger):
+    labels, counts = np.unique(y_all, return_counts=True)
+    class_dist = dict(zip(labels, counts))
+    total = sum(class_dist.values())
+    logger.info(f"Class count {class_dist}")
+    for key, val in class_dist.items():
+        class_dist[key] = round((val/total)*100,1)
+    for key, val in class_dist.items():
+        logger.info(f"{int(key)}: {val}%")
 
 def build_training_sample(train_batch, classes, params_path, logger):
     """
@@ -446,15 +451,34 @@ def build_training_sample(train_batch, classes, params_path, logger):
 
     train_data_dir = params["data_load"]["local_prefix"]
     ttc_feats_dir = params["data_load"]["ttc_feats_dir"]
+    cleanlab = params["data_load"]["drop_cleanlab_ids"]
+
     if params['data_load']['create_labels']:
         create_label_arrays(train_batch, train_data_dir)
-    cleanlab = params["data_load"]["drop_cleanlab_ids"]
+
     plot_ids = gather_plot_ids(train_batch, 
                                train_data_dir, 
                                ttc_feats_dir, 
                                logger,
                                cleanlab)
     logger.info(f"{len(plot_ids)} plots will be used in training.")
+
+    # compute split
+    train_ids, val_ids = train_test_split(
+        plot_ids,
+        test_size=(params["data_condition"]["test_split"] / 100),
+        train_size=(params["data_condition"]["train_split"] / 100),
+        random_state=params["base"]["random_state"],
+        )
+
+    split_dir = os.path.join(params["data_load"]["local_prefix"], "train_params/")
+    with open(os.path.join(split_dir, "train_ids.txt"), "w") as f:
+        f.write("\n".join(train_ids))
+    with open(os.path.join(split_dir, "val_ids.txt"), "w") as f:
+        f.write("\n".join(val_ids))
+
+    validate.validate_split_alignment(split_dir, 
+                                      f"{train_data_dir}cleanlab/round2/final_plot_ids.json")
 
     # create empty x and y array based on number of plots
     # x.shape is (plots, 14, 14, n_feats) y.shape is (plots, 14, 14)
@@ -466,7 +490,7 @@ def build_training_sample(train_batch, classes, params_path, logger):
     med_indices = params["data_condition"]["ard_subsample"]
 
     for num, plot in enumerate(tqdm(plot_ids)):
-        ard = load_ard(plot, med_indices, train_data_dir)
+        ard = load_ard(plot, med_indices, train_data_dir, pytorch=False)
         ttc = load_ttc(plot, ttc_feats_dir, train_data_dir)
         txt = load_txt(plot, train_data_dir)
         validate.train_output_range_dtype(
@@ -482,7 +506,6 @@ def build_training_sample(train_batch, classes, params_path, logger):
             ard[..., 11:13],
             txt,
             ttc,
-            plot=None,
         )
 
         y = load_label(plot, ttc, classes, train_data_dir)
@@ -498,28 +521,19 @@ def build_training_sample(train_batch, classes, params_path, logger):
     # Create a DataFrame where each row corresponds to a pixel
     df = pd.DataFrame(features_flat, columns=[f'feature_{i}' for i in range(n_feats)])
     df['label'] = labels_flat
+    check_class_balance(y_all, logger)
 
     # Saving the DataFrame to a CSV file
-    df.to_csv('data/cleanlab/round2/cleanlab_xy.csv', index=False) # this was named demo
-
-    # check class balance
-    labels, counts = np.unique(y_all, return_counts=True)
-    class_dist = dict(zip(labels, counts))
-    total = sum(class_dist.values())
-    logger.info(f"Class count {class_dist}")
-    for key, val in class_dist.items():
-        class_dist[key] = round((val/total)*100,1)
-    for key, val in class_dist.items():
-        logger.info(f"{int(key)}: {val}%")
+    df.to_csv(f'{train_data_dir}cleanlab/round2/cleanlab_xy.csv', index=False) # this was named demo
 
     return x_all, y_all
 
-
 def build_training_sample_CNN(train_batch, classes, n_feats, params_path, logger):
     """
+    This builds x and y samples based on the input requirements for training a pytorch CNN model
     Need to recreate the x and y so they are not reshaped to pixel-wise rows,
     there is no scaling, no QAQC check (all inputs have already passed checks) 
-    and there are no TTC features included
+    and there are no TTC or texture features included. 
     """
     with open(params_path) as file:
         params = yaml.safe_load(file)
@@ -533,30 +547,22 @@ def build_training_sample_CNN(train_batch, classes, n_feats, params_path, logger
                                logger,
                                cleanlab)
     logger.info(f"{len(plot_ids)} plots will be used in training.")
-
-    # create empty x and y array based on number of plots
-    # x.shape is (plots, 14, 14, n_feats) y.shape is (plots, 14, 14)
-    sample_shape = (14, 14)
    
     n_samples = len(plot_ids)
-    y_all = np.zeros(shape=(n_samples, sample_shape[0], sample_shape[1]), dtype=np.float32)
-    x_all = np.zeros(shape=(n_samples, sample_shape[0], sample_shape[1], n_feats), dtype=np.float32)
+    y_all = np.zeros(shape=(n_samples, 14, 14), dtype=np.float32)
+    x_all = np.zeros(shape=(n_samples, 28, 28, n_feats), dtype=np.float32)
     med_indices = params["data_condition"]["ard_subsample"]
 
     for num, plot in enumerate(tqdm(plot_ids)):
-        ard = load_ard(plot, med_indices, train_data_dir)
+        ard = load_ard(plot, med_indices, train_data_dir, pytorch=True)
         ttc = load_ttc(plot, ttc_feats_dir, train_data_dir) # still needed for labels
-        txt = load_txt(plot, train_data_dir)
 
-        X = make_sample(
-            sample_shape,
-            ard[..., 0:10],
-            ard[..., 10:11],
-            ard[..., 11:13],
-            txt,
-            ttc,
-            plot,
-        )
+        # create sample (this replaces make_sample)
+        X = np.zeros((28, 28, n_feats), dtype=np.float32)
+        X[..., 0:10] = ard[..., 0:10]
+        X[..., 10:11] = ard[..., 10:11]
+        X[..., 11:13] = ard[..., 11:13]
+        hkl.dump(X, os.path.join(f'{train_data_dir}train-pytorch/', f"{plot}.hkl"))
 
         y = load_label(plot, ttc, classes, train_data_dir)
         x_all[num] = X
