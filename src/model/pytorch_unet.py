@@ -307,19 +307,19 @@ class UNetEncoder(torch.nn.Module):
         self.forwardblock = UNetDownBlock(channels * 4, channels * 8, 1) # 10 to 8
 
     def forward(self, x, med, train, drop_prob):
-        _, temporal = self.gru(x)
-        med = self.downblock10to20(med)
+        _, temporal = self.gru(x) # 28
+        med = self.downblock10to20(med) # 28
         #print(temporal.shape, med.shape)
         tenm = torch.concat((med, temporal), axis = 1)
         tenm = self.concatconv(tenm)
         tenm = drop_block2d(tenm, p = drop_prob, block_size = 5, training = train)
         #print(tenm.shape)
-        twentym = self.maxPool1(tenm)
-        twentym = self.downblock20to40(twentym)
+        twentym = self.maxPool1(tenm) # 14
+        twentym = self.downblock20to40(twentym) # 12
         twentym = drop_block2d(twentym, p = drop_prob, block_size = 3, training = train)
          
-        fourtym = self.maxPool2(twentym)
-        fourtym = self.forwardblock(fourtym)
+        fourtym = self.maxPool2(twentym) # 6
+        fourtym = self.forwardblock(fourtym) # 4
         fourtym = drop_block2d(fourtym, p = drop_prob, block_size = 3, training = train)
 
         #eightym = self.maxPool3(fourtym)
