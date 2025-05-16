@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader 
 from torch.utils.data import random_split
+from sklearn.metrics import balanced_accuracy_score
 import numpy as np
 import os
 import yaml
@@ -105,29 +106,48 @@ class UNet(nn.Module):
 
 class Dataset(Dataset):
     '''
-    Creates a custom PyTorch dataset for loading Sentinel and texture features.
-    __getitem__ loads a single sample (img and corresponding target) one at a time
+    Creates a custom PyTorch dataset for loading Sentinel features.
+    __getitem__ loads a single sample (img and corresponding target) at a time.
+    Mins and maxs are calculated across all sentinel input tiles using the
+    code in src/utils/min_max.py
     '''
-    def __init__(self, dataset_path):
-        self.img_path = os.path.join(dataset_path, 'train-pytorch/')
-        self.target_path = os.path.join(dataset_path, 'train-labels/')
-        self.datapoints = [f for f in os.listdir(self.img_path) if f.endswith('.hkl')]
-    
+    def __init__(self, plot_ids, input_dir, label_dir):
+        self.plot_ids = plot_ids
+        self.input_dir = input_dir
+        self.label_dir = label_dir
+        self.min_all = [0.01725032366812229, 0.029564354568719864, 0.01933318004012108, 
+                   0.06290531903505325, 0.03508812189102173, 0.05046158283948898, 
+                   0.0642404854297638, 0.05921263247728348, 0.01604486256837845, 
+                   0.0052948808297514915, 0.0, 0.0, 0.0]
+        self.max_all = [0.4679408073425293, 0.4629587233066559, 0.41253527998924255, 
+                   0.5527504682540894, 0.47520411014556885, 0.464446485042572, 
+                   0.5933089256286621, 0.6391470432281494, 0.5431296229362488, 
+                   0.4426642060279846, 0.49999237060546875, 0.9672541618347168, 
+                   0.890066385269165]
+
     def __len__(self):
-        return len(self.datapoints)
-    
+        return len(self.plot_ids)
+
     def __getitem__(self, idx):
-        img_file = self.datapoints[idx]
-        img = hkl.load(os.path.join(self.img_path, img_file))  # (14,14,29)
-        img = (img - np.mean(img)) / np.std(img)  # need to norm per band not img L440
-        img = np.transpose(img, (2,0,1))  # (29,14,14)
-        img_tensor = torch.tensor(img, dtype=torch.float32)
-        
-        label_file = img_file.replace('.hkl', '.npy')
-        label = np.load(os.path.join(self.target_path, label_file))  # (14,14)
-        label_tensor = torch.tensor(label, dtype=torch.long)
-        
-        return img_tensor, label_tensor
+        plot_id = self.plot_ids[idx]
+        x_path = os.path.join(self.input_dir, f"{plot_id}.hkl")
+        y_path = os.path.join(self.label_dir, f"{plot_id}.npy")
+
+        x = hkl.load(x_path).astype(np.float32)   # (14, 14, 16)
+        x = np.transpose(x, (2, 0, 1))            # (16, 14, 14)
+        for band in range(x.shape[0]):  # iterate over bands (channels)
+            mins = self.min_all[band]
+            maxs = self.max_all[band]
+            x[band] = np.clip(x[band], mins, maxs)
+            midrange = (maxs + mins) / 2
+            rng = maxs - mins
+            x[band] = (x[band] - midrange) / (rng / 2)
+        x = torch.tensor(x, dtype=torch.float32)
+
+        y = np.load(y_path).astype(np.int64)      # (14, 14)
+        y = torch.tensor(y, dtype=torch.long)
+
+        return x, y
 
 if __name__ == "__main__":
     import argparse
@@ -137,35 +157,19 @@ if __name__ == "__main__":
 
     with open(args.param_path) as file:
         params = yaml.safe_load(file)
+    
+    local_dir = params['data_load']['local_prefix']
 
-    # uses same random_state and split sizes from params.yaml
-    random_state = params['base']['random_state']
-    torch.manual_seed(random_state)
-    np.random.seed(random_state)
-    random.seed(random_state)
+    with open(f"{local_dir}train_params/train_ids.txt") as f:
+        train_ids = [line.strip() for line in f]
+    with open(f"{local_dir}train_params/val_ids.txt") as f:
+        val_ids = [line.strip() for line in f]
 
-    test_fraction = params['data_condition']['test_split'] / 100
-    train_fraction = params['data_condition']['train_split'] / 100
-    dataset = Dataset("data/")
-    val_size = int(len(dataset) * test_fraction)
-    train_size = len(dataset) - val_size
-    print(f"validation size: {val_size}, train size: {train_size}")
+    train_dataset = Dataset(train_ids, "data/train-pytorch", "data/train-labels")
+    val_dataset = Dataset(val_ids, "data/train-pytorch", "data/train-labels")
 
-    # Perform split using random_state as the generator seed
-    train_dataset, val_dataset = random_split(
-        dataset,
-        [train_size, val_size],
-        generator=torch.Generator().manual_seed(random_state)
-    )
-
-    train_loader = DataLoader(train_dataset, 
-                              batch_size=params['pytorch']['batch_size'], # batch size is for model training not split
-                              shuffle=True
-                              )
-    val_loader = DataLoader(val_dataset, 
-                            batch_size=params['pytorch']['batch_size'], 
-                            shuffle=False
-                            )
+    train_loader = DataLoader(train_dataset, batch_size=params['pytorch']['batch_size'], shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=params['pytorch']['batch_size'], shuffle=False)
 
     #Initialize model
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -199,6 +203,8 @@ if __name__ == "__main__":
         val_loss = 0
         correct_pixels = 0
         total_pixels = 0
+        all_preds = []
+        all_labels = []
 
         with torch.no_grad():
             for data, target in val_loader:
@@ -210,11 +216,18 @@ if __name__ == "__main__":
                 preds = torch.argmax(output, dim=1)
                 correct_pixels += (preds == target).sum().item()
                 total_pixels += target.numel()
+                # For balanced accuracy
+                all_preds.extend(preds.cpu().numpy().reshape(-1))
+                all_labels.extend(target.cpu().numpy().reshape(-1))
 
         avg_val_loss = val_loss / len(val_loader)
         val_accuracy = correct_pixels / total_pixels
+        val_bal_acc = balanced_accuracy_score(all_labels, all_preds)
+
 
         print(f"Epoch [{epoch}/{params['pytorch']['epochs']}], "
             f"Train Loss: {avg_train_loss:.4f}, "
             f"Val Loss: {avg_val_loss:.4f}, "
-            f"Val Accuracy: {val_accuracy:.4f}")
+            f"Val Accuracy: {val_accuracy:.4f},"
+            f"Balanced Accuracy: {val_bal_acc:.4f}")
+

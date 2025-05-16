@@ -11,7 +11,7 @@ deploy:
   model_type: classifier
   cleanup: false
   overwrite: false
-  version: v30
+  version: v31
 
 postprocess:
   remove_noise: true
@@ -22,7 +22,7 @@ data_load:
   download_data: false
   bucket_name: restoration-monitoring
   folder_prefix: plantation-mapping/data/train/
-  local_prefix: data/
+  local_prefix: data/         # Update for pytorch
   ttc_feats_dir: train-features-ard/
   create_labels: false       # Update
   drop_cleanlab_ids: true   # Update

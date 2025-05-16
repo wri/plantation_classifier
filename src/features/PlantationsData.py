@@ -27,9 +27,9 @@ class PlantationsData:
 
         if use_precomputed_split:
             with open(train_file) as f:
-                train_ids = [int(x.strip()) for x in f]
+                train_ids = [x.strip() for x in f]  
             with open(val_file) as f:
-                val_ids = [int(x.strip()) for x in f]
+                val_ids = [x.strip() for x in f]
             with open(all_ids_file) as f:
                 all_ids = json.load(f)
 
@@ -37,6 +37,10 @@ class PlantationsData:
             id_to_idx = {pid: idx for idx, pid in enumerate(all_ids)}
             train_idx = [id_to_idx[i] for i in train_ids]
             val_idx = [id_to_idx[i] for i in val_ids]
+
+            for i in train_ids:
+                if i not in id_to_idx:
+                    print(f"Missing plot ID: {i}")
 
             self.X_train = self.X_data_array[train_idx]
             self.X_test = self.X_data_array[val_idx]
