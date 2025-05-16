@@ -22,7 +22,7 @@ data_load:
   download_data: false
   bucket_name: restoration-monitoring
   folder_prefix: plantation-mapping/data/train/
-  local_prefix: ../../data/
+  local_prefix: data/
   ttc_feats_dir: train-features-ard/
   create_labels: false       # Update
   drop_cleanlab_ids: true   # Update
@@ -81,6 +81,7 @@ tune:
   best_params: data/train_params/best_params.json
 
 train:
+  use_split: True              # Update for pytorch
   use_best_params: true        # Update - true following tuning
   model_dir: models/ 
   model_name: models/model.joblib
@@ -102,8 +103,7 @@ train:
         learning_rate: 0.04   
 
 pytorch:
-  in_channels: 29
-  model_path: data/ # TBD
+  in_channels: 13
   epochs: 10        # how many times the model sees the entire training dataset
   batch_size: 16    # how many samples are fed in at each training step
 
