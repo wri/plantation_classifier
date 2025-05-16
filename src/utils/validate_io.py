@@ -3,9 +3,8 @@
 import numpy as np
 import hickle as hkl
 import gc
-
-### TRAINING ###
-# these tests happen after preprocessing the raw training data
+import os
+import json
 
 
 def fast_glcm_input(img):
@@ -266,3 +265,33 @@ def texture_output_range(arr, prop):
 
     elif prop == "contrast":
         assert arr.min() >= 0.0, print(arr.min())
+
+
+def validate_split_alignment(split_dir, full_id_path):
+    """
+    Validates that all plot IDs in train/val split exist in the full dataset list
+    and that they are mutually exclusive.
+
+    Args:
+        split_dir (str): Directory containing train_ids.txt and val_ids.txt
+        full_id_path (str): Path to final_plot_ids.json
+
+    Raises:
+        AssertionError: If there are mismatches, overlaps, or missing IDs
+    """
+    with open(os.path.join(split_dir, "train_ids.txt")) as f:
+        train_ids = set(x.strip() for x in f.readlines())
+    with open(os.path.join(split_dir, "val_ids.txt")) as f:
+        val_ids = set(x.strip() for x in f.readlines())
+    with open(full_id_path) as f:
+        all_ids = set(json.load(f))
+
+    # Check mutual exclusivity
+    intersection = train_ids & val_ids
+    assert len(intersection) == 0, f"Train/val overlap: {intersection}"
+
+    # Check all train and val IDs are in the dataset
+    missing_from_all = (train_ids | val_ids) - all_ids
+    assert len(missing_from_all) == 0, f"IDs in split not found in full list: {missing_from_all}"
+
+    print(f"✅ Split check passed: {len(train_ids)} train, {len(val_ids)} val, {len(all_ids)} total")
